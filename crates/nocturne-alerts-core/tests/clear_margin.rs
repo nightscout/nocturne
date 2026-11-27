@@ -25,7 +25,9 @@ use nocturne_alerts_core::engine::{
     EngineState, Evaluation, OnUnknown, Rule, WireRule, evaluate_rule,
 };
 use nocturne_alerts_core::excursion::{TrackerState, TrackerStateKind, TransitionType};
-use nocturne_alerts_core::model::{ConditionKind, Reason, parse_payload};
+use nocturne_alerts_core::model::{
+    CURRENT_SCHEMA, ConditionKind, ParseResult, Payload, Reason, SCHEMA_VERSION, parse_payload,
+};
 use nocturne_alerts_core::truth::Truth;
 
 const RULE_ID: Uuid = Uuid::from_u128(1);
@@ -42,11 +44,22 @@ fn d(s: &str) -> Decimal {
     s.parse().unwrap()
 }
 
+/// `doc` as a stored tree's root, naming schema 2 (engine-semantics.md §1.2).
+fn rooted(mut doc: Value) -> Value {
+    doc[SCHEMA_VERSION] = json!(CURRENT_SCHEMA);
+    doc
+}
+
+/// [`parse_payload`] of `payload` stored as a rule body.
+fn parse_body(kind: ConditionKind, payload: &Value) -> ParseResult<Payload> {
+    parse_payload(kind, &rooted(payload.clone()))
+}
+
 fn rule(kind: &str, params: Value) -> Rule {
     let wire: WireRule = serde_json::from_value(json!({
         "id": RULE_ID,
         "condition_type": kind,
-        "condition_params": params,
+        "condition_params": rooted(params),
     }))
     .unwrap();
     Rule::try_from(wire).unwrap()
@@ -56,10 +69,15 @@ fn node(kind: &str, payload: Value) -> Value {
     json!({ "type": kind, kind: payload })
 }
 
-/// `threshold below 70` with a margin of 5: closed, true below 70; open,
+/// A stored root node: an auto-resolve tree.
+fn root_node(kind: &str, payload: Value) -> Value {
+    rooted(node(kind, payload))
+}
+
+/// `threshold < 70` with a margin of 5: closed, true below 70; open,
 /// true below 75.
 fn low_with_margin() -> Value {
-    json!({ "direction": "below", "value": 70, "clear_margin": 5 })
+    json!({ "operator": "<", "value": 70, "clear_margin": 5 })
 }
 
 fn glucose(value: &str, now: DateTime<Utc>) -> SensorContext {
@@ -120,7 +138,7 @@ fn margined_payloads() -> Vec<(ConditionKind, Value)> {
         (ConditionKind::Threshold, low_with_margin()),
         (
             ConditionKind::RateOfChange,
-            json!({ "direction": "falling", "rate": 2, "clear_margin": 1 }),
+            json!({ "operator": "<=", "value": -2, "clear_margin": 1 }),
         ),
         (
             ConditionKind::Predicted,
@@ -157,7 +175,7 @@ fn every_comparison_leaf_reads_a_margin() {
     let payloads = margined_payloads();
     assert_eq!(payloads.len(), 13);
     for (kind, payload) in payloads {
-        let parsed = parse_payload(kind, &payload).unwrap_or_else(|e| panic!("{kind:?}: {e}"));
+        let parsed = parse_body(kind, &payload).unwrap_or_else(|e| panic!("{kind:?}: {e}"));
         let margin = parsed.margined().and_then(|m| m.clear_margin());
         assert_eq!(
             margin.map(|m| m.get()),
@@ -175,15 +193,15 @@ fn a_leaf_without_a_margin_does_not_read_one() {
     let elapsed = [
         (
             ConditionKind::SiteAge,
-            json!({ "operator": ">=", "value": 72 }),
+            json!({ "operator": ">=", "minutes": 4320 }),
         ),
         (
             ConditionKind::SensorAge,
-            json!({ "operator": ">=", "value": 10 }),
+            json!({ "operator": ">=", "minutes": 14400 }),
         ),
         (
             ConditionKind::Staleness,
-            json!({ "operator": ">=", "value": 15 }),
+            json!({ "operator": ">=", "minutes": 15 }),
         ),
         (
             ConditionKind::LoopStale,
@@ -217,9 +235,9 @@ fn a_leaf_without_a_margin_does_not_read_one() {
         ),
     ];
     for (kind, mut payload) in elapsed {
-        assert!(parse_payload(kind, &payload).is_ok(), "{kind:?} without");
+        assert!(parse_body(kind, &payload).is_ok(), "{kind:?} without");
         payload["clear_margin"] = json!(5);
-        let issues = parse_payload(kind, &payload).unwrap_err().0;
+        let issues = parse_body(kind, &payload).unwrap_err().0;
         assert_eq!(
             issues.iter().map(|i| i.reason).collect::<Vec<_>>(),
             vec![Reason::UnknownField],
@@ -233,7 +251,7 @@ fn a_margin_is_invalid_as_a_value_is_and_when_negative() {
     let reason = |margin: Value| {
         let mut payload = json!({ "operator": ">", "value": 2 });
         payload["clear_margin"] = margin;
-        parse_payload(ConditionKind::Iob, &payload).err().map(|e| {
+        parse_body(ConditionKind::Iob, &payload).err().map(|e| {
             e.0.iter()
                 .map(|i| (i.reason.code(), i.reason.field()))
                 .collect::<Vec<_>>()
@@ -263,7 +281,7 @@ fn a_margin_is_invalid_as_a_value_is_and_when_negative() {
 #[test]
 fn a_margin_on_an_equality_is_invalid_and_zero_is_none() {
     let issues = |margin: i64| {
-        parse_payload(
+        parse_body(
             ConditionKind::Iob,
             &json!({ "operator": "==", "value": 2, "clear_margin": margin }),
         )
@@ -276,22 +294,21 @@ fn a_margin_on_an_equality_is_invalid_and_zero_is_none() {
 
 #[test]
 fn a_margin_serialises_exactly_and_only_when_present() {
-    let without = parse_payload(
+    let without = parse_body(
         ConditionKind::Threshold,
-        &json!({ "direction": "below", "value": 70 }),
+        &json!({ "operator": "<", "value": 70 }),
     )
     .unwrap();
     assert_eq!(
         serde_json::to_value(&without).unwrap(),
-        json!({ "direction": "below", "value": 70 })
+        json!({ "operator": "<", "value": 70 })
     );
     let with: Value =
-        serde_json::from_str(r#"{ "direction": "below", "value": 70, "clear_margin": 5.50 }"#)
-            .unwrap();
-    let parsed = parse_payload(ConditionKind::Threshold, &with).unwrap();
+        serde_json::from_str(r#"{ "operator": "<", "value": 70, "clear_margin": 5.50 }"#).unwrap();
+    let parsed = parse_body(ConditionKind::Threshold, &with).unwrap();
     assert_eq!(
         serde_json::to_string(&parsed).unwrap(),
-        r#"{"direction":"below","value":70,"clear_margin":5.50}"#
+        r#"{"operator":"<","value":70,"clear_margin":5.50}"#
     );
 }
 
@@ -343,7 +360,7 @@ fn idle_and_never_evaluated_are_closed() {
 fn awaiting_rearm_is_closed_so_a_value_inside_the_margin_rearms() {
     let mut r = rule("threshold", low_with_margin());
     r.auto_resolve_enabled = true;
-    r.auto_resolve_params = Some(node("iob", json!({ "operator": ">", "value": 1 })));
+    r.auto_resolve_params = Some(root_node("iob", json!({ "operator": ">", "value": 1 })));
     let mut state = restored(TrackerState {
         awaiting_rearm: true,
         ..tracker(TrackerStateKind::Idle, None)
@@ -461,7 +478,7 @@ fn a_stale_or_recovered_state_reads_open_by_its_excursion() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn every_operator_and_direction_widens_toward_its_true_side() {
+fn every_operator_and_sign_widens_toward_its_true_side() {
     let iob = |op: &str| {
         rule(
             "iob",
@@ -497,7 +514,7 @@ fn every_operator_and_direction_widens_toward_its_true_side() {
 
     let above = rule(
         "threshold",
-        json!({ "direction": "above", "value": 180, "clear_margin": 20 }),
+        json!({ "operator": ">", "value": 180, "clear_margin": 20 }),
     );
     assert_eq!(root_at(&above, "161", &mut open()), Truth::True);
     assert_eq!(root_at(&above, "160", &mut open()), Truth::False);
@@ -506,10 +523,10 @@ fn every_operator_and_direction_widens_toward_its_true_side() {
         Truth::False
     );
 
-    let rate = |direction: &str, v: &str, state: &mut EngineState| {
+    let rate = |op: &str, value: i64, v: &str, state: &mut EngineState| {
         let r = rule(
             "rate_of_change",
-            json!({ "direction": direction, "rate": 2, "clear_margin": 1 }),
+            json!({ "operator": op, "value": value, "clear_margin": 1 }),
         );
         let ctx = SensorContext {
             trend_rate: Some(d(v)),
@@ -517,19 +534,37 @@ fn every_operator_and_direction_widens_toward_its_true_side() {
         };
         step(&r, &ctx, base(), state).root
     };
-    assert_eq!(rate("falling", "-1", &mut open()), Truth::True);
-    assert_eq!(rate("falling", "-0.9", &mut open()), Truth::False);
-    assert_eq!(rate("falling", "-1", &mut EngineState::new()), Truth::False);
-    assert_eq!(rate("rising", "1", &mut open()), Truth::True);
-    assert_eq!(rate("rising", "0.9", &mut open()), Truth::False);
-    assert_eq!(rate("rising", "1", &mut EngineState::new()), Truth::False);
+    let cases = [
+        ("<=", -2, "-1", Truth::True, Truth::False),
+        ("<=", -2, "-0.9", Truth::False, Truth::False),
+        ("<", -2, "-1.01", Truth::True, Truth::False),
+        ("<", -2, "-1", Truth::False, Truth::False),
+        (">=", 2, "1", Truth::True, Truth::False),
+        (">=", 2, "0.9", Truth::False, Truth::False),
+        (">", 2, "1.01", Truth::True, Truth::False),
+        (">", 2, "1", Truth::False, Truth::False),
+        (">=", -2, "-3", Truth::True, Truth::False),
+        ("<=", 2, "3", Truth::True, Truth::False),
+    ];
+    for (op, value, v, opened, closed) in cases {
+        assert_eq!(
+            rate(op, value, v, &mut open()),
+            opened,
+            "{op} {value} {v} open"
+        );
+        assert_eq!(
+            rate(op, value, v, &mut EngineState::new()),
+            closed,
+            "{op} {value} {v} closed"
+        );
+    }
 }
 
 #[test]
 fn a_margin_of_zero_is_no_margin() {
     let zero = rule(
         "threshold",
-        json!({ "direction": "below", "value": 70, "clear_margin": 0 }),
+        json!({ "operator": "<", "value": 70, "clear_margin": 0 }),
     );
     assert_eq!(root_at(&zero, "70", &mut open()), Truth::False);
     assert_eq!(root_at(&zero, "69.9", &mut open()), Truth::True);
@@ -599,13 +634,11 @@ fn issues(
     kind: ConditionKind,
     payload: &Value,
 ) -> Vec<(String, &'static str, Option<&'static str>)> {
-    parse_payload(kind, payload)
-        .err()
-        .map_or_else(Vec::new, |e| {
-            e.0.iter()
-                .map(|i| (i.path.clone(), i.reason.code(), i.reason.field()))
-                .collect()
-        })
+    parse_body(kind, payload).err().map_or_else(Vec::new, |e| {
+        e.0.iter()
+            .map(|i| (i.path.clone(), i.reason.code(), i.reason.field()))
+            .collect()
+    })
 }
 
 /// One `sustained` run start cannot serve both the plain and the widened
@@ -654,7 +687,7 @@ fn a_margin_under_sustained_is_invalid() {
     );
     let zero = node(
         "threshold",
-        json!({ "direction": "below", "value": 70, "clear_margin": 0 }),
+        json!({ "operator": "<", "value": 70, "clear_margin": 0 }),
     );
     assert_eq!(issues(ConditionKind::Sustained, &under(zero)), vec![]);
     assert_eq!(
@@ -667,48 +700,62 @@ fn a_margin_under_sustained_is_invalid() {
 
     let mut r = rule("iob", json!({ "operator": ">", "value": 1 }));
     r.auto_resolve_enabled = true;
-    r.auto_resolve_params = Some(node("sustained", under(low)));
+    r.auto_resolve_params = Some(root_node("sustained", under(low)));
     assert!(r.parse_body().is_ok());
     assert!(
         nocturne_alerts_core::engine::parse_auto_resolve(r.auto_resolve_params.as_ref()).is_none()
     );
 }
 
-/// A rate margin may bring the open limit to zero, not past it: a "falling"
-/// alert then holds while glucose is not rising.
+/// A rate margin may bring the open limit to zero, not past it: `<= -2`
+/// then holds while glucose is not rising.
 #[test]
 fn a_rate_margin_cannot_pass_zero() {
-    let rate = |direction: &str, margin: &str| {
-        let payload: Value = serde_json::from_str(&format!(
-            r#"{{ "direction": "{direction}", "rate": 2, "clear_margin": {margin} }}"#
+    let payload = |op: &str, value: &str, margin: &str| -> Value {
+        serde_json::from_str(&format!(
+            r#"{{ "operator": "{op}", "value": {value}, "clear_margin": {margin} }}"#
         ))
-        .unwrap();
-        issues(ConditionKind::RateOfChange, &payload)
+        .unwrap()
     };
-    for direction in ["falling", "rising"] {
-        assert_eq!(rate(direction, "2"), vec![], "{direction}");
-        assert_eq!(rate(direction, "1.99"), vec![], "{direction}");
+    let past = |path: &str| vec![(path.to_owned(), "margin_past_zero", Some("clear_margin"))];
+    for (op, value) in [
+        ("<=", "-2"),
+        ("<", "-2"),
+        (">=", "2"),
+        (">", "2"),
+        ("<=", "2"),
+        (">=", "-2"),
+    ] {
+        let rate = |margin: &str| issues(ConditionKind::RateOfChange, &payload(op, value, margin));
+        assert_eq!(rate("2"), vec![], "{op} {value}");
+        assert_eq!(rate("1.99"), vec![], "{op} {value}");
+        assert_eq!(rate("2.01"), past("rate_of_change"), "{op} {value}");
+
+        let negated = |margin: &str| {
+            issues(
+                ConditionKind::Not,
+                &json!({ "child": node("rate_of_change", payload(op, value, margin)) }),
+            )
+        };
+        assert_eq!(negated("2"), vec![], "not {op} {value}");
         assert_eq!(
-            rate(direction, "2.01"),
-            vec![(
-                "rate_of_change".to_owned(),
-                "margin_past_zero",
-                Some("clear_margin")
-            )],
-            "{direction}"
+            negated("2.01"),
+            past("not[0].rate_of_change"),
+            "not {op} {value}"
         );
     }
     assert_eq!(
-        issues(
-            ConditionKind::RateOfChange,
-            &json!({ "direction": "rising", "rate": -1, "clear_margin": 0 })
-        ),
+        issues(ConditionKind::RateOfChange, &payload("==", "0", "0")),
         vec![]
+    );
+    assert_eq!(
+        issues(ConditionKind::RateOfChange, &payload(">=", "0", "0.01")),
+        past("rate_of_change")
     );
 
     let at_zero = rule(
         "rate_of_change",
-        json!({ "direction": "falling", "rate": 2, "clear_margin": 2 }),
+        json!({ "operator": "<=", "value": -2, "clear_margin": 2 }),
     );
     let trend = |v: &str, state: &mut EngineState| {
         let ctx = SensorContext {
@@ -895,9 +942,9 @@ fn a_lower_bound_reservoir_decides_against_the_widened_limit() {
 fn an_auto_resolve_tree_reads_its_plain_limit() {
     let mut r = rule("iob", json!({ "operator": ">", "value": 1 }));
     r.auto_resolve_enabled = true;
-    r.auto_resolve_params = Some(node(
+    r.auto_resolve_params = Some(root_node(
         "threshold",
-        json!({ "direction": "above", "value": 80, "clear_margin": 10 }),
+        json!({ "operator": ">", "value": 80, "clear_margin": 10 }),
     ));
     let ctx = |value: &str, now| SensorContext {
         iob_units: Some(d("2")),
@@ -921,7 +968,7 @@ fn a_flag_change_on_a_margined_body_is_due_at_once() {
     let resolving = |params: Value| {
         let mut r = rule("threshold", params);
         r.auto_resolve_enabled = true;
-        r.auto_resolve_params = Some(node("iob", json!({ "operator": ">", "value": 1 })));
+        r.auto_resolve_params = Some(root_node("iob", json!({ "operator": ">", "value": 1 })));
         r
     };
     let ctx = SensorContext {
@@ -936,12 +983,12 @@ fn a_flag_change_on_a_margined_body_is_due_at_once() {
     assert!(e.auto_resolved);
     assert_eq!(e.next_change_at, Some(tick));
 
-    let plain = resolving(json!({ "direction": "below", "value": 75 }));
+    let plain = resolving(json!({ "operator": "<", "value": 75 }));
     let e = step(&plain, &ctx, base(), &mut open());
     assert!(e.auto_resolved);
     assert_eq!(e.next_change_at, Some(stale));
 
-    let zero = resolving(json!({ "direction": "below", "value": 75, "clear_margin": 0 }));
+    let zero = resolving(json!({ "operator": "<", "value": 75, "clear_margin": 0 }));
     let e = step(&zero, &ctx, base(), &mut open());
     assert_eq!(e.next_change_at, Some(stale));
 }
@@ -981,8 +1028,7 @@ fn an_opening_under_not_continues_on_the_next() {
 enum Leaf {
     Below,
     Above,
-    Falling,
-    Rising,
+    Rate(&'static str),
     Iob(&'static str),
     Predicted(&'static str),
 }
@@ -998,11 +1044,9 @@ struct Case {
 impl Case {
     fn params(&self, margin: Option<i64>) -> (&'static str, Value) {
         let mut params = match self.leaf {
-            Leaf::Below => json!({ "direction": "below", "value": self.value }),
-            Leaf::Above => json!({ "direction": "above", "value": self.value }),
-            Leaf::Falling => json!({ "direction": "falling", "rate": self.value }),
-            Leaf::Rising => json!({ "direction": "rising", "rate": self.value }),
-            Leaf::Iob(op) => json!({ "operator": op, "value": self.value }),
+            Leaf::Below => json!({ "operator": "<", "value": self.value }),
+            Leaf::Above => json!({ "operator": ">", "value": self.value }),
+            Leaf::Rate(op) | Leaf::Iob(op) => json!({ "operator": op, "value": self.value }),
             Leaf::Predicted(op) => {
                 json!({ "operator": op, "value": self.value, "within_minutes": 30 })
             }
@@ -1016,7 +1060,7 @@ impl Case {
     fn kind(&self) -> &'static str {
         match self.leaf {
             Leaf::Below | Leaf::Above => "threshold",
-            Leaf::Falling | Leaf::Rising => "rate_of_change",
+            Leaf::Rate(_) => "rate_of_change",
             Leaf::Iob(_) => "iob",
             Leaf::Predicted(_) => "predicted",
         }
@@ -1034,7 +1078,7 @@ impl Case {
         let fresh = glucose("100", now);
         match self.leaf {
             Leaf::Below | Leaf::Above => glucose(&reading.to_string(), now),
-            Leaf::Falling | Leaf::Rising => SensorContext {
+            Leaf::Rate(_) => SensorContext {
                 trend_rate: Some(v),
                 ..fresh
             },
@@ -1066,9 +1110,7 @@ impl Case {
         match self.leaf {
             Leaf::Below => reading < v + m,
             Leaf::Above => reading > v - m,
-            Leaf::Falling => reading <= -v + m,
-            Leaf::Rising => reading >= v - m,
-            Leaf::Iob(op) | Leaf::Predicted(op) => compare(op),
+            Leaf::Rate(op) | Leaf::Iob(op) | Leaf::Predicted(op) => compare(op),
         }
     }
 }
@@ -1078,15 +1120,14 @@ fn case() -> impl Strategy<Value = Case> {
     let leaf = prop_oneof![
         Just(Leaf::Below),
         Just(Leaf::Above),
-        Just(Leaf::Falling),
-        Just(Leaf::Rising),
+        op().prop_map(Leaf::Rate),
         op().prop_map(Leaf::Iob),
         op().prop_map(Leaf::Predicted),
     ];
     leaf.prop_flat_map(|leaf| {
         let (values, readings) = match leaf {
             Leaf::Below | Leaf::Above | Leaf::Predicted(_) => (60..=80i64, 50..=95i64),
-            Leaf::Falling | Leaf::Rising => (1..=3, -6..=6),
+            Leaf::Rate(_) => (-3..=3, -6..=6),
             Leaf::Iob(_) => (0..=4, -2..=8),
         };
         (
@@ -1096,7 +1137,7 @@ fn case() -> impl Strategy<Value = Case> {
         )
             .prop_flat_map(|(leaf, value, readings)| {
                 let largest = match leaf {
-                    Leaf::Falling | Leaf::Rising => value,
+                    Leaf::Rate(_) => value.abs(),
                     Leaf::Iob(_) => 3,
                     _ => 10,
                 };
@@ -1250,8 +1291,8 @@ enum Tree {
         margin: i64,
     },
     Rate {
-        falling: bool,
-        rate: i64,
+        op: &'static str,
+        value: i64,
         margin: i64,
     },
     /// A `cob` leaf whose fact the context never carries: unknown.
@@ -1315,11 +1356,11 @@ impl Tree {
         match self {
             Tree::Below { value, margin } => node(
                 "threshold",
-                json!({ "direction": "below", "value": value, "clear_margin": margin }),
+                json!({ "operator": "<", "value": value, "clear_margin": margin }),
             ),
             Tree::Above { value, margin } => node(
                 "threshold",
-                json!({ "direction": "above", "value": value, "clear_margin": margin }),
+                json!({ "operator": ">", "value": value, "clear_margin": margin }),
             ),
             Tree::Iob { op, value, margin } => node(
                 "iob",
@@ -1329,17 +1370,9 @@ impl Tree {
                 "reservoir",
                 json!({ "operator": op, "value": value, "clear_margin": margin }),
             ),
-            Tree::Rate {
-                falling,
-                rate,
-                margin,
-            } => node(
+            Tree::Rate { op, value, margin } => node(
                 "rate_of_change",
-                json!({
-                    "direction": if *falling { "falling" } else { "rising" },
-                    "rate": rate,
-                    "clear_margin": margin,
-                }),
+                json!({ "operator": op, "value": value, "clear_margin": margin }),
             ),
             Tree::Absent { margin } => node(
                 "cob",
@@ -1393,15 +1426,9 @@ impl Tree {
                     None
                 }
             }
-            Tree::Rate {
-                falling,
-                rate,
-                margin,
-            } => Some(if *falling {
-                f.trend <= -rate + shift(*margin)
-            } else {
-                f.trend >= rate - shift(*margin)
-            }),
+            Tree::Rate { op, value, margin } => {
+                Some(compare(op, f.trend, toward_true(op, *value, *margin)))
+            }
             Tree::Absent { .. } => None,
             Tree::Not(child) => child.oracle(f, open, !negated).map(|t| !t),
             Tree::All(children) => {
@@ -1477,13 +1504,9 @@ fn tree() -> impl Strategy<Value = Tree> {
             value,
             margin
         }),
-        (any::<bool>(), 1..=3i64)
-            .prop_flat_map(|(falling, rate)| (Just(falling), Just(rate), 0..=rate))
-            .prop_map(|(falling, rate, margin)| Tree::Rate {
-                falling,
-                rate,
-                margin
-            }),
+        (op(), -3..=3i64)
+            .prop_flat_map(|(op, value)| (Just(op), Just(value), 0..=value.abs()))
+            .prop_map(|(op, value, margin)| Tree::Rate { op, value, margin }),
         (0..=3i64).prop_map(|margin| Tree::Absent { margin }),
     ];
     leaf.prop_recursive(3, 12, 3, |inner| {
@@ -1576,7 +1599,7 @@ fn a_tree_with_a_margin_under_sustained_never_parses() {
     for _ in 0..1000 {
         let (t, minutes) = (tree(), 1..=30i64).new_tree(&mut runner).unwrap().current();
         let wrapped = json!({ "minutes": minutes, "child": t.json() });
-        let result = parse_payload(ConditionKind::Sustained, &wrapped);
+        let result = parse_body(ConditionKind::Sustained, &wrapped);
         if t.has_margin() {
             let reasons: Vec<_> = result.unwrap_err().0.iter().map(|i| i.reason).collect();
             assert!(!reasons.is_empty(), "{t:?}");

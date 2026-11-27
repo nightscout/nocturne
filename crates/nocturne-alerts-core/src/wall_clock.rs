@@ -79,8 +79,18 @@ mod tests {
     use crate::enums::WireEnum;
     use serde_json::{Value, json};
 
+    /// `doc` as a stored tree's root, which names its schema; anything but
+    /// an object as it is.
+    fn rooted(mut doc: Value) -> Value {
+        if let Value::Object(fields) = &mut doc {
+            fields.insert("schema_version".into(), json!(2));
+        }
+        doc
+    }
+
     fn body_references_wall_clock(condition_type: &str, condition_params: &Value) -> bool {
-        references_wall_clock(&RuleConditions::body(condition_type, condition_params))
+        let params = rooted(condition_params.clone());
+        references_wall_clock(&RuleConditions::body(condition_type, &params))
     }
 
     /// The §5.1 table. A kind dropped from it would only re-evaluate on the next
@@ -133,7 +143,7 @@ mod tests {
     fn reading_driven_root_is_not_selected() {
         assert!(!body_references_wall_clock(
             "threshold",
-            &json!({"direction": "below", "value": 70})
+            &json!({"operator": "<", "value": 70})
         ));
         assert!(!body_references_wall_clock("no_such_kind", &json!({})));
     }
@@ -159,7 +169,7 @@ mod tests {
         let tree = json!({
             "operator": "and",
             "conditions": [
-                { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+                { "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
                 { "type": "not", "not": { "child": {
                     "type": "sustained",
                     "sustained": { "minutes": 10, "child": {
@@ -176,21 +186,19 @@ mod tests {
     /// missed evaluation there changes nothing (§5.1).
     #[test]
     fn a_freshness_leaf_is_selected_only_when_unknown_is_read_as_known() {
-        let low = json!({"direction": "below", "value": 70});
-        let iob = json!({"operator": ">", "value": 2});
+        let low = json!({"operator": "<", "value": 70});
+        let iob = rooted(json!({"operator": ">", "value": 2}));
         for (kind, params) in [
-            ("threshold", &low),
-            (
-                "rate_of_change",
-                &json!({"direction": "falling", "rate": 2}),
-            ),
-            ("trend", &json!({"bucket": "falling_fast"})),
-            ("glucose_bucket", &json!({"buckets": ["low"]})),
+            ("threshold", low.clone()),
+            ("rate_of_change", json!({"operator": "<=", "value": -2})),
+            ("trend", json!({"bucket": "falling_fast"})),
+            ("glucose_bucket", json!({"buckets": ["low"]})),
         ] {
+            let params = rooted(params);
             for on_unknown in OnUnknown::ALL {
                 let rule = RuleConditions {
                     on_unknown: *on_unknown,
-                    ..RuleConditions::body(kind, params)
+                    ..RuleConditions::body(kind, &params)
                 };
                 assert_eq!(
                     references_wall_clock(&rule),
@@ -204,7 +212,7 @@ mod tests {
             ..RuleConditions::body("iob", &iob)
         };
         assert!(!references_wall_clock(&not_glucose));
-        let resolve = json!({"type": "threshold", "threshold": low});
+        let resolve = rooted(json!({"type": "threshold", "threshold": low}));
         let in_resolve = RuleConditions {
             condition_type: "iob",
             condition_params: &iob,
@@ -220,7 +228,7 @@ mod tests {
         let tree = json!({
             "operator": "and",
             "conditions": [
-                { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+                { "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
                 { "type": "time_of_day", "time_of_day": { "from": "22:00", "to": "06:00" } },
                 { "type": "sustained", "sustained": { "minutes": 15, "child":
                     { "type": "iob", "iob": { "operator": ">", "value": 2 } } } }

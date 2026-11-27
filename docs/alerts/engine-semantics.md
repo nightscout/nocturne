@@ -115,7 +115,7 @@ this tick):
 | `limit_conflict` | a `threshold`, `predicted` or `eventual_glucose` with both `value` and `value_from` (§3, a limit from a fact); the field is `value_from` |
 | `offset_out_of_range` | a `value_from` `offset` more than 1000 either side of `0` (§3, a limit from a fact); the field is `offset` |
 | `window_out_of_range` | a `window_minutes` that is a whole number outside 5 to 180 (§3, windows); the field is `window_minutes` |
-| `unsupported_schema` | a tree whose root does not carry `"schema_version": 2` (§1.2); the field is `schema_version`, the path the root's, and it is the tree's only problem |
+| `unsupported_schema` | a tree whose root does not carry `"schema_version": 2` (§1.2); the field is `schema_version`, the path the root's, and it is the tree's only problem, unless the document nests too deep to be read at all (`too_deep`, §1.1) |
 | `self_reference` | a `threshold` whose `value_from` names `latest_glucose`, which compares the reading with itself plus a constant, so its answer never depends on the reading (§3, a limit from a fact); the field is `value_from` |
 
 `clear_margin` is an optional member added after the first release. An engine older than it

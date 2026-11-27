@@ -308,8 +308,8 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
         half_present(at(60)),
     );
     let devices = (
-        half_present(at(3600)),
-        half_present(at(86_400)),
+        half_present(at(60)),
+        half_present(at(60)),
         half_present(at(60)),
         half_present(at(60)),
         half_present(quantity()),

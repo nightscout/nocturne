@@ -1,6 +1,7 @@
 //! `migrate_v1_to_v2` (engine-semantics.md §1.5): each schema 1 shape and the
 //! schema 2 shape it becomes, the rounding of ages, what it refuses, and that
 //! it can run again.
+#![allow(clippy::expect_used, clippy::panic, reason = "test code")]
 
 use nocturne_alerts_core::migrate::{Migrated, Migration, TreeRoot, migrate_v1_to_v2};
 use nocturne_alerts_core::model::{ConditionKind, Node, Reason, parse_payload};
@@ -49,7 +50,10 @@ fn a_threshold_direction_becomes_its_strict_operator() {
         json!({"direction": "above", "value_from": {"fact": "target_high", "offset": 20}}),
     );
     assert_eq!(above.tree["operator"], json!(">"));
-    assert_eq!(above.tree["value_from"], json!({"fact": "target_high", "offset": 20}));
+    assert_eq!(
+        above.tree["value_from"],
+        json!({"fact": "target_high", "offset": 20})
+    );
 }
 
 #[test]
@@ -119,11 +123,12 @@ fn an_age_between_minutes_rounds_to_the_side_that_holds_no_later() {
 
 #[test]
 fn under_a_not_an_age_rounds_the_other_way() {
-    let leaf = |operator: &str| {
-        json!({"type": "site_age", "site_age": {"operator": operator, "value": 1.001}})
-    };
+    let leaf = |operator: &str| json!({"type": "site_age", "site_age": {"operator": operator, "value": 1.001}});
     let negated = node(json!({"type": "not", "not": {"child": leaf(">=")}}));
-    assert_eq!(negated.tree["not"]["child"]["site_age"]["minutes"], json!(61));
+    assert_eq!(
+        negated.tree["not"]["child"]["site_age"]["minutes"],
+        json!(61)
+    );
     let twice = node(json!({"type": "not", "not": {"child":
         {"type": "not", "not": {"child": leaf(">=")}}}}));
     assert_eq!(
@@ -223,22 +228,86 @@ fn a_missing_operand_stays_missing() {
 #[test]
 fn what_schema_1_could_not_read_stays_as_it_is() {
     let cases = [
-        (json!({"direction": "sideways", "value": 70}), "threshold", Reason::UnknownValue("direction")),
-        (json!({"direction": 1, "value": 70}), "threshold", Reason::InvalidField("direction")),
-        (json!({"direction": "below", "operator": "<", "value": 70}), "threshold", Reason::UnknownField),
-        (json!({"rate": 2}), "rate_of_change", Reason::FieldMissing("direction")),
-        (json!({"direction": "falling", "rate": "2"}), "rate_of_change", Reason::InvalidField("rate")),
-        (json!({"operator": ">", "value": 1, "minutes": 1}), "staleness", Reason::UnknownField),
-        (json!({"operator": ">", "value": "72"}), "site_age", Reason::InvalidField("value")),
-        (json!({"value": 1.001}), "site_age", Reason::FieldMissing("operator")),
-        (json!({"operator": "gt", "value": 1.001}), "site_age", Reason::UnknownValue("operator")),
-        (json!({"operator": "and"}), "composite", Reason::ListEmpty("conditions")),
-        (json!({"operator": "and", "conditions": [null]}), "composite", Reason::ConditionMissing),
-        (json!({"operator": "and", "conditions": [{"threshold": {}}]}), "composite", Reason::TypeMissing),
-        (json!({"operator": "and", "conditions": [{"type": "warp"}]}), "composite", Reason::UnknownKind),
-        (json!({"operator": "and", "conditions": [{"type": "iob"}]}), "composite", Reason::PayloadMissing),
-        (json!({"schema_version": 3, "operator": "<", "value": 70}), "threshold", Reason::UnsupportedSchema),
-        (json!({"schema_version": "2", "operator": "<", "value": 70}), "threshold", Reason::UnsupportedSchema),
+        (
+            json!({"direction": "sideways", "value": 70}),
+            "threshold",
+            Reason::UnknownValue("direction"),
+        ),
+        (
+            json!({"direction": 1, "value": 70}),
+            "threshold",
+            Reason::InvalidField("direction"),
+        ),
+        (
+            json!({"direction": "below", "operator": "<", "value": 70}),
+            "threshold",
+            Reason::UnknownField,
+        ),
+        (
+            json!({"rate": 2}),
+            "rate_of_change",
+            Reason::FieldMissing("direction"),
+        ),
+        (
+            json!({"direction": "falling", "rate": "2"}),
+            "rate_of_change",
+            Reason::InvalidField("rate"),
+        ),
+        (
+            json!({"operator": ">", "value": 1, "minutes": 1}),
+            "staleness",
+            Reason::UnknownField,
+        ),
+        (
+            json!({"operator": ">", "value": "72"}),
+            "site_age",
+            Reason::InvalidField("value"),
+        ),
+        (
+            json!({"value": 1.001}),
+            "site_age",
+            Reason::FieldMissing("operator"),
+        ),
+        (
+            json!({"operator": "gt", "value": 1.001}),
+            "site_age",
+            Reason::UnknownValue("operator"),
+        ),
+        (
+            json!({"operator": "and"}),
+            "composite",
+            Reason::ListEmpty("conditions"),
+        ),
+        (
+            json!({"operator": "and", "conditions": [null]}),
+            "composite",
+            Reason::ConditionMissing,
+        ),
+        (
+            json!({"operator": "and", "conditions": [{"threshold": {}}]}),
+            "composite",
+            Reason::TypeMissing,
+        ),
+        (
+            json!({"operator": "and", "conditions": [{"type": "warp"}]}),
+            "composite",
+            Reason::UnknownKind,
+        ),
+        (
+            json!({"operator": "and", "conditions": [{"type": "iob"}]}),
+            "composite",
+            Reason::PayloadMissing,
+        ),
+        (
+            json!({"schema_version": 3, "operator": "<", "value": 70}),
+            "threshold",
+            Reason::UnsupportedSchema,
+        ),
+        (
+            json!({"schema_version": "2", "operator": "<", "value": 70}),
+            "threshold",
+            Reason::UnsupportedSchema,
+        ),
         (json!([1]), "threshold", Reason::NotAnObject),
         (Value::Null, "threshold", Reason::PayloadMissing),
         (json!({"value": 70}), "warp", Reason::UnknownKind),
@@ -254,6 +323,9 @@ fn a_refusal_names_the_node_it_is_on() {
         {"type": "threshold", "threshold": {"direction": "up", "value": 70}}}});
     assert_eq!(
         refused(&tree, TreeRoot::Node("snooze")),
-        ("snooze[0].threshold".to_owned(), Reason::UnknownValue("direction"))
+        (
+            "snooze[0].threshold".to_owned(),
+            Reason::UnknownValue("direction")
+        )
     );
 }

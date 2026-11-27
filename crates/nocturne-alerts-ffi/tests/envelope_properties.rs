@@ -42,8 +42,8 @@ use nocturne_alerts_core::facts::ContextFact;
 use nocturne_alerts_core::model::{ConditionKind, Node, ParseError, parse_payload};
 
 use generators::{
-    RULE_ID, arbitrary_json, base, mutated, mutations, payload, rule_spec, skewed_ticks, ticks,
-    tree, word,
+    RULE_ID, arbitrary_json, base, body, mutated, mutations, root_tree, rule_spec, skewed_ticks,
+    ticks, word,
 };
 
 type Entry = unsafe extern "C" fn(*const c_char) -> *mut c_char;
@@ -131,7 +131,7 @@ fn tracker_object() -> BoxedStrategy<Value> {
 
 fn condition_pair() -> Group {
     let valid = select(ConditionKind::ALL.to_vec()).prop_flat_map(|kind| {
-        payload(kind, &tree()).prop_map(move |params| (Value::from(kind.name()), params))
+        body(kind).prop_map(move |params| (Value::from(kind.name()), params))
     });
     prop_oneof![
         30 => valid,
@@ -168,8 +168,8 @@ fn tracker_request(required: Vec<Group>) -> BoxedStrategy<Value> {
 
 fn leaf_paths_input() -> BoxedStrategy<Value> {
     prop_oneof![
-        3 => tree(),
-        1 => (tree(), select(vec!["auto_resolve", "snooze", "x"]))
+        3 => root_tree(),
+        1 => (root_tree(), select(vec!["auto_resolve", "snooze", "x"]))
             .prop_map(|(node, root)| json!({ "node": node, "root": root })),
     ]
     .boxed()
@@ -212,7 +212,7 @@ fn entry_points() -> Vec<EntryPoint> {
                 request(
                     vec![
                         swappable("rule_id", Just(Value::from(RULE_ID.to_string())).boxed()),
-                        swappable("node", tree()),
+                        swappable("node", root_tree()),
                         swappable("context", first_context()),
                         swappable("now", timestamp()),
                     ],
@@ -235,10 +235,10 @@ fn entry_points() -> Vec<EntryPoint> {
                 rule_body_request(
                     vec![],
                     vec![
-                        swappable("auto_resolve_params", tree()),
+                        swappable("auto_resolve_params", root_tree()),
                         swappable(
                             "snooze_conditions",
-                            vec(tree(), 0..3).prop_map(Value::from).boxed(),
+                            vec(root_tree(), 0..3).prop_map(Value::from).boxed(),
                         ),
                     ],
                 )
@@ -257,7 +257,9 @@ fn entry_points() -> Vec<EntryPoint> {
         EntryPoint {
             name: "describe",
             call: nocturne_alerts_describe,
-            request: || rule_body_request(vec![], vec![swappable("auto_resolve_params", tree())]),
+            request: || {
+                rule_body_request(vec![], vec![swappable("auto_resolve_params", root_tree())])
+            },
         },
         EntryPoint {
             name: "rule_reads",
@@ -267,7 +269,7 @@ fn entry_points() -> Vec<EntryPoint> {
                     vec![],
                     vec![
                         swappable("auto_resolve_enabled", flag()),
-                        swappable("auto_resolve_params", tree()),
+                        swappable("auto_resolve_params", root_tree()),
                     ],
                 )
             },
@@ -285,7 +287,7 @@ fn entry_points() -> Vec<EntryPoint> {
                     )],
                     vec![
                         swappable("auto_resolve_enabled", flag()),
-                        swappable("auto_resolve_params", tree()),
+                        swappable("auto_resolve_params", root_tree()),
                     ],
                 )
             },
@@ -298,7 +300,7 @@ fn entry_points() -> Vec<EntryPoint> {
                     vec![],
                     vec![
                         swappable("auto_resolve_enabled", flag()),
-                        swappable("auto_resolve_params", tree()),
+                        swappable("auto_resolve_params", root_tree()),
                     ],
                 )
             },
@@ -399,11 +401,11 @@ fn every_entry_point_answers_any_input_with_an_envelope() {
 
 /// Each entry point's own request generator reaches `ok: true`, so the
 /// previous property exercises the working path and not only rejection.
-/// Rates measured over 256 requests: evaluate 199, evaluate_node 203,
-/// validate 250, classify 246, leaf_paths 256, describe 238, rule_reads 242,
-/// references_any 241, references_wall_clock 242, replay 224,
-/// tracker_process 215, tracker_force_close 213,
-/// tracker_close_elapsed_hysteresis 218. The floor is half.
+/// Rates measured over 256 requests: evaluate 215, evaluate_node 202,
+/// validate 242, classify 247, leaf_paths 256, describe 234, rule_reads 240,
+/// references_any 233, references_wall_clock 240, replay 234,
+/// tracker_process 212, tracker_force_close 218,
+/// tracker_close_elapsed_hysteresis 233. The floor is half.
 #[test]
 fn every_entry_point_request_generator_reaches_the_working_path() {
     const FLOOR: usize = 128;
@@ -456,10 +458,24 @@ fn core_issues(
         ));
     }
     if let Some(conditions) = snooze.filter(|c| !c.is_empty()) {
-        let node = json!({
+        let names_schema_2 = |c: &Value| c.get("schema_version").and_then(Value::as_u64) == Some(2);
+        let children: Vec<Value> = conditions
+            .iter()
+            .map(|c| {
+                let mut child = c.clone();
+                if let Some(fields) = child.as_object_mut() {
+                    fields.shift_remove("schema_version");
+                }
+                child
+            })
+            .collect();
+        let mut node = json!({
             "type": "composite",
-            "composite": { "operator": "and", "conditions": conditions },
+            "composite": { "operator": "and", "conditions": children },
         });
+        if conditions.iter().all(names_schema_2) {
+            node["schema_version"] = json!(2);
+        }
         let errors = Node::parse_rooted(&node, "snooze").err();
         issues.extend(scoped("snooze", errors.map(|e| e.0).unwrap_or_default()));
     }
@@ -475,15 +491,15 @@ fn broken(doc: BoxedStrategy<Value>) -> BoxedStrategy<Value> {
 fn validate_inputs() -> impl Strategy<Value = (String, Value, Option<Value>, Option<Vec<Value>>)> {
     let condition = prop_oneof![
         9 => select(ConditionKind::ALL.to_vec()).prop_flat_map(|kind| {
-            broken(payload(kind, &tree())).prop_map(move |p| (kind.name().to_owned(), p))
+            broken(body(kind)).prop_map(move |p| (kind.name().to_owned(), p))
         }),
         1 => ("[a-z_]{0,8}", arbitrary_json()),
     ];
     let auto_resolve = option::of(prop_oneof![
-        4 => broken(tree()),
+        4 => broken(root_tree()),
         1 => Just(Value::Null),
     ]);
-    let snooze = option::of(vec(broken(tree()), 0..3));
+    let snooze = option::of(vec(broken(root_tree()), 0..3));
     (condition, auto_resolve, snooze)
         .prop_map(|((kind, params), auto, snooze)| (kind, params, auto, snooze))
 }
@@ -618,14 +634,14 @@ fn write_fuzz_seeds() {
             seeds.push((name.clone(), request.to_string().into_bytes()));
         }
     }
-    for node in sampled(&tree(), &mut runner, 24) {
+    for node in sampled(&root_tree(), &mut runner, 24) {
         seeds.push(("node_parse".into(), node.to_string().into_bytes()));
     }
     let kinds = ConditionKind::ALL;
     for (index, kind) in kinds.iter().enumerate() {
-        for body in sampled(&payload(*kind, &tree()), &mut runner, 3) {
+        for params in sampled(&body(*kind), &mut runner, 3) {
             let mut bytes = vec![u8::try_from(index).unwrap()];
-            bytes.extend(body.to_string().into_bytes());
+            bytes.extend(params.to_string().into_bytes());
             seeds.push(("parse_payload".into(), bytes));
         }
     }
@@ -687,6 +703,16 @@ fn write_fuzz_seeds() {
     println!("seeds written: {written:?}");
 }
 
+/// A rule body as the stored node of its kind: the schema it names moves from
+/// the body to the node's root.
 fn node_of(kind: &str, params: &Value) -> Value {
-    json!({ "type": kind, kind: params })
+    let mut payload = params.clone();
+    let schema = payload
+        .as_object_mut()
+        .and_then(|fields| fields.shift_remove("schema_version"));
+    let mut node = json!({ "type": kind, kind: payload });
+    if let Some(schema) = schema {
+        node["schema_version"] = schema;
+    }
+    node
 }

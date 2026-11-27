@@ -141,7 +141,6 @@ fn world() -> impl Strategy<Value = World> {
 #[derive(Debug, Clone)]
 struct Leaf {
     kind: ConditionKind,
-    /// `threshold`'s direction, else the operator.
     comparison: &'static str,
     fact: LimitFact,
     offset: Option<Decimal>,
@@ -150,16 +149,11 @@ struct Leaf {
 
 impl Leaf {
     fn operator(&self) -> CmpOp {
-        match self.comparison {
-            "below" => CmpOp::Lt,
-            "above" => CmpOp::Gt,
-            op => CmpOp::from_name(op).expect("an operator"),
-        }
+        CmpOp::from_name(self.comparison).expect("an operator")
     }
 
     fn params(&self, limit: Value) -> Value {
         let mut params = match self.kind {
-            ConditionKind::Threshold => json!({ "direction": self.comparison }),
             ConditionKind::Predicted => {
                 json!({ "operator": self.comparison, "within_minutes": 30 })
             }
@@ -180,13 +174,19 @@ impl Leaf {
         if let Some(offset) = self.offset {
             value_from["offset"] = number(offset);
         }
-        parse_payload(self.kind, &self.params(json!({ "value_from": value_from })))
-            .expect("the reference parses")
+        parse_payload(
+            self.kind,
+            &rooted(self.params(json!({ "value_from": value_from }))),
+        )
+        .expect("the reference parses")
     }
 
     fn literal(&self, value: Decimal) -> Payload {
-        parse_payload(self.kind, &self.params(json!({ "value": number(value) })))
-            .expect("the literal parses")
+        parse_payload(
+            self.kind,
+            &rooted(self.params(json!({ "value": number(value) }))),
+        )
+        .expect("the literal parses")
     }
 
     /// The limit compared against: `limit` moved by the margin, as §3 moves
@@ -204,14 +204,23 @@ impl Leaf {
     }
 }
 
+/// `params` as a stored rule body, which names its schema.
+fn rooted(mut params: Value) -> Value {
+    params["schema_version"] = json!(2);
+    params
+}
+
 fn number(d: Decimal) -> Value {
     Value::Number(d.to_string().parse().expect("a number"))
 }
 
 fn leaf() -> impl Strategy<Value = Leaf> {
     let kind = prop_oneof![
-        Just((ConditionKind::Threshold, "below")),
-        Just((ConditionKind::Threshold, "above")),
+        Just((ConditionKind::Threshold, "<")),
+        Just((ConditionKind::Threshold, "<=")),
+        Just((ConditionKind::Threshold, ">")),
+        Just((ConditionKind::Threshold, ">=")),
+        Just((ConditionKind::Threshold, "==")),
         Just((ConditionKind::Predicted, "<")),
         Just((ConditionKind::Predicted, "<=")),
         Just((ConditionKind::Predicted, ">")),
@@ -314,7 +323,7 @@ proptest! {
 }
 
 fn issues(kind: ConditionKind, params: Value) -> Vec<(String, &'static str, Option<&'static str>)> {
-    parse_payload(kind, &params).map_or_else(
+    parse_payload(kind, &rooted(params)).map_or_else(
         |e| {
             e.0.into_iter()
                 .map(|i| (i.path, i.reason.code(), i.reason.field()))
@@ -330,13 +339,13 @@ fn each_invalid_form_of_a_limit_is_refused_with_its_reason() {
     let cases: Vec<(K, Value, &str, Option<&str>)> = vec![
         (
             K::Threshold,
-            json!({"direction": "below", "value": 70, "value_from": {"fact": "target_low"}}),
+            json!({"operator": "<", "value": 70, "value_from": {"fact": "target_low"}}),
             Reason::LimitConflict.code(),
             Some("value_from"),
         ),
         (
             K::Threshold,
-            json!({"direction": "below"}),
+            json!({"operator": "<"}),
             "field_missing",
             Some("value"),
         ),
@@ -348,7 +357,7 @@ fn each_invalid_form_of_a_limit_is_refused_with_its_reason() {
         ),
         (
             K::Threshold,
-            json!({"direction": "above", "value_from": {"fact": "latest_glucose"}}),
+            json!({"operator": ">", "value_from": {"fact": "latest_glucose"}}),
             "self_reference",
             Some("value_from"),
         ),
@@ -382,25 +391,25 @@ fn each_invalid_form_of_a_limit_is_refused_with_its_reason() {
         ),
         (
             K::Threshold,
-            json!({"direction": "below", "value_from": {"fact": "max_iob"}}),
+            json!({"operator": "<", "value_from": {"fact": "max_iob"}}),
             "unknown_value",
             Some("fact"),
         ),
         (
             K::Threshold,
-            json!({"direction": "below", "value_from": {}}),
+            json!({"operator": "<", "value_from": {}}),
             "field_missing",
             Some("fact"),
         ),
         (
             K::Threshold,
-            json!({"direction": "below", "value_from": "target_low"}),
+            json!({"operator": "<", "value_from": "target_low"}),
             "invalid_field",
             Some("value_from"),
         ),
         (
             K::Threshold,
-            json!({"direction": "below", "value_from": {"fact": "target_low", "scale": 2}}),
+            json!({"operator": "<", "value_from": {"fact": "target_low", "scale": 2}}),
             "unknown_field",
             None,
         ),
@@ -412,7 +421,7 @@ fn each_invalid_form_of_a_limit_is_refused_with_its_reason() {
         ),
         (
             K::RateOfChange,
-            json!({"direction": "falling", "value_from": {"fact": "latest_glucose"}}),
+            json!({"operator": "<=", "value_from": {"fact": "latest_glucose"}}),
             "unknown_field",
             None,
         ),
@@ -444,7 +453,7 @@ fn each_invalid_form_of_a_limit_is_refused_with_its_reason() {
 #[test]
 fn a_margin_under_sustained_is_refused_on_a_limit_from_a_fact() {
     let tree = json!({"minutes": 15, "child": {"type": "threshold", "threshold":
-        {"direction": "below", "value_from": {"fact": "target_low"}, "clear_margin": 5}}});
+        {"operator": "<", "value_from": {"fact": "target_low"}, "clear_margin": 5}}});
     assert_eq!(
         issues(ConditionKind::Sustained, tree),
         [(
@@ -462,7 +471,7 @@ fn a_limit_serialises_as_it_was_written() {
     for (kind, params) in [
         (
             ConditionKind::Threshold,
-            json!({"direction": "below", "value": 70.50}),
+            json!({"operator": "<", "value": 70.50}),
         ),
         (
             ConditionKind::Predicted,
@@ -474,7 +483,7 @@ fn a_limit_serialises_as_it_was_written() {
         ),
         (
             ConditionKind::Threshold,
-            json!({"direction": "below",
+            json!({"operator": "<",
             "value_from": {"fact": "target_low", "offset": -10.5}}),
         ),
         (
@@ -483,7 +492,7 @@ fn a_limit_serialises_as_it_was_written() {
             "value_from": {"fact": "latest_glucose"}}),
         ),
     ] {
-        let payload = parse_payload(kind, &params).expect("parses");
+        let payload = parse_payload(kind, &rooted(params.clone())).expect("parses");
         assert_eq!(
             serde_json::to_value(&payload).expect("serialises"),
             params,
@@ -507,7 +516,7 @@ fn a_run_over_a_target_starts_at_the_evaluation_and_over_a_literal_at_the_readin
     let run_start = |child: Value| {
         let payload = parse_payload(
             ConditionKind::Sustained,
-            &json!({ "minutes": 15, "child": child }),
+            &rooted(json!({ "minutes": 15, "child": child })),
         )
         .expect("parses");
         let mut timers = TimerStore::default();
@@ -518,8 +527,8 @@ fn a_run_over_a_target_starts_at_the_evaluation_and_over_a_literal_at_the_readin
     };
 
     let target = json!({"type": "threshold", "threshold":
-        {"direction": "below", "value_from": {"fact": "target_low"}}});
-    let literal = json!({"type": "threshold", "threshold": {"direction": "below", "value": 80}});
+        {"operator": "<", "value_from": {"fact": "target_low"}}});
+    let literal = json!({"type": "threshold", "threshold": {"operator": "<", "value": 80}});
 
     assert_eq!(run_start(target), Some(now()));
     assert_eq!(run_start(literal), Some(ago(3)));

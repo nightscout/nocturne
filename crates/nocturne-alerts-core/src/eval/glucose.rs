@@ -386,7 +386,9 @@ pub(super) fn staleness(
     enabled_at: Option<DateTime<Utc>>,
 ) -> ClockLeaf {
     match data_stopped(ctx, enabled_at) {
-        DataStopped::At(anchor, source) => minutes(anchor, Some(source), p.operator, p.minutes.get()),
+        DataStopped::At(anchor, source) => {
+            minutes(anchor, Some(source), p.operator, p.minutes.get())
+        }
         DataStopped::Forever => {
             ClockLeaf::Fixed(matches!(p.operator, CmpOp::Gt | CmpOp::Ge).into())
         }

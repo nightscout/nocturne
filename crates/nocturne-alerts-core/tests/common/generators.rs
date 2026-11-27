@@ -13,10 +13,10 @@ use uuid::Uuid;
 use nocturne_alerts_core::engine::OnUnknown;
 use nocturne_alerts_core::enums::{
     AlertStateKind, CmpOp, CompositeOp, DayOfWeek, ForecastCurve, GlucoseBucket, PumpMode,
-    RateDirection, SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection,
-    TransmitterBatteryMetric, TrendBucket, WindowExtreme, WireEnum,
+    SensorState, StateSpanCategory, TempBasalMetric, TransmitterBatteryMetric, TrendBucket,
+    WindowExtreme, WireEnum,
 };
-use nocturne_alerts_core::model::{ConditionKind, Payload};
+use nocturne_alerts_core::model::{CURRENT_SCHEMA, ConditionKind, Payload, SCHEMA_VERSION};
 
 pub(crate) const RULE_ID: Uuid = Uuid::from_u128(1);
 
@@ -34,10 +34,25 @@ pub(crate) fn node(kind: &str, payload: Value) -> Value {
     json!({ "type": kind, kind: payload })
 }
 
+/// `doc` as a stored tree's root, which names the schema it is written in
+/// (engine-semantics.md §1.2): a rule body or a full node. Anything but an
+/// object is returned as it is.
+pub(crate) fn rooted(doc: Value) -> Value {
+    match doc {
+        Value::Object(fields) => {
+            let mut root = Map::with_capacity(fields.len() + 1);
+            root.insert(SCHEMA_VERSION.to_owned(), Value::from(CURRENT_SCHEMA));
+            root.extend(fields.into_iter().filter(|(k, _)| k != SCHEMA_VERSION));
+            Value::Object(root)
+        }
+        other => other,
+    }
+}
+
 pub(crate) fn simple_leaf() -> BoxedStrategy<Value> {
     prop_oneof![
-        (word::<ThresholdDirection>(), 40..300i32)
-            .prop_map(|(d, v)| node("threshold", json!({ "direction": d, "value": v }))),
+        (word::<CmpOp>(), 40..300i32)
+            .prop_map(|(op, v)| node("threshold", json!({ "operator": op, "value": v }))),
         (word::<CmpOp>(), 0..6i32)
             .prop_map(|(op, v)| node("iob", json!({ "operator": op, "value": v }))),
         any::<bool>().prop_map(|a| node("sleep_session_active", json!({ "is_active": a }))),
@@ -93,13 +108,13 @@ pub(crate) struct RuleSpec {
 impl RuleSpec {
     /// The rule in the corpus `ScenarioRule` shape.
     pub(crate) fn wire(&self) -> Value {
-        let params = self.body.get("composite").cloned();
+        let params = self.body.get("composite").cloned().map(rooted);
         json!({
             "id": RULE_ID.to_string(),
             "condition_type": "composite",
             "condition_params": params,
             "auto_resolve_enabled": self.auto_resolve.is_some(),
-            "auto_resolve_params": self.auto_resolve,
+            "auto_resolve_params": self.auto_resolve.clone().map(rooted),
             "on_unknown": self.on_unknown,
             "glucose_freshness_minutes": self.glucose_freshness_minutes,
         })
@@ -217,7 +232,7 @@ fn ticks_stepping(step_back: bool) -> impl Strategy<Value = Vec<Tick>> {
 /// Names a document is likely to hold: kind names, every payload field, and
 /// the node keys.
 pub(crate) fn known_keys() -> Vec<&'static str> {
-    let mut keys = vec!["type", "_uid", "child", "conditions"];
+    let mut keys = vec!["type", "_uid", "child", "conditions", SCHEMA_VERSION];
     for kind in ConditionKind::ALL {
         keys.push(kind.name());
         keys.extend_from_slice(Payload::fields(*kind));
@@ -379,12 +394,7 @@ pub(crate) fn curve_selector() -> BoxedStrategy<Option<(&'static str, Value)>> {
 pub(crate) fn payload(kind: ConditionKind, child: &BoxedStrategy<Value>) -> BoxedStrategy<Value> {
     use ConditionKind as K;
     match kind {
-        K::Threshold => (word_value::<ThresholdDirection>(), number())
-            .prop_map(|(direction, value)| json!({ "direction": direction, "value": value }))
-            .boxed(),
-        K::RateOfChange => (word_value::<RateDirection>(), number())
-            .prop_map(|(direction, rate)| json!({ "direction": direction, "rate": rate }))
-            .boxed(),
+        K::Threshold | K::RateOfChange => compare(),
         K::SignalLoss => minutes(1..=1440)
             .prop_map(|m| json!({ "timeout_minutes": m }))
             .boxed(),
@@ -400,7 +410,7 @@ pub(crate) fn payload(kind: ConditionKind, child: &BoxedStrategy<Value>) -> Boxe
         K::Sustained => (minutes(1..=1440), child.clone())
             .prop_map(|(m, child)| json!({ "minutes": m, "child": child }))
             .boxed(),
-        K::Staleness => minutes_compare("value"),
+        K::Staleness | K::SiteAge | K::SensorAge => minutes_compare("minutes"),
         K::Predicted => (
             word_value::<CmpOp>(),
             number(),
@@ -423,8 +433,6 @@ pub(crate) fn payload(kind: ConditionKind, child: &BoxedStrategy<Value>) -> Boxe
         K::Iob
         | K::Cob
         | K::Reservoir
-        | K::SiteAge
-        | K::SensorAge
         | K::PumpBattery
         | K::UploaderBattery
         | K::SensitivityRatio
@@ -534,7 +542,18 @@ pub(crate) fn is_container(kind: ConditionKind) -> bool {
     )
 }
 
-/// A valid condition node whose subtree can hold any kind.
+/// A valid rule body of `kind`, naming its schema.
+pub(crate) fn body(kind: ConditionKind) -> BoxedStrategy<Value> {
+    payload(kind, &tree()).prop_map(rooted).boxed()
+}
+
+/// A valid stored condition node, naming its schema at its root.
+pub(crate) fn root_tree() -> BoxedStrategy<Value> {
+    tree().prop_map(rooted).boxed()
+}
+
+/// A valid condition node whose subtree can hold any kind, to nest under a
+/// root: it names no schema.
 pub(crate) fn tree() -> BoxedStrategy<Value> {
     let placeholder = Just(Value::Null).boxed();
     let leaves: Vec<ConditionKind> = ConditionKind::ALL

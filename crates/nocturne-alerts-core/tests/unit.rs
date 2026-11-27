@@ -26,7 +26,9 @@ use nocturne_alerts_core::eval::{
 use nocturne_alerts_core::excursion::{
     CloseReason, ExcursionTracker, TrackerState, TrackerStateKind, TransitionType,
 };
-use nocturne_alerts_core::model::{ConditionKind, Node, ParseResult, Reason, parse_payload};
+use nocturne_alerts_core::model::{
+    ConditionKind, Node, ParseResult, Payload, Reason, parse_payload,
+};
 use nocturne_alerts_core::sustained::{NOT_TRUE_LEASE, TimerState, TimerStore};
 use nocturne_alerts_core::truth::Truth::{self, False, True, Unknown};
 
@@ -36,6 +38,24 @@ fn base() -> DateTime<Utc> {
 
 fn d(s: &str) -> Decimal {
     s.parse().unwrap()
+}
+
+/// `doc` as a stored tree's root, which names its schema (engine-semantics.md
+/// §1.2): a rule body or a full node. Anything but an object as it is.
+fn rooted(doc: &Value) -> Value {
+    let mut doc = doc.clone();
+    if let Value::Object(fields) = &mut doc {
+        fields.insert("schema_version".into(), json!(2));
+    }
+    doc
+}
+
+fn parse_body(kind: ConditionKind, payload: &Value) -> ParseResult<Payload> {
+    parse_payload(kind, &rooted(payload))
+}
+
+fn parse_node(node: &Value) -> ParseResult<Node> {
+    Node::parse(&rooted(node))
 }
 
 fn glucose_ctx(latest_value: Option<&str>, trend_rate: Option<&str>) -> SensorContext {
@@ -58,14 +78,14 @@ fn eval_payload_at(
     ctx: &SensorContext,
     now: DateTime<Utc>,
 ) -> Truth {
-    let parsed = parse_payload(kind, payload).expect("payload parses");
+    let parsed = parse_body(kind, payload).expect("payload parses");
     let mut timers = TimerStore::new();
     let mut env = Env::new(now, Uuid::nil(), ctx, &mut timers);
     eval_parsed(&parsed, kind.name(), &mut env)
 }
 
 fn eval_tree(node_json: &Value, ctx: &SensorContext) -> Truth {
-    let node = Node::parse(node_json).expect("node parses");
+    let node = parse_node(node_json).expect("node parses");
     let mut timers = TimerStore::new();
     let mut env = Env::new(base(), Uuid::nil(), ctx, &mut timers);
     let root = node.kind().name();
@@ -76,118 +96,127 @@ fn eval_tree(node_json: &Value, ctx: &SensorContext) -> Truth {
 // ThresholdEvaluator
 // ---------------------------------------------------------------------------
 
+/// Each operator against a glucose value below, at and above `70`.
 #[test]
-fn threshold_below_triggers_when_value_below_threshold() {
-    let payload = json!({"direction": "below", "value": 70});
-    let ctx = glucose_ctx(Some("65"), Some("0"));
+fn threshold_compares_by_each_operator_and_its_inclusivity_at_the_value() {
+    for (operator, below, at, above) in [
+        ("<", True, False, False),
+        ("<=", True, True, False),
+        (">", False, False, True),
+        (">=", False, True, True),
+        ("==", False, True, False),
+    ] {
+        let payload = json!({"operator": operator, "value": 70});
+        let read = |mgdl: &str| {
+            eval_payload(
+                ConditionKind::Threshold,
+                &payload,
+                &glucose_ctx(Some(mgdl), Some("0")),
+            )
+        };
+        assert_eq!(
+            [read("69.9"), read("70"), read("70.1")],
+            [below, at, above],
+            "{operator}"
+        );
+    }
+}
+
+#[test]
+fn threshold_compares_exact_decimals() {
+    let payload = json!({"operator": "==", "value": 5.5});
+    let ctx = glucose_ctx(Some("5.50"), Some("0"));
     assert_eq!(True, eval_payload(ConditionKind::Threshold, &payload, &ctx));
-}
-
-#[test]
-fn threshold_below_does_not_trigger_when_value_above_threshold() {
-    let payload = json!({"direction": "below", "value": 70});
-    let ctx = glucose_ctx(Some("85"), Some("0"));
-    assert_eq!(
-        False,
-        eval_payload(ConditionKind::Threshold, &payload, &ctx)
-    );
-}
-
-#[test]
-fn threshold_below_exact_boundary_returns_false() {
-    let payload = json!({"direction": "below", "value": 70});
-    let ctx = glucose_ctx(Some("70"), Some("0"));
-    assert_eq!(
-        False,
-        eval_payload(ConditionKind::Threshold, &payload, &ctx)
-    );
-}
-
-#[test]
-fn threshold_above_triggers_when_value_above_threshold() {
-    let payload = json!({"direction": "above", "value": 250});
-    let ctx = glucose_ctx(Some("260"), Some("0"));
-    assert_eq!(True, eval_payload(ConditionKind::Threshold, &payload, &ctx));
-}
-
-#[test]
-fn threshold_above_exact_boundary_returns_false() {
-    let payload = json!({"direction": "above", "value": 250});
-    let ctx = glucose_ctx(Some("250"), Some("0"));
-    assert_eq!(
-        False,
-        eval_payload(ConditionKind::Threshold, &payload, &ctx)
-    );
 }
 
 #[test]
 fn threshold_null_latest_value_is_unknown() {
-    let payload = json!({"direction": "below", "value": 70});
-    let ctx = glucose_ctx(None, Some("0"));
-    assert_eq!(
-        Unknown,
-        eval_payload(ConditionKind::Threshold, &payload, &ctx)
-    );
+    for operator in ["<", "<=", ">", ">=", "=="] {
+        let payload = json!({"operator": operator, "value": 70});
+        let ctx = glucose_ctx(None, Some("0"));
+        assert_eq!(
+            Unknown,
+            eval_payload(ConditionKind::Threshold, &payload, &ctx),
+            "{operator}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
 // RateOfChangeEvaluator
 // ---------------------------------------------------------------------------
 
+/// The trend rate compared with a signed `value`, by `operator`, at
+/// `-4`, `-3`, `-2`, `0`, `2`, `3` and `4` mg/dL per minute.
+fn rate_truths(operator: &str, value: f64) -> Vec<Truth> {
+    let payload = json!({"operator": operator, "value": value});
+    ["-4.0", "-3.0", "-2.0", "0", "2.0", "3.0", "4.0"]
+        .iter()
+        .map(|rate| {
+            eval_payload(
+                ConditionKind::RateOfChange,
+                &payload,
+                &glucose_ctx(Some("100"), Some(rate)),
+            )
+        })
+        .collect()
+}
+
 #[test]
-fn rate_of_change_falling_triggers_at_negative_threshold() {
-    // rate = -3.0, threshold = 3.0 => -3.0 <= -3.0 => true
-    let payload = json!({"direction": "falling", "rate": 3.0});
-    let ctx = glucose_ctx(Some("100"), Some("-3.0"));
+fn rate_of_change_compares_a_fall_against_a_negative_value() {
     assert_eq!(
-        True,
-        eval_payload(ConditionKind::RateOfChange, &payload, &ctx)
+        rate_truths("<=", -3.0),
+        [True, True, False, False, False, False, False]
+    );
+    assert_eq!(
+        rate_truths("<", -3.0),
+        [True, False, False, False, False, False, False]
     );
 }
 
 #[test]
-fn rate_of_change_falling_triggers_below_negative_threshold() {
-    let payload = json!({"direction": "falling", "rate": 3.0});
-    let ctx = glucose_ctx(Some("100"), Some("-4.0"));
+fn rate_of_change_compares_a_rise_against_a_positive_value() {
     assert_eq!(
-        True,
-        eval_payload(ConditionKind::RateOfChange, &payload, &ctx)
+        rate_truths(">=", 3.0),
+        [False, False, False, False, False, True, True]
+    );
+    assert_eq!(
+        rate_truths(">", 3.0),
+        [False, False, False, False, False, False, True]
     );
 }
 
 #[test]
-fn rate_of_change_falling_does_not_trigger_above_negative_threshold() {
-    let payload = json!({"direction": "falling", "rate": 3.0});
-    let ctx = glucose_ctx(Some("100"), Some("-2.0"));
+fn rate_of_change_reads_its_sign_from_the_value_not_the_operator() {
     assert_eq!(
-        False,
-        eval_payload(ConditionKind::RateOfChange, &payload, &ctx)
+        rate_truths(">=", -3.0),
+        [False, True, True, True, True, True, True]
+    );
+    assert_eq!(
+        rate_truths("<", 3.0),
+        [True, True, True, True, True, False, False]
     );
 }
 
 #[test]
-fn rate_of_change_rising_triggers_at_threshold() {
-    let payload = json!({"direction": "rising", "rate": 3.0});
-    let ctx = glucose_ctx(Some("100"), Some("3.0"));
+fn rate_of_change_against_zero_is_whether_glucose_is_falling_or_rising() {
     assert_eq!(
-        True,
-        eval_payload(ConditionKind::RateOfChange, &payload, &ctx)
+        rate_truths("<", 0.0),
+        [True, True, True, False, False, False, False]
     );
-}
-
-#[test]
-fn rate_of_change_rising_does_not_trigger_below_threshold() {
-    let payload = json!({"direction": "rising", "rate": 3.0});
-    let ctx = glucose_ctx(Some("100"), Some("2.0"));
     assert_eq!(
-        False,
-        eval_payload(ConditionKind::RateOfChange, &payload, &ctx)
+        rate_truths(">=", 0.0),
+        [False, False, False, True, True, True, True]
+    );
+    assert_eq!(
+        rate_truths("==", 0.0),
+        [False, False, False, True, False, False, False]
     );
 }
 
 #[test]
 fn rate_of_change_null_trend_rate_is_unknown() {
-    let payload = json!({"direction": "falling", "rate": 3.0});
+    let payload = json!({"operator": "<=", "value": -3.0});
     let ctx = glucose_ctx(Some("100"), None);
     assert_eq!(
         Unknown,
@@ -205,8 +234,8 @@ fn composite_tree(operator: &str) -> Value {
         "composite": {
             "operator": operator,
             "conditions": [
-                {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
-                {"type": "rate_of_change", "rate_of_change": {"direction": "falling", "rate": 3.0}}
+                {"type": "threshold", "threshold": {"operator": "<", "value": 70}},
+                {"type": "rate_of_change", "rate_of_change": {"operator": "<=", "value": -3.0}}
             ]
         }
     })
@@ -247,11 +276,11 @@ fn composite_nested_works() {
                 {"type": "composite", "composite": {
                     "operator": "and",
                     "conditions": [
-                        {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
-                        {"type": "rate_of_change", "rate_of_change": {"direction": "falling", "rate": 3.0}}
+                        {"type": "threshold", "threshold": {"operator": "<", "value": 70}},
+                        {"type": "rate_of_change", "rate_of_change": {"operator": "<=", "value": -3.0}}
                     ]
                 }},
-                {"type": "threshold", "threshold": {"direction": "above", "value": 250}}
+                {"type": "threshold", "threshold": {"operator": ">", "value": 250}}
             ]
         }
     });
@@ -268,12 +297,12 @@ fn sustained_timer_runs_behind_a_false_and_sibling() {
     let tree = json!({
         "type": "composite",
         "composite": {"operator": "and", "conditions": [
-            {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+            {"type": "threshold", "threshold": {"operator": "<", "value": 70}},
             {"type": "sustained", "sustained": {"minutes": 10, "child":
-                {"type": "threshold", "threshold": {"direction": "below", "value": 120}}}}
+                {"type": "threshold", "threshold": {"operator": "<", "value": 120}}}}
         ]}
     });
-    let node = Node::parse(&tree).expect("node parses");
+    let node = parse_node(&tree).expect("node parses");
     let mut timers = TimerStore::new();
     let at = |now: DateTime<Utc>, glucose: &str, timers: &mut TimerStore| {
         let ctx = SensorContext {
@@ -319,12 +348,12 @@ fn freshness_leaves() -> Vec<(ConditionKind, Value, SensorContext)> {
     vec![
         (
             ConditionKind::Threshold,
-            json!({"direction": "below", "value": 70}),
+            json!({"operator": "<", "value": 70}),
             glucose(None, None),
         ),
         (
             ConditionKind::RateOfChange,
-            json!({"direction": "falling", "rate": 2}),
+            json!({"operator": "<=", "value": -2}),
             glucose(None, None),
         ),
         (
@@ -357,7 +386,7 @@ fn a_glucose_fact_is_fresh_up_to_exactly_eleven_minutes_and_unknown_after() {
 #[test]
 fn a_rules_freshness_bound_replaces_the_default() {
     for (kind, payload, ctx) in freshness_leaves() {
-        let parsed = parse_payload(kind, &payload).expect("payload parses");
+        let parsed = parse_body(kind, &payload).expect("payload parses");
         let at = |age: TimeDelta, bound: TimeDelta| {
             let mut timers = TimerStore::new();
             let mut env = Env::new(base() + age, Uuid::nil(), &ctx, &mut timers)
@@ -407,7 +436,7 @@ fn a_glucose_fact_without_a_reading_time_is_not_judged_stale() {
         latest_timestamp: None,
         ..glucose_ctx(Some("60"), None)
     };
-    let payload = json!({"direction": "below", "value": 70});
+    let payload = json!({"operator": "<", "value": 70});
     let a_day_on = base() + TimeDelta::days(1);
     assert_eq!(
         True,
@@ -432,7 +461,7 @@ fn signal_loss_and_staleness_read_an_old_reading_as_ever() {
         True,
         eval_payload_at(
             ConditionKind::Staleness,
-            &json!({"operator": ">", "value": 30}),
+            &json!({"operator": ">", "minutes": 30}),
             &ctx,
             an_hour_on
         )
@@ -443,7 +472,7 @@ fn held_rule(condition_type: ConditionKind, condition_params: Value) -> Rule {
     Rule {
         id: rule_id(),
         condition_type,
-        condition_params,
+        condition_params: rooted(&condition_params),
         auto_resolve_enabled: false,
         auto_resolve_params: None,
         on_unknown: OnUnknown::Hold,
@@ -458,7 +487,7 @@ fn signal_loss_or_a_stale_threshold_opens_once_the_signal_is_lost() {
         ConditionKind::Composite,
         json!({"operator": "or", "conditions": [
             {"type": "signal_loss", "signal_loss": {"timeout_minutes": 20}},
-            {"type": "threshold", "threshold": {"direction": "below", "value": 70}}
+            {"type": "threshold", "threshold": {"operator": "<", "value": 70}}
         ]}),
     );
     let ctx = glucose_ctx(Some("100"), None);
@@ -488,7 +517,7 @@ fn a_sustained_run_completes_only_on_a_fresh_reading() {
     let rule = held_rule(
         ConditionKind::Sustained,
         json!({"minutes": 60, "child":
-            {"type": "threshold", "threshold": {"direction": "above", "value": 250}}}),
+            {"type": "threshold", "threshold": {"operator": ">", "value": 250}}}),
     );
     let old = glucose_ctx(Some("300"), None);
     let mut state = EngineState::new();
@@ -523,7 +552,7 @@ fn glucose_freshness_minutes_is_a_whole_number_of_minutes_up_to_a_day() {
         let wire: WireRule = serde_json::from_value(json!({
             "id": rule_id(),
             "condition_type": "threshold",
-            "condition_params": {"direction": "below", "value": 70},
+            "condition_params": {"schema_version": 2, "operator": "<", "value": 70},
             "glucose_freshness_minutes": minutes,
         }))
         .map_err(|e| e.to_string())?;
@@ -572,7 +601,7 @@ fn staleness_infinity_convention_with_reading_history() {
         True,
         eval_payload(
             ConditionKind::Staleness,
-            &json!({"operator": ">", "value": 15}),
+            &json!({"operator": ">", "minutes": 15}),
             &ctx
         )
     );
@@ -580,7 +609,7 @@ fn staleness_infinity_convention_with_reading_history() {
         True,
         eval_payload(
             ConditionKind::Staleness,
-            &json!({"operator": ">=", "value": 15}),
+            &json!({"operator": ">=", "minutes": 15}),
             &ctx
         )
     );
@@ -588,7 +617,7 @@ fn staleness_infinity_convention_with_reading_history() {
         False,
         eval_payload(
             ConditionKind::Staleness,
-            &json!({"operator": "<", "value": 15}),
+            &json!({"operator": "<", "minutes": 15}),
             &ctx
         )
     );
@@ -596,7 +625,7 @@ fn staleness_infinity_convention_with_reading_history() {
         False,
         eval_payload(
             ConditionKind::Staleness,
-            &json!({"operator": "==", "value": 15}),
+            &json!({"operator": "==", "minutes": 15}),
             &ctx
         )
     );
@@ -609,7 +638,7 @@ fn staleness_cold_start_is_unknown_before_infinity() {
         Unknown,
         eval_payload(
             ConditionKind::Staleness,
-            &json!({"operator": ">", "value": 15}),
+            &json!({"operator": ">", "minutes": 15}),
             &ctx
         )
     );
@@ -622,7 +651,7 @@ fn staleness_cold_start_is_unknown_before_infinity() {
 fn an_enablement_after_now_follows_the_clock_tolerance() {
     let ctx = SensorContext::default();
     let leaf = |ahead: TimeDelta, kind: ConditionKind, payload: Value| {
-        let parsed = parse_payload(kind, &payload).expect("payload parses");
+        let parsed = parse_body(kind, &payload).expect("payload parses");
         let mut timers = TimerStore::new();
         let mut env =
             Env::new(base(), Uuid::nil(), &ctx, &mut timers).with_enabled_at(Some(base() + ahead));
@@ -633,7 +662,7 @@ fn an_enablement_after_now_follows_the_clock_tolerance() {
             leaf(
                 ahead,
                 ConditionKind::Staleness,
-                json!({"operator": op, "value": 0}),
+                json!({"operator": op, "minutes": 0}),
             )
         }
     };
@@ -775,6 +804,234 @@ fn loop_stale_null_timestamp_with_guard_set_is_unknown() {
             &ctx
         )
     );
+}
+
+#[test]
+fn loop_stale_without_a_cycle_ever_is_unknown_whatever_its_timestamp() {
+    let ctx = SensorContext {
+        has_ever_aps_cycled: false,
+        last_aps_cycle_at: Some(base() - TimeDelta::hours(1)),
+        ..Default::default()
+    };
+    assert_eq!(
+        Unknown,
+        eval_payload(
+            ConditionKind::LoopStale,
+            &json!({"operator": ">", "minutes": 15}),
+            &ctx
+        )
+    );
+}
+
+#[test]
+fn loop_enaction_stale_is_measured_without_a_cycle_ever_and_unknown_only_without_its_timestamp() {
+    let enacted = SensorContext {
+        has_ever_aps_cycled: false,
+        last_aps_enacted_at: Some(base() - TimeDelta::hours(1)),
+        ..Default::default()
+    };
+    let read = |ctx: &SensorContext, operator: &str| {
+        eval_payload(
+            ConditionKind::LoopEnactionStale,
+            &json!({"operator": operator, "minutes": 15}),
+            ctx,
+        )
+    };
+    assert_eq!(True, read(&enacted, ">"));
+    assert_eq!(False, read(&enacted, "<"));
+    let never = SensorContext {
+        has_ever_aps_cycled: true,
+        last_aps_enacted_at: None,
+        ..Default::default()
+    };
+    assert_eq!(Unknown, read(&never, ">"));
+    assert_eq!(Unknown, read(&never, "<"));
+}
+
+// ---------------------------------------------------------------------------
+// Elapsed time against whole minutes, compared exactly (engine-semantics.md
+// §1.3)
+// ---------------------------------------------------------------------------
+
+/// Each operator's truth one nanosecond before, exactly at and one nanosecond
+/// after the bound.
+const AT_THE_BOUND: [(&str, [Truth; 3]); 5] = [
+    (">=", [False, True, True]),
+    (">", [False, False, True]),
+    ("<", [True, False, False]),
+    ("<=", [True, True, False]),
+    ("==", [False, True, False]),
+];
+
+/// Checks the leaf `kind` over `payload`, under each operator, against
+/// [`AT_THE_BOUND`] around `anchor + minutes`.
+fn around_the_bound(
+    kind: ConditionKind,
+    payload: &Value,
+    ctx: &SensorContext,
+    anchor: DateTime<Utc>,
+    minutes: i64,
+) {
+    let bound = anchor + TimeDelta::minutes(minutes);
+    let ns = TimeDelta::nanoseconds(1);
+    for (operator, expected) in AT_THE_BOUND {
+        let mut payload = payload.clone();
+        payload["operator"] = json!(operator);
+        let read = |now| eval_payload_at(kind, &payload, ctx, now);
+        assert_eq!(
+            [read(bound - ns), read(bound), read(bound + ns)],
+            expected,
+            "{} {operator}",
+            kind.name()
+        );
+    }
+}
+
+#[test]
+fn staleness_reaches_its_bound_exactly_at_the_reading_plus_its_minutes() {
+    let ctx = glucose_ctx(Some("100"), None);
+    around_the_bound(
+        ConditionKind::Staleness,
+        &json!({"minutes": 17}),
+        &ctx,
+        base(),
+        17,
+    );
+}
+
+#[test]
+fn site_age_reaches_its_bound_exactly_at_the_change_plus_its_minutes() {
+    let ctx = SensorContext {
+        last_site_change_at: Some(base()),
+        ..Default::default()
+    };
+    around_the_bound(
+        ConditionKind::SiteAge,
+        &json!({"minutes": 72 * 60 + 1}),
+        &ctx,
+        base(),
+        72 * 60 + 1,
+    );
+}
+
+#[test]
+fn sensor_age_reaches_its_bound_exactly_at_the_start_plus_its_minutes() {
+    let ctx = SensorContext {
+        last_sensor_start_at: Some(base()),
+        ..Default::default()
+    };
+    around_the_bound(
+        ConditionKind::SensorAge,
+        &json!({"minutes": 10 * 1440 + 7}),
+        &ctx,
+        base(),
+        10 * 1440 + 7,
+    );
+}
+
+#[test]
+fn loop_stale_reaches_its_bound_exactly_at_the_cycle_plus_its_minutes() {
+    let ctx = SensorContext {
+        has_ever_aps_cycled: true,
+        last_aps_cycle_at: Some(base()),
+        ..Default::default()
+    };
+    around_the_bound(
+        ConditionKind::LoopStale,
+        &json!({"minutes": 15}),
+        &ctx,
+        base(),
+        15,
+    );
+}
+
+#[test]
+fn loop_enaction_stale_reaches_its_bound_exactly_without_a_cycle_ever() {
+    let ctx = SensorContext {
+        has_ever_aps_cycled: false,
+        last_aps_enacted_at: Some(base()),
+        ..Default::default()
+    };
+    around_the_bound(
+        ConditionKind::LoopEnactionStale,
+        &json!({"minutes": 15}),
+        &ctx,
+        base(),
+        15,
+    );
+}
+
+#[test]
+fn tracker_age_reaches_its_bound_exactly_at_the_reference_plus_its_minutes() {
+    around_the_bound(
+        ConditionKind::TrackerAge,
+        &tracker_age_payload(">=", 90),
+        &tracker_ctx(base()),
+        base(),
+        90,
+    );
+    around_the_bound(
+        ConditionKind::TrackerAge,
+        &tracker_age_payload(">=", -30),
+        &recorded_ctx(base(), None, true),
+        base(),
+        -30,
+    );
+}
+
+#[test]
+fn time_since_reaches_its_bound_exactly_at_the_anchor_plus_its_minutes() {
+    let ctx = SensorContext {
+        last_carb_at: Some(base()),
+        last_bolus_at: Some(base()),
+        ..Default::default()
+    };
+    for kind in [
+        ConditionKind::TimeSinceLastCarb,
+        ConditionKind::TimeSinceLastBolus,
+    ] {
+        around_the_bound(kind, &json!({"minutes": 45}), &ctx, base(), 45);
+    }
+}
+
+#[test]
+fn for_minutes_holds_exactly_from_the_start_plus_its_minutes() {
+    let ctx = SensorContext {
+        active_override: Some(nocturne_alerts_core::context::StartedSpan { started_at: base() }),
+        ..Default::default()
+    };
+    let payload = json!({"is_active": true, "for_minutes": 20});
+    let bound = base() + TimeDelta::minutes(20);
+    let read = |now| eval_payload_at(ConditionKind::OverrideActive, &payload, &ctx, now);
+    assert_eq!(False, read(bound - TimeDelta::nanoseconds(1)));
+    assert_eq!(True, read(bound));
+}
+
+#[test]
+fn sustained_holds_exactly_from_its_run_start_plus_its_minutes() {
+    let node = parse_node(
+        &json!({"type": "sustained", "sustained": {"minutes": 20, "child":
+        {"type": "override_active", "override_active": {"is_active": true}}}}),
+    )
+    .expect("node parses");
+    let ctx = SensorContext {
+        active_override: Some(nocturne_alerts_core::context::StartedSpan {
+            started_at: base() - TimeDelta::hours(1),
+        }),
+        ..Default::default()
+    };
+    let bound = base() + TimeDelta::minutes(20);
+    let read = |now| {
+        let mut timers = TimerStore::new();
+        timers.seed(Uuid::nil(), "sustained", TimerState::Running(base()));
+        eval_node(
+            &node,
+            "sustained",
+            &mut Env::new(now, Uuid::nil(), &ctx, &mut timers),
+        )
+    };
+    assert_eq!(False, read(bound - TimeDelta::nanoseconds(1)));
+    assert_eq!(True, read(bound));
 }
 
 // ---------------------------------------------------------------------------
@@ -1090,12 +1347,13 @@ fn relapsing_low_rule() -> Rule {
     Rule {
         id: rule_id(),
         condition_type: ConditionKind::Threshold,
-        condition_params: json!({ "direction": "below", "value": 70 }),
+        condition_params: json!({ "schema_version": 2, "operator": "<", "value": 70 }),
         auto_resolve_enabled: true,
         auto_resolve_params: Some(json!({
+            "schema_version": 2,
             "type": "sustained",
             "sustained": { "minutes": 10, "child": {
-                "type": "threshold", "threshold": { "direction": "above", "value": 60 } } },
+                "type": "threshold", "threshold": { "operator": ">", "value": 60 } } },
         })),
         on_unknown: OnUnknown::Hold,
         glucose_freshness: DEFAULT_GLUCOSE_FRESHNESS,
@@ -1639,7 +1897,7 @@ fn elapsed_across_the_whole_domain_still_evaluates() {
         True,
         eval_payload_at(
             ConditionKind::Staleness,
-            &json!({"operator": ">", "value": 15}),
+            &json!({"operator": ">", "minutes": 15}),
             &ctx,
             now
         )
@@ -1704,7 +1962,7 @@ fn unknown_context_enum_values_drop_only_their_facts() {
         True,
         eval_payload(
             ConditionKind::Threshold,
-            &json!({"direction": "below", "value": 70}),
+            &json!({"operator": "<", "value": 70}),
             &ctx
         )
     );
@@ -2010,8 +2268,8 @@ fn raw(json: &str) -> Value {
 #[test]
 fn a_repeated_property_binds_its_last_occurrence() {
     let ctx = glucose_ctx(Some("60"), Some("0"));
-    let last_is_70 = raw(r#"{"direction": "below", "value": 50, "value": 70}"#);
-    let last_is_50 = raw(r#"{"direction": "below", "value": 70, "value": 50}"#);
+    let last_is_70 = raw(r#"{"operator": "<", "value": 50, "value": 70}"#);
+    let last_is_50 = raw(r#"{"operator": "<", "value": 70, "value": 50}"#);
     assert_eq!(
         True,
         eval_payload(ConditionKind::Threshold, &last_is_70, &ctx)
@@ -2025,7 +2283,7 @@ fn a_repeated_property_binds_its_last_occurrence() {
 #[test]
 fn uuid_payload_fields_accept_only_the_hyphenated_form() {
     let parses = |id: &str| {
-        parse_payload(
+        parse_body(
             ConditionKind::AlertState,
             &json!({ "alert_id": id, "state": "firing" }),
         )
@@ -2041,7 +2299,7 @@ fn uuid_payload_fields_accept_only_the_hyphenated_form() {
 #[test]
 fn an_enum_value_is_exactly_a_wire_name() {
     let parses = |category: Value| {
-        parse_payload(
+        parse_body(
             ConditionKind::StateSpanActive,
             &json!({ "category": category, "is_active": true }),
         )
@@ -2061,8 +2319,8 @@ fn an_enum_value_is_exactly_a_wire_name() {
 }
 
 fn threshold_value(literal: &str) -> Option<String> {
-    let payload = raw(&format!(r#"{{"direction": "below", "value": {literal}}}"#));
-    match parse_payload(ConditionKind::Threshold, &payload).ok()? {
+    let payload = raw(&format!(r#"{{"operator": "<", "value": {literal}}}"#));
+    match parse_body(ConditionKind::Threshold, &payload).ok()? {
         nocturne_alerts_core::model::Payload::Threshold(t) => match t.value {
             nocturne_alerts_core::model::Limit::Literal(value) => Some(value.to_string()),
             nocturne_alerts_core::model::Limit::Fact(_) => None,
@@ -2124,7 +2382,7 @@ fn not_chain(levels: usize, innermost: Value) -> Value {
 }
 
 fn threshold_node() -> Value {
-    json!({ "type": "threshold", "threshold": { "direction": "below", "value": 70 } })
+    json!({ "type": "threshold", "threshold": { "operator": "<", "value": 70 } })
 }
 
 fn too_deep<T>(read: ParseResult<T>) -> bool {
@@ -2135,19 +2393,19 @@ fn too_deep<T>(read: ParseResult<T>) -> bool {
 #[test]
 fn node_depth_limit_counts_typed_values_like_system_text_json() {
     // 30 not levels (60 objects) + threshold node and payload = 62.
-    assert!(Node::parse(&not_chain(30, threshold_node())).is_ok());
+    assert!(parse_node(&not_chain(30, threshold_node())).is_ok());
     // 63 typed objects is the most STJ builds.
-    assert!(!too_deep(Node::parse(&not_chain(
+    assert!(!too_deep(parse_node(&not_chain(
         31,
         json!({ "type": "threshold" })
     ))));
-    assert!(too_deep(Node::parse(&not_chain(31, threshold_node()))));
+    assert!(too_deep(parse_node(&not_chain(31, threshold_node()))));
     // A condition list is a typed frame too: 60 + node + payload + list + node = 64.
     let composite = json!({
         "type": "composite",
         "composite": { "operator": "and", "conditions": [{ "type": "threshold" }] }
     });
-    assert!(too_deep(Node::parse(&not_chain(30, composite))));
+    assert!(too_deep(parse_node(&not_chain(30, composite))));
 }
 
 #[test]
@@ -2157,24 +2415,26 @@ fn node_depth_limit_counts_ignored_properties_as_plain_json() {
         for _ in 0..arrays {
             x = json!([x]);
         }
-        json!({ "type": "threshold", "threshold": { "direction": "below", "value": 1, "x": x } })
+        json!({ "type": "threshold", "threshold": { "operator": "<", "value": 1, "x": x } })
     };
     // 62 typed objects + 2 untyped arrays = 64 nested containers.
-    assert!(!too_deep(Node::parse(&not_chain(30, with_arrays(2)))));
-    assert!(too_deep(Node::parse(&not_chain(30, with_arrays(3)))));
+    assert!(!too_deep(parse_node(&not_chain(30, with_arrays(2)))));
+    assert!(too_deep(parse_node(&not_chain(30, with_arrays(3)))));
 }
 
 #[test]
 fn payload_depth_counts_from_the_payload_document() {
     let payload = |levels| json!({ "child": not_chain(levels, json!({ "type": "threshold", "threshold": {} })) });
     // payload + 60 + node + payload = 63.
-    assert!(!too_deep(parse_payload(ConditionKind::Not, &payload(30))));
-    assert!(too_deep(parse_payload(ConditionKind::Not, &payload(31))));
+    assert!(!too_deep(parse_body(ConditionKind::Not, &payload(30))));
+    assert!(too_deep(parse_body(ConditionKind::Not, &payload(31))));
 }
 
 #[test]
 fn very_deep_nodes_are_a_parse_error_not_a_stack_overflow() {
-    assert!(Node::parse(&not_chain(500, threshold_node())).is_err());
+    let mut chain = not_chain(500, threshold_node());
+    chain["schema_version"] = json!(2);
+    assert!(too_deep(Node::parse(&chain)));
 }
 
 // ---------------------------------------------------------------------------
@@ -2186,7 +2446,7 @@ fn very_deep_nodes_are_a_parse_error_not_a_stack_overflow() {
 /// `sustained` child's) a day before.
 fn start_over(child: Value, ctx: Value) -> DateTime<Utc> {
     let tree = json!({"type": "sustained", "sustained": {"minutes": 600, "child": child}});
-    let node = Node::parse(&tree).expect("node parses");
+    let node = parse_node(&tree).expect("node parses");
     let ctx: SensorContext = serde_json::from_value(ctx).expect("a context");
     let mut timers = TimerStore::new();
     for path in ["sustained", "sustained[0].sustained"] {
@@ -2235,13 +2495,13 @@ fn each_leaf_reports_since_when_it_has_held_as_the_spec_table_says() {
         json!({"active_temp_basal": {"rate": 1, "scheduled_rate": 0.8, "started_at": ago(20)}});
     let tracker = Uuid::from_u128(7);
     let other_rule = Uuid::from_u128(8);
-    let below = || leaf("threshold", json!({"direction": "below", "value": 70}));
+    let below = || leaf("threshold", json!({"operator": "<", "value": 70}));
     let override_on = || leaf("override_active", json!({"is_active": true}));
     let cases: Vec<(&str, Value, Value, DateTime<Utc>)> = vec![
         ("threshold", below(), reading.clone(), minutes(3)),
         (
             "rate_of_change",
-            leaf("rate_of_change", json!({"direction": "falling", "rate": 1})),
+            leaf("rate_of_change", json!({"operator": "<=", "value": -1})),
             reading.clone(),
             minutes(3),
         ),
@@ -2268,13 +2528,13 @@ fn each_leaf_reports_since_when_it_has_held_as_the_spec_table_says() {
         ),
         (
             "staleness",
-            leaf("staleness", json!({"operator": ">=", "value": 10})),
+            leaf("staleness", json!({"operator": ">=", "minutes": 10})),
             stopped.clone(),
             minutes(15),
         ),
         (
             "staleness below its bound knows none",
-            leaf("staleness", json!({"operator": "<", "value": 30})),
+            leaf("staleness", json!({"operator": "<", "minutes": 30})),
             stopped.clone(),
             base(),
         ),
@@ -2286,13 +2546,13 @@ fn each_leaf_reports_since_when_it_has_held_as_the_spec_table_says() {
         ),
         (
             "site_age",
-            leaf("site_age", json!({"operator": ">=", "value": 2})),
+            leaf("site_age", json!({"operator": ">=", "minutes": 120})),
             json!({"last_site_change_at": ago(180)}),
             minutes(60),
         ),
         (
             "sensor_age",
-            leaf("sensor_age", json!({"operator": ">=", "value": 1})),
+            leaf("sensor_age", json!({"operator": ">=", "minutes": 1440})),
             json!({"last_sensor_start_at": ago(30 * 60)}),
             minutes(6 * 60),
         ),
@@ -2563,7 +2823,7 @@ fn each_leaf_reports_since_when_it_has_held_as_the_spec_table_says() {
 fn a_start_is_never_before_the_last_not_true_evaluation_nor_after_now() {
     let tree = json!({"type": "sustained", "sustained": {"minutes": 30, "child":
         {"type": "override_active", "override_active": {"is_active": true}}}});
-    let node = Node::parse(&tree).expect("node parses");
+    let node = parse_node(&tree).expect("node parses");
     let at = |now: DateTime<Utc>, started: Option<DateTime<Utc>>, timers: &mut TimerStore| {
         let ctx: SensorContext = serde_json::from_value(match started {
             Some(at) => json!({"active_override": {"started_at": at}}),
@@ -2634,7 +2894,7 @@ fn a_rule_s_first_evaluation_bounds_a_start_by_its_enabled_at() {
         let wire: WireRule = serde_json::from_value(json!({
             "id": rule_id,
             "condition_type": "sustained",
-            "condition_params": {"minutes": 30, "child":
+            "condition_params": {"schema_version": 2, "minutes": 30, "child":
                 {"type": "override_active", "override_active": {"is_active": true}}},
             "enabled_at": enabled_at,
         }))
@@ -2675,7 +2935,7 @@ fn a_rule_s_first_evaluation_bounds_a_start_by_its_enabled_at() {
 fn a_not_true_instant_is_recorded_at_most_once_a_lease_and_whenever_a_run_ends() {
     let tree = json!({"type": "sustained", "sustained": {"minutes": 30, "child":
         {"type": "override_active", "override_active": {"is_active": true}}}});
-    let node = Node::parse(&tree).expect("node parses");
+    let node = parse_node(&tree).expect("node parses");
     let mut timers = TimerStore::new();
     let mut at = |minutes: i64, on: bool| {
         let ctx: SensorContext = serde_json::from_value(if on {
@@ -2731,7 +2991,7 @@ fn a_start_is_bounded_only_by_the_not_true_instant_the_host_gives() {
     let noon = base();
     let tree = json!({"type": "sustained", "sustained": {"minutes": 30, "child":
         {"type": "override_active", "override_active": {"is_active": true}}}});
-    let node = Node::parse(&tree).expect("node parses");
+    let node = parse_node(&tree).expect("node parses");
     let ctx: SensorContext = serde_json::from_value(
         json!({"active_override": {"started_at": noon - TimeDelta::minutes(40)}}),
     )

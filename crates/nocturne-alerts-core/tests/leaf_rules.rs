@@ -3,10 +3,9 @@
 //! present, absent, stale or guarded off.
 //!
 //! Every instant is at `generators::base()`, a Monday at 12:00 UTC, so a daylight saving change and
-//! most day boundaries are not crossed. Elapsed times are whole seconds and the model compares
-//! them exactly. `site_age` and `sensor_age` take operands in tenths and ages in tenths of their
-//! unit, where the evaluator's double-to-decimal conversion (§1.3) decides equality: one tenth
-//! of an hour is not a double. The other leaves take whole-number operands, as their payloads do.
+//! most day boundaries are not crossed. Elapsed times are whole seconds, often exactly a bound or a
+//! second either side of it, and the model compares them exactly with the bound's minutes × 60
+//! seconds (§1.3). Every payload is a rule body, so it names its schema at its root.
 
 #![allow(
     dead_code,
@@ -41,9 +40,8 @@ use uuid::Uuid;
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{EngineState, Rule, WireRule, evaluate_rule};
 use nocturne_alerts_core::enums::{
-    AlertStateKind, CmpOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection, SensorState,
-    StateSpanCategory, TempBasalMetric, ThresholdDirection, TransmitterBatteryMetric, TrendBucket,
-    WireEnum,
+    AlertStateKind, CmpOp, DayOfWeek, GlucoseBucket, PumpMode, SensorState, StateSpanCategory,
+    TempBasalMetric, TransmitterBatteryMetric, TrendBucket, WireEnum,
 };
 use nocturne_alerts_core::eval::{Env, eval_payload};
 use nocturne_alerts_core::model::{ConditionKind, parse_payload};
@@ -51,7 +49,7 @@ use nocturne_alerts_core::sustained::TimerStore;
 use nocturne_alerts_core::truth::Truth;
 
 use full_context::{ALERT_IDS, TRACKER_IDS, age_in, full_context, pump_modes, quantity};
-use generators::{base, object, word, word_value, words};
+use generators::{base, object, rooted, word, word_value, words};
 
 const FRESHNESS_MINUTES: i64 = 11;
 const TOLERANCE_SECONDS: i64 = 300;
@@ -83,7 +81,7 @@ fn leaf(payload: BoxedStrategy<Value>) -> BoxedStrategy<Case> {
 
 fn evaluate(kind: ConditionKind, c: &Case) -> Truth {
     let context: SensorContext = serde_json::from_value(c.ctx.clone()).expect("a context");
-    let payload = parse_payload(kind, &c.payload).expect("a payload");
+    let payload = parse_payload(kind, &rooted(c.payload.clone())).expect("a payload");
     let mut timers = TimerStore::new();
     let mut env = Env::new(base(), Uuid::nil(), &context, &mut timers)
         .with_glucose_freshness(TimeDelta::minutes(
@@ -246,14 +244,6 @@ fn whole_compare_payload(
         .boxed()
 }
 
-fn tenths_compare_payload(range: std::ops::RangeInclusive<i32>) -> BoxedStrategy<Value> {
-    (word_value::<CmpOp>(), range)
-        .prop_map(|(operator, n)| {
-            json!({ "operator": operator, "value": Value::from(f64::from(n) / 10.0) })
-        })
-        .boxed()
-}
-
 fn active_payload() -> BoxedStrategy<Value> {
     (any::<bool>(), option::of(-1..=5i32))
         .prop_map(|(is_active, for_minutes)| {
@@ -326,62 +316,56 @@ fn judged(c: &Case, fact: Option<Value>, decide: impl FnOnce(Value) -> Verdict) 
     }
 }
 
+/// A low comparison (`<`, `<=`) or a high one (`>`, `>=`) by its operator; `==` is neither.
+fn side(c: &Case) -> &'static str {
+    match operator(c) {
+        "<" | "<=" => "low",
+        ">" | ">=" => "high",
+        _ => "equal",
+    }
+}
+
 fn threshold_model(c: &Case) -> Verdict {
     judged(c, field(&c.ctx, "latest_value").cloned(), |v| {
-        let latest = decimal_of(&v);
-        let value = operand(c, "value");
-        match c.payload["direction"].as_str().unwrap() {
-            "above" => verdict(latest > value, "above"),
-            _ => verdict(latest < value, "below"),
-        }
+        verdict(compared(c, decimal_of(&v)), side(c))
     })
 }
 
 family!(
-    threshold_is_strict_over_a_fresh_reading_and_unknown_without_one,
+    threshold_compares_a_fresh_reading_by_its_operator_and_is_unknown_without_one,
     ConditionKind::Threshold,
-    glucose_leaf(
-        (word_value::<ThresholdDirection>(), quantity())
-            .prop_map(|(direction, value)| json!({ "direction": direction, "value": value }))
-            .boxed()
-    ),
+    glucose_leaf(compare_payload()),
     threshold_model,
     [
-        "true:above",
-        "false:above",
-        "true:below",
-        "false:below",
+        "true:low",
+        "false:low",
+        "true:high",
+        "false:high",
+        "false:equal",
         "unknown:absent",
         "unknown:stale",
         "unknown:sensor"
     ]
 );
 
+/// The rate is signed: a fall is negative, so `<= -2` is falling at 2 mg/dL/min or faster.
 fn rate_model(c: &Case) -> Verdict {
     judged(c, field(&c.ctx, "trend_rate").cloned(), |v| {
-        let rate = decimal_of(&v);
-        let by = operand(c, "rate");
-        match c.payload["direction"].as_str().unwrap() {
-            "falling" => verdict(rate <= -by, "falling"),
-            _ => verdict(rate >= by, "rising"),
-        }
+        verdict(compared(c, decimal_of(&v)), side(c))
     })
 }
 
 family!(
-    rate_of_change_is_inclusive_over_a_fresh_reading_and_unknown_without_one,
+    rate_of_change_compares_a_fresh_signed_rate_by_its_operator_and_is_unknown_without_one,
     ConditionKind::RateOfChange,
-    glucose_leaf(
-        (word_value::<RateDirection>(), quantity())
-            .prop_map(|(direction, rate)| json!({ "direction": direction, "rate": rate }))
-            .boxed()
-    ),
+    glucose_leaf(compare_payload()),
     rate_model,
     [
-        "true:falling",
-        "false:falling",
-        "true:rising",
-        "false:rising",
+        "true:low",
+        "false:low",
+        "true:high",
+        "false:high",
+        "false:equal",
         "unknown:absent",
         "unknown:stale",
         "unknown:sensor"
@@ -644,7 +628,7 @@ fn met_by(kind: ConditionKind, c: &Case) -> Option<Value> {
     let wire: WireRule = serde_json::from_value(json!({
         "id": Uuid::nil(),
         "condition_type": kind.name(),
-        "condition_params": c.payload,
+        "condition_params": rooted(c.payload.clone()),
         "glucose_freshness_minutes": c.freshness_minutes,
     }))
     .expect("a rule");
@@ -848,15 +832,7 @@ fn stopped(c: &Case) -> Stopped {
 
 fn staleness_model(c: &Case) -> Verdict {
     match stopped(c) {
-        Stopped::At(at) => passed(at).map_or_else(
-            || unknown("ahead"),
-            |p| {
-                verdict(
-                    compared(c, Decimal::from(p) / Decimal::from(60)),
-                    "measured",
-                )
-            },
-        ),
+        Stopped::At(at) => measured(c, at),
         Stopped::Forever => verdict(matches!(operator(c), ">" | ">="), "forever"),
         Stopped::Nothing => unknown("nothing"),
     }
@@ -865,11 +841,16 @@ fn staleness_model(c: &Case) -> Verdict {
 family!(
     staleness_measures_minutes_since_data_stopped,
     ConditionKind::Staleness,
-    enabled_case(whole_compare_payload("value", 0..=10)),
+    near_bound(
+        "last_reading_at",
+        enabled_case(whole_compare_payload("minutes", 0..=5))
+    ),
     staleness_model,
     [
         "true:measured",
         "false:measured",
+        "true:bound",
+        "false:bound",
         "true:forever",
         "false:forever",
         "unknown:nothing"
@@ -1109,98 +1090,143 @@ family!(
 // elapsed time since an anchor
 // ---------------------------------------------------------------------------
 
-fn age_model(c: &Case, anchor: &str, unit_seconds: i64) -> Verdict {
-    let Some(at) = ago(&c.ctx, anchor) else {
-        return unknown("absent");
-    };
+/// The whole seconds since the anchor against the payload's `minutes` × 60, exactly, so `>=`
+/// holds at the bound and `>` does not.
+fn compared_minutes(c: &Case, passed_seconds: i64) -> Truth {
+    compare(operator(c), passed_seconds, whole(c, "minutes") * 60).into()
+}
+
+/// The comparison of the time since an anchor `at` seconds ago, on the `bound` branch when it
+/// is exactly the payload's minutes.
+fn measured(c: &Case, at: i64) -> Verdict {
     passed(at).map_or_else(
         || unknown("ahead"),
         |p| {
-            verdict(
-                compared(c, Decimal::from(p) / Decimal::from(unit_seconds)),
-                "measured",
-            )
+            let branch = if p == whole(c, "minutes") * 60 {
+                "bound"
+            } else {
+                "measured"
+            };
+            verdict(compared_minutes(c, p), branch)
         },
     )
 }
 
+/// `cases` with the `anchor` instant moved, three times in ten, to exactly the payload's
+/// `minutes` ago or a second either side of it.
+fn near_bound(anchor: &'static str, cases: BoxedStrategy<Case>) -> BoxedStrategy<Case> {
+    (cases, option::weighted(0.3, -1..=1i64))
+        .prop_map(move |(mut c, beside)| {
+            if let Some(beside) = beside {
+                let ago = whole(&c, "minutes") * 60 + beside;
+                c.ctx[anchor] = Value::from((base() - TimeDelta::seconds(ago)).to_rfc3339());
+            }
+            c
+        })
+        .boxed()
+}
+
+fn age_model(c: &Case, anchor: &str) -> Verdict {
+    ago(&c.ctx, anchor).map_or_else(|| unknown("absent"), |at| measured(c, at))
+}
+
 fn site_age_model(c: &Case) -> Verdict {
-    age_model(c, "last_site_change_at", 3600)
+    age_model(c, "last_site_change_at")
 }
 
 fn sensor_age_model(c: &Case) -> Verdict {
-    age_model(c, "last_sensor_start_at", 86_400)
+    age_model(c, "last_sensor_start_at")
 }
 
 family!(
-    site_age_compares_hours_since_the_site_change,
+    site_age_compares_whole_minutes_since_the_site_change_exactly,
     ConditionKind::SiteAge,
-    leaf(tenths_compare_payload(0..=50)),
+    near_bound(
+        "last_site_change_at",
+        leaf(whole_compare_payload("minutes", 0..=5))
+    ),
     site_age_model,
-    ["true:measured", "false:measured", "unknown:absent"]
+    [
+        "true:measured",
+        "false:measured",
+        "true:bound",
+        "false:bound",
+        "unknown:absent",
+        "unknown:ahead"
+    ]
 );
 
 family!(
-    sensor_age_compares_days_since_the_sensor_start,
+    sensor_age_compares_whole_minutes_since_the_sensor_start_exactly,
     ConditionKind::SensorAge,
-    leaf(tenths_compare_payload(0..=50)),
+    near_bound(
+        "last_sensor_start_at",
+        leaf(whole_compare_payload("minutes", 0..=5))
+    ),
     sensor_age_model,
-    ["true:measured", "false:measured", "unknown:absent"]
+    [
+        "true:measured",
+        "false:measured",
+        "true:bound",
+        "false:bound",
+        "unknown:absent",
+        "unknown:ahead"
+    ]
 );
 
-fn loop_model(c: &Case, anchor: &str) -> Verdict {
+fn loop_stale_model(c: &Case) -> Verdict {
     if !flag(&c.ctx, "has_ever_aps_cycled") {
         return unknown("unguarded");
     }
-    let Some(at) = ago(&c.ctx, anchor) else {
-        return unknown("absent");
-    };
-    passed(at).map_or_else(
-        || unknown("ahead"),
-        |p| verdict(compared_minutes(c, "minutes", p), "measured"),
-    )
+    age_model(c, "last_aps_cycle_at")
 }
 
-fn compared_minutes(c: &Case, field: &str, passed_seconds: i64) -> Truth {
-    compare(
-        operator(c),
-        Decimal::from(passed_seconds) / Decimal::from(60),
-        operand(c, field),
-    )
-    .into()
-}
-
-fn loop_stale_model(c: &Case) -> Verdict {
-    loop_model(c, "last_aps_cycle_at")
-}
-
+/// No guard: the enacted timestamp is the last enactment ever, so it is measured whatever
+/// `has_ever_aps_cycled` says.
 fn loop_enaction_stale_model(c: &Case) -> Verdict {
-    loop_model(c, "last_aps_enacted_at")
+    let (truth, branch) = age_model(c, "last_aps_enacted_at");
+    if flag(&c.ctx, "has_ever_aps_cycled") {
+        (truth, branch)
+    } else {
+        (truth, format!("{branch}, never cycled"))
+    }
 }
 
 family!(
     loop_stale_is_unknown_until_the_loop_has_cycled_and_then_measures_the_last_cycle,
     ConditionKind::LoopStale,
-    leaf(whole_compare_payload("minutes", 0..=5)),
+    near_bound(
+        "last_aps_cycle_at",
+        leaf(whole_compare_payload("minutes", 0..=5))
+    ),
     loop_stale_model,
     [
         "true:measured",
         "false:measured",
+        "true:bound",
+        "false:bound",
         "unknown:absent",
         "unknown:unguarded"
     ]
 );
 
 family!(
-    loop_enaction_stale_is_guarded_by_the_cycle_flag_and_measures_the_last_enactment,
+    loop_enaction_stale_measures_the_last_enactment_with_no_cycle_guard,
     ConditionKind::LoopEnactionStale,
-    leaf(whole_compare_payload("minutes", 0..=5)),
+    near_bound(
+        "last_aps_enacted_at",
+        leaf(whole_compare_payload("minutes", 0..=5))
+    ),
     loop_enaction_stale_model,
     [
         "true:measured",
         "false:measured",
+        "true:bound",
+        "false:bound",
+        "true:measured, never cycled",
+        "false:measured, never cycled",
         "unknown:absent",
-        "unknown:unguarded"
+        "unknown:absent, never cycled"
     ]
 );
 
@@ -1209,10 +1235,7 @@ fn time_since_model(c: &Case, anchor: &str) -> Verdict {
     let Some(at) = ago(&c.ctx, anchor) else {
         return verdict(matches!(operator(c), ">" | ">="), "never");
     };
-    passed(at).map_or_else(
-        || unknown("ahead"),
-        |p| verdict(compared_minutes(c, "minutes", p), "measured"),
-    )
+    measured(c, at)
 }
 
 fn time_since_carb_model(c: &Case) -> Verdict {
@@ -1226,11 +1249,16 @@ fn time_since_bolus_model(c: &Case) -> Verdict {
 family!(
     time_since_last_carb_measures_minutes_and_reads_no_carb_as_infinitely_long_ago,
     ConditionKind::TimeSinceLastCarb,
-    leaf(whole_compare_payload("minutes", 0..=5)),
+    near_bound(
+        "last_carb_at",
+        leaf(whole_compare_payload("minutes", 0..=5))
+    ),
     time_since_carb_model,
     [
         "true:measured",
         "false:measured",
+        "true:bound",
+        "false:bound",
         "true:never",
         "false:never"
     ]
@@ -1239,11 +1267,16 @@ family!(
 family!(
     time_since_last_bolus_measures_minutes_and_reads_no_bolus_as_infinitely_long_ago,
     ConditionKind::TimeSinceLastBolus,
-    leaf(whole_compare_payload("minutes", 0..=5)),
+    near_bound(
+        "last_bolus_at",
+        leaf(whole_compare_payload("minutes", 0..=5))
+    ),
     time_since_bolus_model,
     [
         "true:measured",
         "false:measured",
+        "true:bound",
+        "false:bound",
         "true:never",
         "false:never"
     ]
@@ -1758,7 +1791,7 @@ fn tracker_model(c: &Case) -> Verdict {
         return verdict(false, "held back");
     }
     verdict(
-        compared_minutes(c, "minutes", p),
+        compared_minutes(c, p),
         if scheduled { "event" } else { "duration" },
     )
 }
@@ -2114,12 +2147,12 @@ fn a_true_leaf_under_not_names_nothing() {
     }))
     .expect("a context");
     let high = json!({ "type": "predicted", "predicted": { "operator": ">", "value": 180, "within_minutes": 30 } });
-    let low = json!({ "type": "threshold", "threshold": { "direction": "below", "value": 70 } });
+    let low = json!({ "type": "threshold", "threshold": { "operator": "<", "value": 70 } });
     let met = |conditions: Value| {
         let wire: WireRule = serde_json::from_value(json!({
             "id": Uuid::nil(),
             "condition_type": "composite",
-            "condition_params": { "operator": "or", "conditions": conditions },
+            "condition_params": rooted(json!({ "operator": "or", "conditions": conditions })),
         }))
         .expect("a rule");
         let rule = Rule::try_from(wire).expect("a rule");

@@ -37,9 +37,9 @@ pub fn validate_node(node: &Value, root: &str) -> Vec<ParseError> {
 /// schema 2 leaves the composite naming none, so it is `unsupported_schema`.
 #[must_use]
 pub fn snooze_tree(conditions: &[Value]) -> Value {
-    let current = conditions.iter().all(|c| {
-        c.get(SCHEMA_VERSION).and_then(Value::as_u64) == Some(CURRENT_SCHEMA)
-    });
+    let current = conditions
+        .iter()
+        .all(|c| c.get(SCHEMA_VERSION).and_then(Value::as_u64) == Some(CURRENT_SCHEMA));
     let children: Vec<Value> = conditions
         .iter()
         .map(|c| match c {

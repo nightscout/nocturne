@@ -1827,9 +1827,7 @@ fn read_node(v: &Value, level: usize, path: &str, issues: &Issues, root: bool) -
             issues.report(path, Reason::PayloadMissing);
             None
         }
-        Some(payload) => {
-            read_payload(kind, payload, level.saturating_add(1), path, issues, false)
-        }
+        Some(payload) => read_payload(kind, payload, level.saturating_add(1), path, issues, false),
     }
     .map(Node)
 }

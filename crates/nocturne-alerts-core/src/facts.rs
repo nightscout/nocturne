@@ -272,6 +272,12 @@ mod tests {
         }
     }
 
+    /// `params` as a stored rule body, which names its schema.
+    fn rooted(mut params: Value) -> Value {
+        params["schema_version"] = json!(2);
+        params
+    }
+
     fn is_container(kind: ConditionKind) -> bool {
         matches!(
             kind,
@@ -335,18 +341,19 @@ mod tests {
 
     #[test]
     fn a_limit_from_a_fact_adds_that_facts_reads() {
-        let below_target = json!({"direction": "below", "value_from": {"fact": "target_low"}});
+        let below_target =
+            json!({"schema_version": 2, "operator": "<", "value_from": {"fact": "target_low"}});
         assert_eq!(
             body("threshold", &below_target),
             [F::Glucose, F::SensorState, F::TargetRange]
         );
-        let below_latest = json!({"operator": "<", "within_minutes": 30,
+        let below_latest = json!({"schema_version": 2, "operator": "<", "within_minutes": 30,
             "value_from": {"fact": "latest_glucose", "offset": -30}});
         assert_eq!(
             body("predicted", &below_latest),
             [F::Glucose, F::Predictions, F::SensorState]
         );
-        let literal = json!({"operator": "<", "value": 70});
+        let literal = json!({"schema_version": 2, "operator": "<", "value": 70});
         assert_eq!(body("eventual_glucose", &literal), [F::ApsDetermination]);
     }
 
@@ -364,7 +371,7 @@ mod tests {
 
     #[test]
     fn a_leaf_root_is_selected_by_its_own_facts_whatever_its_body() {
-        let threshold = json!({"direction": "below", "value": 70});
+        let threshold = json!({"schema_version": 2, "operator": "<", "value": 70});
         assert_eq!(body("threshold", &threshold), [F::Glucose, F::SensorState]);
         assert_eq!(body("THRESHOLD", &threshold), []);
         assert_eq!(body("tracker_age", &json!("not an object")), [F::Trackers]);
@@ -375,7 +382,7 @@ mod tests {
 
     #[test]
     fn a_root_that_is_not_a_wire_name_reads_nothing() {
-        let rate = json!({"direction": "falling", "rate": 2});
+        let rate = json!({"schema_version": 2, "operator": "<=", "value": -2});
         assert!(body("RATE_OF_CHANGE", &rate).is_empty());
         assert!(body("RateOfChange", &rate).is_empty());
         assert!(body("1", &rate).is_empty());
@@ -387,7 +394,7 @@ mod tests {
     /// reading (engine-semantics.md §5.2).
     #[test]
     fn a_glucose_bucket_reads_the_time_zone_too() {
-        let tree = json!({"operator": "or", "conditions": [
+        let tree = json!({"schema_version": 2, "operator": "or", "conditions": [
             {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}},
             {"type": "glucose_bucket", "glucose_bucket": {"buckets": ["low"]}}
         ]});
@@ -404,9 +411,10 @@ mod tests {
     #[test]
     fn a_nested_leaf_is_read() {
         let tree = json!({
+            "schema_version": 2,
             "operator": "and",
             "conditions": [
-                { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+                { "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
                 { "type": "sustained", "sustained": { "minutes": 15, "child":
                     { "type": "iob", "iob": { "operator": ">", "value": 2 } } } }
             ]
@@ -419,7 +427,7 @@ mod tests {
 
     #[test]
     fn a_group_under_not_is_read() {
-        let tree = json!({ "child": {
+        let tree = json!({ "schema_version": 2, "child": {
             "type": "composite",
             "composite": { "operator": "or", "conditions": [
                 { "type": "sleep_session_active", "sleep_session_active": { "is_active": true } },
@@ -434,8 +442,9 @@ mod tests {
     #[test]
     fn a_null_slot_makes_the_body_unevaluable() {
         let tree = json!({
+            "schema_version": 2,
             "operator": "or",
-            "conditions": [ null, { "type": "staleness", "staleness": { "operator": ">", "value": 10 } } ]
+            "conditions": [ null, { "type": "staleness", "staleness": { "operator": ">", "minutes": 10 } } ]
         });
         assert!(parse_payload(ConditionKind::Composite, &tree).is_err());
         let rule = RuleConditions::body("composite", &tree);
@@ -446,6 +455,7 @@ mod tests {
     #[test]
     fn a_container_without_its_payload_makes_the_body_unevaluable() {
         let tree = json!({
+            "schema_version": 2,
             "operator": "or",
             "conditions": [ { "type": "not" }, { "type": "sustained" } ]
         });
@@ -458,6 +468,7 @@ mod tests {
     #[test]
     fn an_unevaluable_sibling_hides_a_matching_leaf() {
         let tree = json!({
+            "schema_version": 2,
             "operator": "and",
             "conditions": [
                 { "type": "signal_loss", "signal_loss": { "timeout_minutes": 15 } },
@@ -473,13 +484,13 @@ mod tests {
     #[test]
     fn an_unevaluable_body_or_unknown_leaf_reads_nothing() {
         assert!(body("composite", &json!("not an object")).is_empty());
-        let tree = json!({ "operator": "or", "conditions": [ { "type": "no_such_kind" } ] });
+        let tree = json!({ "schema_version": 2, "operator": "or", "conditions": [ { "type": "no_such_kind" } ] });
         assert!(body("composite", &tree).is_empty());
     }
 
     #[test]
     fn no_facts_selects_nothing() {
-        let threshold = json!({"direction": "below", "value": 70});
+        let threshold = json!({"schema_version": 2, "operator": "<", "value": 70});
         assert!(!references_any(
             &RuleConditions::body("threshold", &threshold),
             &[]
@@ -488,8 +499,9 @@ mod tests {
 
     #[test]
     fn an_enabled_auto_resolve_tree_adds_its_facts() {
-        let threshold = json!({"direction": "above", "value": 180});
-        let cob_zero = json!({ "type": "cob", "cob": { "operator": "==", "value": 0 } });
+        let threshold = json!({"schema_version": 2, "operator": ">", "value": 180});
+        let cob_zero =
+            json!({ "schema_version": 2, "type": "cob", "cob": { "operator": "==", "value": 0 } });
         let rule = with_auto_resolve("threshold", &threshold, true, Some(&cob_zero));
         assert_eq!(rule_reads(&rule), [F::Glucose, F::Carbs, F::SensorState]);
         assert!(references_any(&rule, &[F::Carbs]));
@@ -498,24 +510,29 @@ mod tests {
 
     #[test]
     fn an_enabled_auto_resolve_tree_can_make_a_rule_wall_clock() {
-        let threshold = json!({"direction": "above", "value": 180});
-        let stale = json!({ "type": "not", "not": { "child":
-            { "type": "staleness", "staleness": { "operator": ">", "value": 30 } } } });
+        let threshold = json!({"schema_version": 2, "operator": ">", "value": 180});
+        let stale = json!({ "schema_version": 2, "type": "not", "not": { "child":
+            { "type": "staleness", "staleness": { "operator": ">", "minutes": 30 } } } });
         let rule = with_auto_resolve("threshold", &threshold, true, Some(&stale));
         assert!(references_wall_clock(&rule));
     }
 
     #[test]
     fn a_disabled_or_unusable_auto_resolve_tree_is_ignored() {
-        let threshold = json!({"direction": "above", "value": 180});
-        let stale = json!({ "type": "staleness", "staleness": { "operator": ">", "value": 30 } });
+        let threshold = json!({"schema_version": 2, "operator": ">", "value": 180});
+        let stale = json!({ "schema_version": 2, "type": "staleness",
+            "staleness": { "operator": ">", "minutes": 30 } });
         let null = Value::Null;
-        let broken = json!({ "type": "composite", "composite": { "operator": "and" } });
+        let broken =
+            json!({ "schema_version": 2, "type": "composite", "composite": { "operator": "and" } });
+        let unnamed =
+            json!({ "type": "staleness", "staleness": { "operator": ">", "minutes": 30 } });
         for rule in [
             with_auto_resolve("threshold", &threshold, false, Some(&stale)),
             with_auto_resolve("threshold", &threshold, true, None),
             with_auto_resolve("threshold", &threshold, true, Some(&null)),
             with_auto_resolve("threshold", &threshold, true, Some(&broken)),
+            with_auto_resolve("threshold", &threshold, true, Some(&unnamed)),
         ] {
             assert_eq!(rule_reads(&rule), [F::Glucose, F::SensorState], "{rule:?}");
             assert!(!references_wall_clock(&rule), "{rule:?}");
@@ -527,9 +544,10 @@ mod tests {
         let rule: WireRule = serde_json::from_value(json!({
             "id": Uuid::nil(),
             "condition_type": "threshold",
-            "condition_params": { "direction": "above", "value": 180 },
+            "condition_params": { "schema_version": 2, "operator": ">", "value": 180 },
             "auto_resolve_enabled": true,
-            "auto_resolve_params": { "type": "iob", "iob": { "operator": "<", "value": 1 } }
+            "auto_resolve_params":
+                { "schema_version": 2, "type": "iob", "iob": { "operator": "<", "value": 1 } }
         }))
         .expect("wire rule");
         assert_eq!(
@@ -705,15 +723,15 @@ mod tests {
     /// A payload that is true in `context(reads(kind))` and false in
     /// `context(&[])`; for a container, one over a `threshold`.
     fn sample(kind: ConditionKind) -> Payload {
-        let low = json!({"type": "threshold", "threshold": {"direction": "below", "value": 70}});
+        let low = json!({"type": "threshold", "threshold": {"operator": "<", "value": 70}});
         let params = match kind {
             ConditionKind::Composite => json!({"operator": "and", "conditions": [low]}),
             ConditionKind::Not => json!({"child": low}),
             ConditionKind::Sustained => json!({"minutes": 5, "child": low}),
-            ConditionKind::Threshold => json!({"direction": "below", "value": 70}),
-            ConditionKind::RateOfChange => json!({"direction": "falling", "rate": 2}),
+            ConditionKind::Threshold => json!({"operator": "<", "value": 70}),
+            ConditionKind::RateOfChange => json!({"operator": "<=", "value": -2}),
             ConditionKind::SignalLoss => json!({"timeout_minutes": 5}),
-            ConditionKind::Staleness => json!({"operator": ">", "value": 5}),
+            ConditionKind::Staleness => json!({"operator": ">", "minutes": 5}),
             ConditionKind::Predicted => {
                 json!({"operator": "<", "value": 55, "within_minutes": 30})
             }
@@ -721,8 +739,8 @@ mod tests {
             ConditionKind::TimeOfDay => json!({"from": "00:30", "to": "02:00"}),
             ConditionKind::Iob | ConditionKind::Cob => json!({"operator": ">", "value": 2}),
             ConditionKind::Reservoir => json!({"operator": ">", "value": 5}),
-            ConditionKind::SiteAge => json!({"operator": ">", "value": 72}),
-            ConditionKind::SensorAge => json!({"operator": ">", "value": 10}),
+            ConditionKind::SiteAge => json!({"operator": ">", "minutes": 72 * 60}),
+            ConditionKind::SensorAge => json!({"operator": ">", "minutes": 10 * 1440}),
             ConditionKind::AlertState => json!({"alert_id": ALERT_ID, "state": "firing"}),
             ConditionKind::LoopStale | ConditionKind::LoopEnactionStale => {
                 json!({"operator": ">", "minutes": 15})
@@ -761,7 +779,7 @@ mod tests {
                 json!({"of": "max", "operator": ">", "value": 115, "window_minutes": 15})
             }
         };
-        parse_payload(kind, &params).expect("sample payload parses")
+        parse_payload(kind, &rooted(params)).expect("sample payload parses")
     }
 
     fn evaluate(kind: ConditionKind, on: &[ContextFact]) -> Truth {
@@ -814,11 +832,11 @@ mod tests {
         [
             (
                 "threshold",
-                json!({"direction": "below", "value_from": {"fact": "target_low"}}),
+                json!({"operator": "<", "value_from": {"fact": "target_low"}}),
             ),
             (
                 "threshold",
-                json!({"direction": "below",
+                json!({"operator": "<",
                 "value_from": {"fact": "target_high", "offset": -100}}),
             ),
             (
@@ -845,7 +863,7 @@ mod tests {
         .into_iter()
         .map(|(kind, params)| {
             let kind = ConditionKind::from_wire(kind).expect("a kind");
-            parse_payload(kind, &params).expect("limit sample parses")
+            parse_payload(kind, &rooted(params)).expect("limit sample parses")
         })
         .collect()
     }

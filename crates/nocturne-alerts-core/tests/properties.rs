@@ -41,7 +41,7 @@ use nocturne_alerts_core::excursion::{
 };
 use nocturne_alerts_core::facts::ContextFact;
 use nocturne_alerts_core::model::{
-    ConditionKind, Node, ParseError, Payload, Reason, parse_payload,
+    ConditionKind, Node, ParseError, Payload, Reason, SCHEMA_VERSION, parse_payload,
 };
 use nocturne_alerts_core::next_change::RESOLUTION;
 use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind, TimerState, TimerStore};
@@ -51,9 +51,9 @@ use nocturne_alerts_core::validate::{validate_node, validate_rule};
 
 use clock::{clock_context, enabled_at, naming_the_context, word_or_unrecognised};
 use generators::{
-    RULE_ID, Tick, arbitrary_json, base, composite, glucose_freshness_minutes, is_container,
-    mutated, mutations, node, node_value, on_unknown, payload, rule_spec, simple_leaf,
-    skewed_ticks, ticks, tree, word,
+    RULE_ID, Tick, arbitrary_json, base, body, composite, glucose_freshness_minutes, is_container,
+    mutated, mutations, node, node_value, on_unknown, payload, root_tree, rooted, rule_spec,
+    simple_leaf, skewed_ticks, ticks, tree, word,
 };
 
 #[derive(Debug, Clone)]
@@ -325,6 +325,26 @@ proptest! {
     }
 }
 
+/// A stored root as the node it is nested as: without its schema.
+fn unrooted(mut doc: Value) -> Value {
+    if let Some(fields) = doc.as_object_mut() {
+        fields.shift_remove(SCHEMA_VERSION);
+    }
+    doc
+}
+
+/// `actual <op> limit`, by a comparison operator's wire name.
+fn compares<T: PartialOrd>(op: &str, actual: T, limit: T) -> bool {
+    match op {
+        ">" => actual > limit,
+        ">=" => actual >= limit,
+        "<" => actual < limit,
+        "<=" => actual <= limit,
+        "==" => actual == limit,
+        other => panic!("the generators produce no operator {other}"),
+    }
+}
+
 fn rule_from_wire(wire: Value) -> Rule {
     let wire: WireRule = serde_json::from_value(wire).expect("a wire rule");
     Rule::try_from(wire).expect("a known condition type")
@@ -429,14 +449,11 @@ impl Model {
         match kind {
             "threshold" => {
                 let value = payload["value"].as_i64().unwrap();
-                let truth = match ctx["latest_value"]
+                let op = payload["operator"].as_str().unwrap();
+                let truth = ctx["latest_value"]
                     .as_i64()
                     .filter(|_| self.stale(ctx, now).is_false())
-                {
-                    None => Truth::Unknown,
-                    Some(latest) if payload["direction"] == "above" => (latest > value).into(),
-                    Some(latest) => (latest < value).into(),
-                };
+                    .map_or(Truth::Unknown, |latest| compares(op, latest, value).into());
                 let read_at = ctx["latest_timestamp"]
                     .as_str()
                     .map(|at| at.parse::<DateTime<Utc>>().expect("an instant"));
@@ -447,17 +464,7 @@ impl Model {
                 let Some(iob) = ctx["iob_units"].as_i64() else {
                     return unheld(Truth::Unknown);
                 };
-                unheld(
-                    match payload["operator"].as_str().unwrap() {
-                        ">" => iob > value,
-                        ">=" => iob >= value,
-                        "<" => iob < value,
-                        "<=" => iob <= value,
-                        "==" => iob == value,
-                        other => panic!("the generators produce no operator {other}"),
-                    }
-                    .into(),
-                )
+                unheld(compares(payload["operator"].as_str().unwrap(), iob, value).into())
             }
             "sleep_session_active" => unheld(
                 (ctx["sleep_session_active"].as_bool() == payload["is_active"].as_bool()).into(),
@@ -608,8 +615,8 @@ proptest! {
         let rule = rule_from_wire(spec.wire());
         let mut state = EngineState::new();
         let mut model = Model::new(spec.glucose_freshness_minutes);
-        let body = node("composite", spec.wire()["condition_params"].clone());
-        let resolve = spec.wire()["auto_resolve_params"].clone();
+        let body = node("composite", unrooted(spec.wire()["condition_params"].clone()));
+        let resolve = unrooted(spec.wire()["auto_resolve_params"].clone());
         for tick in &ticks {
             let awaiting = state.tracker.awaiting_rearm(RULE_ID);
             let outcome = evaluate_rule(&rule, &context_of(tick), tick.now, &mut state, false);
@@ -630,9 +637,9 @@ proptest! {
 /// truth is that node's.
 fn sustained_root(spec: &generators::RuleSpec, minutes: i64) -> Rule {
     let mut wire = spec.wire();
-    let body = node("composite", wire["condition_params"].clone());
+    let body = node("composite", unrooted(wire["condition_params"].clone()));
     wire["condition_type"] = "sustained".into();
-    wire["condition_params"] = json!({ "minutes": minutes, "child": body });
+    wire["condition_params"] = rooted(json!({ "minutes": minutes, "child": body }));
     rule_from_wire(wire)
 }
 
@@ -779,7 +786,7 @@ impl CadenceCase {
     fn rule(&self) -> Rule {
         let child = match self.begins {
             Begins::Suspension => node("pump_suspended", json!({ "is_active": true })),
-            Begins::LowReading => node("threshold", json!({ "direction": "below", "value": 70 })),
+            Begins::LowReading => node("threshold", json!({ "operator": "<", "value": 70 })),
             Begins::SignalLoss => node(
                 "signal_loss",
                 json!({ "timeout_minutes": self.began_after / 60 }),
@@ -799,7 +806,7 @@ impl CadenceCase {
         rule_from_wire(json!({
             "id": RULE_ID.to_string(),
             "condition_type": "sustained",
-            "condition_params": { "minutes": self.minutes, "child": child },
+            "condition_params": rooted(json!({ "minutes": self.minutes, "child": child })),
             "glucose_freshness_minutes": 1440,
         }))
     }
@@ -1314,9 +1321,9 @@ fn auto_resolving_rule() -> impl Strategy<Value = (Value, Value, Value)> {
         let wire = json!({
             "id": RULE_ID.to_string(),
             "condition_type": "composite",
-            "condition_params": composite("or", vec![body.clone()])["composite"],
+            "condition_params": rooted(composite("or", vec![body.clone()])["composite"].clone()),
             "auto_resolve_enabled": true,
-            "auto_resolve_params": resolve,
+            "auto_resolve_params": rooted(resolve.clone()),
             "on_unknown": on_unknown,
         });
         (wire, composite("or", vec![body]), resolve)
@@ -1381,10 +1388,10 @@ proptest! {
     }
 }
 
-/// A valid condition node rooted at `kind`.
+/// A valid stored condition node rooted at `kind`, naming its schema.
 fn node_of(kind: ConditionKind) -> BoxedStrategy<Value> {
     payload(kind, &tree())
-        .prop_map(move |p| node(kind.name(), p))
+        .prop_map(move |p| rooted(node(kind.name(), p)))
         .boxed()
 }
 
@@ -1428,7 +1435,7 @@ fn sample<S: Strategy>(strategy: &S, count: usize) -> Vec<S::Value> {
 #[test]
 fn generators_cover_every_condition_kind() {
     let mut seen = BTreeSet::new();
-    for doc in sample(&tree(), 600) {
+    for doc in sample(&root_tree(), 600) {
         let node = Node::parse(&doc).expect("a generated tree is valid");
         kinds_in(&node, &mut seen);
     }
@@ -1541,7 +1548,7 @@ fn check_readers(doc: &Value) -> Result<(), TestCaseError> {
     match Node::parse_rooted(doc, ROOT) {
         Ok(node) => {
             let written = assemble(&node);
-            let again = Node::parse_rooted(&written, ROOT);
+            let again = Node::parse_rooted(&rooted(written.clone()), ROOT);
             prop_assert!(again.is_ok(), "re-assembled node did not parse: {written}");
             prop_assert_eq!(assemble(&again.unwrap()), written);
         }
@@ -1555,7 +1562,7 @@ fn check_readers(doc: &Value) -> Result<(), TestCaseError> {
         check_issue_paths(&validate_rule(kind.name(), doc), kind.name())?;
         if let Ok(payload) = parse_payload(*kind, doc) {
             let written = body_of(&payload);
-            let again = parse_payload(*kind, &written);
+            let again = parse_payload(*kind, &rooted(written.clone()));
             prop_assert!(
                 again.is_ok(),
                 "re-assembled payload did not parse: {written}"
@@ -1574,7 +1581,7 @@ enum Bound {
 }
 
 /// The duration operands of §1.4.
-const MINUTE_OPERANDS: [(ConditionKind, &str, Bound); 9] = [
+const MINUTE_OPERANDS: [(ConditionKind, &str, Bound); 11] = [
     (ConditionKind::Sustained, "minutes", Bound::Positive),
     (
         ConditionKind::SignalLoss,
@@ -1582,7 +1589,9 @@ const MINUTE_OPERANDS: [(ConditionKind, &str, Bound); 9] = [
         Bound::Positive,
     ),
     (ConditionKind::Predicted, "within_minutes", Bound::Positive),
-    (ConditionKind::Staleness, "value", Bound::NonNegative),
+    (ConditionKind::Staleness, "minutes", Bound::NonNegative),
+    (ConditionKind::SiteAge, "minutes", Bound::NonNegative),
+    (ConditionKind::SensorAge, "minutes", Bound::NonNegative),
     (ConditionKind::LoopStale, "minutes", Bound::NonNegative),
     (
         ConditionKind::LoopEnactionStale,
@@ -1616,11 +1625,11 @@ proptest! {
     /// A generated valid tree reads, validates clean, and writes back as the
     /// document it was read from, up to null fields.
     #[test]
-    fn valid_trees_read_back_as_written(doc in tree()) {
+    fn valid_trees_read_back_as_written(doc in root_tree()) {
         let node = Node::parse(&doc);
         prop_assert!(node.is_ok(), "{doc}");
         prop_assert!(validate_node(&doc, "auto_resolve").is_empty());
-        prop_assert_eq!(without_nulls(&assemble(&node.unwrap())), without_nulls(&doc));
+        prop_assert_eq!(without_nulls(&rooted(assemble(&node.unwrap()))), without_nulls(&doc));
         check_readers(&doc)?;
     }
 
@@ -1639,8 +1648,7 @@ proptest! {
     /// The same on a valid payload of any kind broken in a few small ways.
     #[test]
     fn readers_survive_near_valid_payloads(
-        body in select(ConditionKind::ALL.to_vec())
-            .prop_flat_map(|kind| payload(kind, &tree())),
+        body in select(ConditionKind::ALL.to_vec()).prop_flat_map(body),
         ops in mutations(1..4),
     ) {
         check_readers(&mutated(body, &ops))?;
@@ -1652,7 +1660,7 @@ proptest! {
     fn minute_operands_are_accepted_or_rejected_as_the_spec_says(
         (kind, field, bound, body, value) in select(MINUTE_OPERANDS.to_vec())
             .prop_flat_map(|(kind, field, bound)| {
-                (payload(kind, &tree()), operand_values()).prop_map(move |(mut body, value)| {
+                (body(kind), operand_values()).prop_map(move |(mut body, value)| {
                     body[field] = Value::from(value);
                     (kind, field, bound, body, value)
                 })
@@ -1673,6 +1681,126 @@ proptest! {
     }
 }
 
+/// A `schema_version` a root cannot name: absent, another schema, or 2 written as anything but
+/// the JSON integer.
+fn schema_not_2() -> BoxedStrategy<Option<Value>> {
+    select(vec![
+        None,
+        Some(Value::Null),
+        Some(json!(1)),
+        Some(json!(3)),
+        Some(json!(-2)),
+        Some(json!("2")),
+        Some(json!(2.0)),
+        Some(json!(true)),
+        Some(json!([2])),
+        Some(json!({ "schema_version": 2 })),
+    ])
+    .boxed()
+}
+
+/// The one problem of a root that does not name schema 2: `unsupported_schema`, unless the
+/// document is nested past the JSON reader's limit and so is not read at all.
+fn unsupported(doc: &Value, root: &str, issues: impl Fn(&Value) -> Vec<ParseError>) -> ParseError {
+    let too_deep = ParseError::new(root, Reason::TooDeep);
+    if issues(&naming_schema(doc.clone(), Some(json!(2)))) == [too_deep.clone()] {
+        too_deep
+    } else {
+        ParseError::new(root, Reason::UnsupportedSchema)
+    }
+}
+
+/// `doc` with its root's `schema_version` replaced by `schema`, or removed.
+fn naming_schema(mut doc: Value, schema: Option<Value>) -> Value {
+    if let Some(fields) = doc.as_object_mut() {
+        fields.shift_remove(SCHEMA_VERSION);
+        if let Some(schema) = schema {
+            fields.insert(SCHEMA_VERSION.to_owned(), schema);
+        }
+    }
+    doc
+}
+
+/// Every node below the root of `node`, at `pointer` and `path`, as its JSON pointer and its
+/// condition path.
+fn nested_nodes(node: &Value, pointer: &str, path: &str, into: &mut Vec<(String, String)>) {
+    let kind = node["type"].as_str().expect("a typed node");
+    let payload = &node[kind];
+    let children: Vec<(String, &Value)> = match kind {
+        "composite" => payload["conditions"]
+            .as_array()
+            .expect("conditions")
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (format!("{pointer}/{kind}/conditions/{i}"), c))
+            .collect(),
+        "not" | "sustained" => vec![(format!("{pointer}/{kind}/child"), &payload["child"])],
+        _ => vec![],
+    };
+    for (i, (child_pointer, child)) in children.into_iter().enumerate() {
+        let child_path = format!("{path}[{i}].{}", child["type"].as_str().expect("a type"));
+        into.push((child_pointer.clone(), child_path.clone()));
+        nested_nodes(child, &child_pointer, &child_path, into);
+    }
+}
+
+proptest! {
+    /// §1.2, §1.4: a stored node whose root does not name schema 2 is `unsupported_schema` on the
+    /// root, and that is its only problem, whatever else is broken below it.
+    #[test]
+    fn a_node_root_not_naming_schema_2_is_unsupported_and_nothing_else(
+        doc in (valid_roots(), mutations(0..4)).prop_map(|(doc, ops)| mutated(doc, &ops)),
+        schema in schema_not_2(),
+    ) {
+        const ROOT: &str = "auto_resolve";
+        prop_assume!(doc.is_object());
+        let only = vec![unsupported(&doc, ROOT, |d| validate_node(d, ROOT))];
+        let doc = naming_schema(doc, schema);
+        prop_assert_eq!(validate_node(&doc, ROOT), only.clone());
+        prop_assert_eq!(Node::parse_rooted(&doc, ROOT).err().map(|e| e.0), Some(only));
+    }
+
+    /// The same for a rule body, whose root is its payload.
+    #[test]
+    fn a_body_root_not_naming_schema_2_is_unsupported_and_nothing_else(
+        (kind, doc) in select(ConditionKind::ALL.to_vec())
+            .prop_flat_map(|kind| (Just(kind), body(kind))),
+        ops in mutations(0..4),
+        schema in schema_not_2(),
+    ) {
+        let doc = mutated(doc, &ops);
+        prop_assume!(doc.is_object());
+        let only = vec![unsupported(&doc, kind.name(), |d| validate_rule(kind.name(), d))];
+        let doc = naming_schema(doc, schema);
+        prop_assert_eq!(validate_rule(kind.name(), &doc), only.clone());
+        prop_assert_eq!(parse_payload(kind, &doc).err().map(|e| e.0), Some(only));
+    }
+
+    /// §1.2: no node below a root carries `schema_version`, so on one, whatever its value, it is
+    /// that node's one `unknown_field`.
+    #[test]
+    fn a_schema_named_below_the_root_is_an_unknown_field(
+        doc in select(vec![ConditionKind::Composite, ConditionKind::Not, ConditionKind::Sustained])
+            .prop_flat_map(node_of),
+        pick in any::<usize>(),
+        schema in select(vec![json!(2), json!(1), json!("2")]),
+    ) {
+        const ROOT: &str = "auto_resolve";
+        let mut nested = Vec::new();
+        nested_nodes(&doc, "", ROOT, &mut nested);
+        let (pointer, path) = nested[pick % nested.len()].clone();
+        let mut doc = doc;
+        doc.pointer_mut(&pointer)
+            .and_then(Value::as_object_mut)
+            .expect("a nested node")
+            .insert(SCHEMA_VERSION.to_owned(), schema);
+        prop_assert_eq!(
+            validate_node(&doc, ROOT),
+            vec![ParseError::new(path, Reason::UnknownField)]
+        );
+    }
+}
+
 /// What `signal_loss` and `staleness` read: a reading's time and timestamp
 /// and the rule's enablement, each present or not, as seconds before `now`.
 #[derive(Debug, Clone)]
@@ -1686,15 +1814,27 @@ struct DataStoppedCase {
     negated: bool,
 }
 
+/// Seconds before `now`, a quarter of the time exactly `minutes` or a second either side of it.
+fn ago_around(minutes: i64, range: std::ops::RangeInclusive<i64>) -> BoxedStrategy<i64> {
+    prop_oneof![
+        3 => range,
+        1 => (-1..=1i64).prop_map(move |beside| minutes * 60 + beside),
+    ]
+    .boxed()
+}
+
 fn data_stopped_case() -> impl Strategy<Value = DataStoppedCase> {
-    let ago = || option::of(-3600..=7200i64);
-    (
-        (ago(), ago(), ago()),
-        any::<bool>(),
-        word::<nocturne_alerts_core::enums::CmpOp>(),
-        1..=60i64,
-        any::<bool>(),
-    )
+    (1..=60i64)
+        .prop_flat_map(|minutes| {
+            let ago = || option::of(ago_around(minutes, -3600..=7200));
+            (
+                (ago(), ago(), ago()),
+                any::<bool>(),
+                word::<nocturne_alerts_core::enums::CmpOp>(),
+                Just(minutes),
+                any::<bool>(),
+            )
+        })
         .prop_map(
             |((last_reading, latest, enabled), signal_loss, operator, minutes, negated)| {
                 DataStoppedCase {
@@ -1757,14 +1897,14 @@ proptest! {
         let leaf = if case.signal_loss {
             node("signal_loss", json!({ "timeout_minutes": case.minutes }))
         } else {
-            node("staleness", json!({ "operator": case.operator, "value": case.minutes }))
+            node("staleness", json!({ "operator": case.operator, "minutes": case.minutes }))
         };
         let body = if case.negated { node("not", json!({ "child": leaf })) } else { leaf };
         let kind = body["type"].as_str().unwrap().to_owned();
         let rule = rule_from_wire(json!({
             "id": RULE_ID.to_string(),
             "condition_type": kind,
-            "condition_params": body[&kind],
+            "condition_params": rooted(body[&kind].clone()),
             "enabled_at": at(case.enabled),
         }));
         let context: SensorContext = serde_json::from_value(json!({
@@ -1792,12 +1932,20 @@ struct TrackerAgeCase {
 }
 
 fn tracker_age_case() -> impl Strategy<Value = TrackerAgeCase> {
-    (
-        prop_oneof![-7200..=7200i64, -300..=0i64, Just(-300i64), Just(-301i64)],
-        any::<bool>(),
-        word::<nocturne_alerts_core::enums::CmpOp>(),
-        -120..=120i64,
-    )
+    (-120..=120i64)
+        .prop_flat_map(|minutes| {
+            (
+                prop_oneof![
+                    3 => ago_around(minutes, -7200..=7200),
+                    1 => -300..=0i64,
+                    1 => Just(-300i64),
+                    1 => Just(-301i64),
+                ],
+                any::<bool>(),
+                word::<nocturne_alerts_core::enums::CmpOp>(),
+                Just(minutes),
+            )
+        })
         .prop_map(|(ago, scheduled, operator, minutes)| TrackerAgeCase {
             ago,
             scheduled,
@@ -1842,11 +1990,11 @@ proptest! {
         let rule = rule_from_wire(json!({
             "id": RULE_ID.to_string(),
             "condition_type": "tracker_age",
-            "condition_params": {
+            "condition_params": rooted(json!({
                 "tracker_definition_id": tracker.to_string(),
                 "operator": case.operator,
                 "minutes": case.minutes,
-            },
+            })),
         }));
         let context: SensorContext = serde_json::from_value(json!({
             "active_trackers": [{
@@ -1915,7 +2063,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
         let now = base() + TimeDelta::seconds(seconds) + TimeDelta::nanoseconds(ticks * 100);
         (
             tree(),
-            option::of(tree()),
+            option::of(root_tree()),
             clock_context(now),
             seeded_tracker(now),
             vec(prop_oneof![3 => 1..=3600i64, 1 => -900..=-1i64], 0..=2),
@@ -1941,7 +2089,7 @@ fn clock_case() -> impl Strategy<Value = ClockCase> {
                         rule: json!({
                             "id": RULE_ID.to_string(),
                             "condition_type": kind,
-                            "condition_params": body[&kind],
+                            "condition_params": rooted(body[&kind].clone()),
                             "auto_resolve_enabled": resolve.is_some(),
                             "auto_resolve_params": resolve.map(naming_the_context),
                             "on_unknown": on_unknown,
@@ -2080,7 +2228,7 @@ proptest! {
         ]))
         .expect("a context");
         let at = |kind: ConditionKind, payload: Value| {
-            let parsed = parse_payload(kind, &payload).expect("a payload");
+            let parsed = parse_payload(kind, &rooted(payload)).expect("a payload");
             let mut timers = TimerStore::new();
             eval_payload(&parsed, kind.name(), &mut Env::new(base(), Uuid::nil(), &context, &mut timers))
         };
@@ -2189,7 +2337,7 @@ proptest! {
         state in select(vec!["warming_up", "calibration_needed", "error", "expired", "no_value", "rebooting"]),
     ) {
         let rule = rule_from_wire(spec.wire());
-        let kinds = leaf_kinds(&node("composite", spec.wire()["condition_params"].clone()));
+        let kinds = leaf_kinds(&node("composite", unrooted(spec.wire()["condition_params"].clone())));
         let reason = if state == "rebooting" {
             UnknownReason::Unrecognised
         } else {
@@ -2265,13 +2413,13 @@ proptest! {
         ticks in skewed_ticks(),
         forecasts in vec((forecast(), curves_and_determination()), 24),
     ) {
-        let body = spec.wire()["condition_params"].clone();
+        let body = unrooted(spec.wire()["condition_params"].clone());
         let (op, value, within) = predicted;
         let mut wire = spec.wire();
-        wire["condition_params"] = json!({ "operator": "or", "conditions": [
+        wire["condition_params"] = rooted(json!({ "operator": "or", "conditions": [
             node("composite", body),
             node("predicted", json!({ "operator": op, "value": value, "within_minutes": within })),
-        ] });
+        ] }));
         let rule = rule_from_wire(wire);
         let (mut without, mut with) = (EngineState::new(), EngineState::new());
         for (tick, (default, (curves, determination))) in ticks.iter().zip(&forecasts) {

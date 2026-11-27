@@ -130,75 +130,91 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn class(condition_type: &str, params: Value) -> ScopeClass {
+    /// `params` as a stored rule body, which names its schema.
+    fn class(condition_type: &str, mut params: Value) -> ScopeClass {
+        params["schema_version"] = json!(2);
         classify(condition_type, &params)
     }
 
-    fn threshold(direction: &str) -> Value {
-        json!({ "type": "threshold", "threshold": { "direction": direction, "value": 70 } })
+    fn threshold(operator: &str) -> Value {
+        json!({ "type": "threshold", "threshold": { "operator": operator, "value": 70 } })
+    }
+
+    fn not(child: Value) -> Value {
+        json!({ "type": "not", "not": { "child": child } })
+    }
+
+    const SIDES: [(&str, ScopeClass); 5] = [
+        ("<", ScopeClass::Low),
+        ("<=", ScopeClass::Low),
+        (">", ScopeClass::High),
+        (">=", ScopeClass::High),
+        ("==", ScopeClass::Undirected),
+    ];
+
+    #[test]
+    fn a_threshold_takes_its_side_from_its_operator() {
+        for (operator, side) in SIDES {
+            assert_eq!(
+                class("threshold", json!({ "operator": operator, "value": 70 })),
+                side,
+                "{operator}"
+            );
+        }
     }
 
     #[test]
-    fn threshold_below_is_low() {
-        assert_eq!(
-            class("threshold", json!({"direction":"below","value":70})),
-            ScopeClass::Low
-        );
+    fn a_rate_of_change_takes_its_side_from_its_operator_whatever_its_sign() {
+        for (operator, side) in SIDES {
+            for value in [-2, 0, 2] {
+                assert_eq!(
+                    class(
+                        "rate_of_change",
+                        json!({ "operator": operator, "value": value })
+                    ),
+                    side,
+                    "{operator} {value}"
+                );
+            }
+        }
     }
 
     #[test]
-    fn threshold_above_is_high() {
-        assert_eq!(
-            class("threshold", json!({"direction":"above","value":250})),
-            ScopeClass::High
-        );
+    fn a_predicted_takes_its_side_from_its_operator() {
+        for (operator, side) in SIDES {
+            assert_eq!(
+                class(
+                    "predicted",
+                    json!({ "operator": operator, "value": 70, "within_minutes": 15 })
+                ),
+                side,
+                "{operator}"
+            );
+        }
     }
 
     #[test]
-    fn rate_of_change_falling_is_low() {
-        assert_eq!(
-            class("rate_of_change", json!({"direction":"falling","rate":2})),
-            ScopeClass::Low
-        );
+    fn a_directed_operator_under_not_is_undirected_and_an_equality_taints_nothing() {
+        for (operator, side) in SIDES {
+            let negated = class("not", json!({ "child": threshold(operator) }));
+            assert_eq!(negated, ScopeClass::Undirected, "not {operator}");
+            let beside_a_low = class(
+                "composite",
+                json!({ "operator": "and", "conditions": [threshold("<"), not(threshold(operator))] }),
+            );
+            let expected = if side == ScopeClass::Undirected {
+                ScopeClass::Low
+            } else {
+                ScopeClass::Undirected
+            };
+            assert_eq!(beside_a_low, expected, "low and not {operator}");
+        }
     }
 
     #[test]
-    fn rate_of_change_rising_is_high() {
+    fn a_body_that_names_no_schema_is_undirected() {
         assert_eq!(
-            class("rate_of_change", json!({"direction":"rising","rate":2})),
-            ScopeClass::High
-        );
-    }
-
-    #[test]
-    fn predicted_less_than_is_low() {
-        assert_eq!(
-            class(
-                "predicted",
-                json!({"operator":"<","value":70,"within_minutes":15})
-            ),
-            ScopeClass::Low
-        );
-    }
-
-    #[test]
-    fn predicted_greater_than_is_high() {
-        assert_eq!(
-            class(
-                "predicted",
-                json!({"operator":">=","value":250,"within_minutes":15})
-            ),
-            ScopeClass::High
-        );
-    }
-
-    #[test]
-    fn predicted_equals_is_undirected() {
-        assert_eq!(
-            class(
-                "predicted",
-                json!({"operator":"==","value":100,"within_minutes":15})
-            ),
+            classify("threshold", &json!({ "operator": "<", "value": 70 })),
             ScopeClass::Undirected
         );
     }
@@ -232,9 +248,11 @@ mod tests {
 
     #[test]
     fn glucose_bucket_in_range_only_is_undirected() {
-        // 2 tight_range, 3 in_range — neither side.
         assert_eq!(
-            class("glucose_bucket", json!({"buckets":[2,3]})),
+            class(
+                "glucose_bucket",
+                json!({"buckets":["tight_range","in_range"]})
+            ),
             ScopeClass::Undirected
         );
     }
@@ -258,9 +276,9 @@ mod tests {
         let params = json!({
             "operator": "and",
             "conditions": [
-                threshold("below"),
+                threshold("<"),
                 { "type": "iob", "iob": { "operator": "<", "value": 1 } },
-                { "type": "rate_of_change", "rate_of_change": { "direction": "falling", "rate": 1 } },
+                { "type": "rate_of_change", "rate_of_change": { "operator": "<=", "value": -1 } },
             ]
         });
         assert_eq!(class("composite", params), ScopeClass::Low);
@@ -270,14 +288,14 @@ mod tests {
     fn composite_mixed_directions_is_composite() {
         let params = json!({
             "operator": "or",
-            "conditions": [threshold("below"), threshold("above")]
+            "conditions": [threshold("<"), threshold(">")]
         });
         assert_eq!(class("composite", params), ScopeClass::Composite);
     }
 
     #[test]
     fn not_directional_is_undirected() {
-        let params = json!({ "child": threshold("above") });
+        let params = json!({ "child": threshold(">") });
         assert_eq!(class("not", params), ScopeClass::Undirected);
     }
 
@@ -286,14 +304,14 @@ mod tests {
         // A low leaf is present, but a directional leaf under NOT taints the whole rule.
         let params = json!({
             "operator": "and",
-            "conditions": [threshold("below"), { "type": "not", "not": { "child": threshold("above") } }]
+            "conditions": [threshold("<"), not(threshold(">"))]
         });
         assert_eq!(class("composite", params), ScopeClass::Undirected);
     }
 
     #[test]
     fn sustained_passes_through_to_child_direction() {
-        let params = json!({ "minutes": 15, "child": threshold("below") });
+        let params = json!({ "minutes": 15, "child": threshold("<") });
         assert_eq!(class("sustained", params), ScopeClass::Low);
     }
 
@@ -302,7 +320,7 @@ mod tests {
         // sustained nested inside a composite still passes its child's direction up.
         let params = json!({
             "operator": "and",
-            "conditions": [{ "type": "sustained", "sustained": { "minutes": 15, "child": threshold("below") } }]
+            "conditions": [{ "type": "sustained", "sustained": { "minutes": 15, "child": threshold("<") } }]
         });
         assert_eq!(class("composite", params), ScopeClass::Low);
     }
@@ -310,7 +328,7 @@ mod tests {
     #[test]
     fn double_not_directional_is_undirected() {
         // Double negation still taints — conservative, not clever.
-        let params = json!({ "child": { "type": "not", "not": { "child": threshold("below") } } });
+        let params = json!({ "child": not(threshold("<")) });
         assert_eq!(class("not", params), ScopeClass::Undirected);
     }
 }

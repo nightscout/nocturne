@@ -29,6 +29,7 @@ use nocturne_alerts_core::excursion::{
     CloseReason, HOLD_BOUND, TrackerState, TrackerStateKind, TransitionType,
 };
 use nocturne_alerts_core::facts::ContextFact;
+use nocturne_alerts_core::model::{CURRENT_SCHEMA, SCHEMA_VERSION};
 use nocturne_alerts_core::truth::Truth;
 use nocturne_alerts_core::unknown::UnknownReason;
 
@@ -38,7 +39,9 @@ fn base() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 1, 5, 12, 0, 0).unwrap()
 }
 
-fn rule(condition_type: &str, params: Value) -> Rule {
+/// A rule whose body `params` names schema 2 (engine-semantics.md §1.2).
+fn rule(condition_type: &str, mut params: Value) -> Rule {
+    params[SCHEMA_VERSION] = json!(CURRENT_SCHEMA);
     let wire: WireRule = serde_json::from_value(json!({
         "id": RULE_ID,
         "condition_type": condition_type,
@@ -375,7 +378,7 @@ proptest! {
     /// closed by the bound only after 24 hours of unbroken hold.
     #[test]
     fn a_hold_starts_ends_and_reaches_its_bound_as_the_model_says(steps in steps()) {
-        let rule = rule("threshold", json!({"direction": "below", "value": 70}));
+        let rule = rule("threshold", json!({"operator": "<", "value": 70}));
         let mut state = EngineState::new();
         let mut now = base();
         let mut hold: Option<DateTime<Utc>> = None;
@@ -417,7 +420,7 @@ proptest! {
 /// are about half.
 #[test]
 fn the_hold_property_reaches_reports_and_closes() {
-    let rule = rule("threshold", json!({"direction": "below", "value": 70}));
+    let rule = rule("threshold", json!({"operator": "<", "value": 70}));
     let (mut reporting, mut twice, mut closing) = (0, 0, 0);
     for steps in sample(&steps(), 256) {
         let mut state = EngineState::new();
@@ -446,13 +449,7 @@ fn the_hold_property_reaches_reports_and_closes() {
 // ---------------------------------------------------------------------------
 
 fn low_rule() -> Rule {
-    let wire: WireRule = serde_json::from_value(json!({
-        "id": RULE_ID,
-        "condition_type": "threshold",
-        "condition_params": {"direction": "below", "value": 70},
-    }))
-    .unwrap();
-    Rule::try_from(wire).unwrap()
+    rule("threshold", json!({"operator": "<", "value": 70}))
 }
 
 fn restored(state: TrackerState) -> EngineState {

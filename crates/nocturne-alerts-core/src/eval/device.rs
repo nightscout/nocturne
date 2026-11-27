@@ -21,7 +21,12 @@ use crate::unknown::UnknownReason as R;
 pub(super) fn site_age(p: &MinutesComparePayload, ctx: &SensorContext) -> ClockLeaf {
     ctx.last_site_change_at
         .map_or(ClockLeaf::Unknown(F::DeviceAges, R::Absent), |at| {
-            minutes(at, Some(ClockAnchor::LastSiteChangeAt), p.operator, p.minutes.get())
+            minutes(
+                at,
+                Some(ClockAnchor::LastSiteChangeAt),
+                p.operator,
+                p.minutes.get(),
+            )
         })
 }
 
@@ -29,7 +34,12 @@ pub(super) fn site_age(p: &MinutesComparePayload, ctx: &SensorContext) -> ClockL
 pub(super) fn sensor_age(p: &MinutesComparePayload, ctx: &SensorContext) -> ClockLeaf {
     ctx.last_sensor_start_at
         .map_or(ClockLeaf::Unknown(F::DeviceAges, R::Absent), |at| {
-            minutes(at, Some(ClockAnchor::LastSensorStartAt), p.operator, p.minutes.get())
+            minutes(
+                at,
+                Some(ClockAnchor::LastSensorStartAt),
+                p.operator,
+                p.minutes.get(),
+            )
         })
 }
 
