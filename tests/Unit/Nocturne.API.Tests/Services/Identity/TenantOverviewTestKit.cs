@@ -4,6 +4,9 @@ using Moq;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Identity;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
@@ -113,6 +116,52 @@ internal static class TenantOverviewTestKit
         : IDbContextFactory<NocturneDbContext>
     {
         public NocturneDbContext CreateDbContext() => new(options);
+    }
+
+    /// <summary>A reason a rule of the caller's gives, at <paramref name="level"/>.</summary>
+    public static TenantOverviewAttention RuleReason(NotificationUrgency level) =>
+        new(TenantOverviewAttentionKind.FlagRule, level)
+        {
+            Rule = new TenantOverviewRuleReason(
+                Guid.NewGuid(), FlagRuleSource.Yours, "glucose_statistics", "timeBelow", "Time below range", "%", "consensus",
+                6.5, FlagRuleComparison.Above, 4, 14, DateTime.UtcNow.AddDays(-14), DateTime.UtcNow, null, null),
+        };
+
+    /// <summary>A run that gives each person the reasons scripted for them, and records what the overview passed it.</summary>
+    public sealed class ScriptedRules : IPersonalFlagRules
+    {
+        public Dictionary<Guid, IReadOnlyList<TenantOverviewAttention>> Reasons { get; } = [];
+        public int Pending { get; init; }
+        public bool None { get; init; }
+        public int Begun { get; private set; }
+        public List<Guid> Subjects { get; } = [];
+        public List<bool> CredentialLimits { get; } = [];
+        public List<(GlucoseReadTenant Person, SensorGlucose? Latest, IReadOnlyList<TrackerInstance>? Trackers, PumpSnapshot? Pump)> Judged { get; } = [];
+        public int? FinishedAfter { get; private set; }
+
+        public Task<IPersonalFlagRuleRun?> BeginAsync(Guid subjectId, bool credentialLimitTo24Hours, CancellationToken ct)
+        {
+            Begun++;
+            Subjects.Add(subjectId);
+            CredentialLimits.Add(credentialLimitTo24Hours);
+            return Task.FromResult<IPersonalFlagRuleRun?>(None ? null : new Run(this));
+        }
+
+        private sealed class Run(ScriptedRules owner) : IPersonalFlagRuleRun
+        {
+            public int PeopleWithRulesPending => owner.Pending;
+
+            public Task<IReadOnlyList<TenantOverviewAttention>> ReasonsAsync(
+                GlucoseReadTenant person, IServiceProvider personScope, SensorGlucose? latest,
+                IReadOnlyList<TrackerInstance>? activeTrackers, PumpSnapshot? pump, CancellationToken ct)
+            {
+                lock (owner.Judged)
+                    owner.Judged.Add((person, latest, activeTrackers, pump));
+                return Task.FromResult(owner.Reasons.GetValueOrDefault(person.Tenant.Id) ?? []);
+            }
+
+            public void Finish() => owner.FinishedAfter = owner.Judged.Count;
+        }
     }
 
     /// <summary>The errors the overview logs, each a read of one person that failed and was stood in for.</summary>

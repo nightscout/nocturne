@@ -36,6 +36,7 @@ public static class PageRouteIds
         "/(authenticated)/oauth/consent",
         "/(authenticated)/oauth/device",
         "/(authenticated)/people",
+        "/(authenticated)/people/rules",
         "/(authenticated)/people/wall",
         "/(authenticated)/reports",
         "/(authenticated)/reports/agp",

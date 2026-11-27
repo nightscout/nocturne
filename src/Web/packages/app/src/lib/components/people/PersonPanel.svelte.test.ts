@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import {
   GlucoseStatus,
+  OverviewRuleSet,
   TenantOverviewAttentionKind,
   TenantPersonEntryKind,
   type TenantOverviewResponse,
@@ -24,6 +25,7 @@ const response = $state<{ data: TenantPersonDetail | undefined; error: unknown }
 const reads = vi.hoisted(() => ({
   opened: [] as string[],
   refreshed: [] as string[],
+  rules: [] as unknown[],
 }));
 
 const nav = vi.hoisted(() => ({ address: new URL("http://localhost/") }));
@@ -53,8 +55,9 @@ vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
     loading: true,
     refresh: async () => {},
   }),
-  getPerson: ({ tenantId }: { tenantId: string }) => {
+  getPerson: ({ tenantId, rules }: { tenantId: string; rules?: unknown }) => {
     reads.opened.push(tenantId);
+    reads.rules.push(rules);
     return {
       get current() {
         return response.data;
@@ -108,6 +111,7 @@ beforeEach(async () => {
   response.error = undefined;
   reads.opened = [];
   reads.refreshed = [];
+  reads.rules = [];
 });
 
 afterEach(() => {
@@ -143,6 +147,15 @@ describe("selecting a person", () => {
 
     await expect.element(panel()).toBeVisible();
     expect(row("bob").getAttribute("aria-current")).toBe("true");
+  });
+
+  it("reads the open person with the viewer's own flag rules, as the list does", async () => {
+    response.data = makeDetail(bob);
+    openAt("?person=bob");
+
+    await expect.element(panel()).toBeVisible();
+    expect(reads.rules.length).toBeGreaterThan(0);
+    expect(reads.rules).toEqual(reads.rules.map(() => OverviewRuleSet.All));
   });
 
   it("opens nothing for a slug that is not in the list, and drops it from the URL", async () => {

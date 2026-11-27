@@ -17,6 +17,7 @@ import {
   makeStatistics,
 } from "./people-fixtures.js";
 import type { ReviewDays, ReviewState } from "./review-lens.js";
+import { makeRuleReason, ruleAttention } from "./flag-rule-fixtures.js";
 
 function crowd(count: number): TenantOverviewItem[] {
   return Array.from({ length: count }, (_, i) =>
@@ -159,6 +160,26 @@ describe("Review rows", () => {
       page.getByRole("heading").elements().map((h) => h.textContent?.replace(/\s+/g, " ").trim())
     ).toEqual(nowHeadings);
     expect(nowHeadings).toEqual(["Flagged 1", "Other people 5"]);
+  });
+
+  it("flags a person by the viewer's own rule and states the rule's reason, as in the Now lens", async () => {
+    const phrase = "Time below consensus range: 6.5% in the last 14 days (your rule: above 4%)";
+    const people = [
+      makePerson({ slug: "zoe" }),
+      makePerson({ slug: "amy", attention: [ruleAttention(makeRuleReason(), NotificationUrgency.Warn)] }),
+      ...crowd(4),
+    ];
+    const now = render(PeopleRoster, { props: { people } });
+    await expect.element(page.getByText(phrase)).toBeVisible();
+    await now.unmount();
+
+    renderReview(people, ready(people.map((p) => makeReviewEntry(p))));
+
+    await expect.element(page.getByText(phrase)).toBeVisible();
+    expect(page.getByRole("heading").elements().map((h) => h.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+      "Flagged 1",
+      "Other people 5",
+    ]);
   });
 
   it("joins the entries to the people on tenant id, not on position", async () => {

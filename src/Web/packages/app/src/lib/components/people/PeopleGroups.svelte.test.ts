@@ -7,6 +7,7 @@ import { page as pageState } from "$app/state";
 import {
   GlucoseStatus,
   NotificationUrgency,
+  OverviewRuleSet,
   TenantOverviewAttentionKind,
   type StaffGroup,
   type TenantOverviewItem,
@@ -87,7 +88,7 @@ vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
       state.groups = server.groups;
     },
   }),
-  getOverview: (args?: { group?: string }) => {
+  getOverview: (args?: { group?: string; rules?: OverviewRuleSet }) => {
     calls.overview.push(args);
     const key = args?.group ?? EVERYONE;
     return {
@@ -222,7 +223,7 @@ describe("PeoplePage group tabs", () => {
       "Oak cabin",
     ]);
     await expect.element(tab("Everyone")).toHaveAttribute("aria-selected", "true");
-    expect(calls.overview).toContainEqual(undefined);
+    expect(calls.overview).toContainEqual({ rules: OverviewRuleSet.All });
   });
 
   it("names the team on the tabs of two groups that share a name", async () => {
@@ -247,7 +248,7 @@ describe("PeoplePage group tabs", () => {
     await tab("Birch cabin").click();
 
     await expect.element(page.getByText("Fay")).toBeVisible();
-    expect(calls.overview).toContainEqual({ group: "0193b6a0-0000-7000-8000-000000000001" });
+    expect(calls.overview).toContainEqual({ group: "0193b6a0-0000-7000-8000-000000000001", rules: OverviewRuleSet.All });
     await expect.element(tab("Birch cabin")).toHaveAttribute("aria-selected", "true");
     await expect.element(page.getByRole("heading", { name: /Flagged\s*1/ })).toBeVisible();
     await expect.element(page.getByRole("heading", { name: /Other people\s*4/ })).toBeVisible();
@@ -306,7 +307,7 @@ describe("PeoplePage group tabs", () => {
     openAt("?group=0193b6a0-0000-7000-8000-000000000002&lens=review&days=30&person=bo");
 
     await expect.element(tab("Oak cabin")).toHaveAttribute("aria-selected", "true");
-    expect(calls.overview).toContainEqual({ group: "0193b6a0-0000-7000-8000-000000000002" });
+    expect(calls.overview).toContainEqual({ group: "0193b6a0-0000-7000-8000-000000000002", rules: OverviewRuleSet.All });
 
     await tab("Everyone").click();
     await expect.element(tab("Everyone")).toHaveAttribute("aria-selected", "true");
@@ -363,7 +364,7 @@ describe("PeoplePage group tabs", () => {
     expect(page.getByRole("tablist").elements()).toHaveLength(0);
     expect(nav.address.searchParams.get("group")).toBeNull();
     expect(nav.address.searchParams.get("lens")).toBe("review");
-    expect(calls.overview.at(-1)).toBeUndefined();
+    expect(calls.overview.at(-1)).toEqual({ rules: OverviewRuleSet.All });
   });
 
   it("reads the groups again on the overview's poll, so a group added while the page is open gains a tab", async () => {

@@ -76,6 +76,7 @@ public class PumpSnapshotRepository : SyncUpsertRepositoryBase<PumpSnapshot, Pum
         if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
         var entity = await query
             .OrderByDescending(e => e.Timestamp)
+            .ThenByDescending(e => e.Id)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : PumpSnapshotMapper.ToDomainModel(entity);
     }

@@ -96,32 +96,35 @@ public class MyTenantsController : ControllerBase
     /// (<see cref="ITenantOverviewService.GetGroupOverviewAsync"/>).
     /// </summary>
     /// <param name="group">One of the caller's groups (<see cref="GetGroups"/>); 404 for any other.</param>
+    /// <param name="rules">The flag rules judged beside the fixed reasons; the fixed reasons only when not given.</param>
     /// <param name="ct">Cancels the operation.</param>
     [HttpGet("overview")]
     [RemoteQuery]
     [ProducesResponseType(typeof(TenantOverviewResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TenantOverviewResponse>> GetOverview(
-        [FromQuery] Guid? group, CancellationToken ct)
+        [FromQuery] Guid? group, [FromQuery] OverviewRuleSet? rules, CancellationToken ct)
     {
         var caller = HttpContext.GetAuthContext() ?? AuthContext.Unauthenticated();
         if (!caller.IsAuthenticated)
             return Unauthorized();
 
+        var flagRules = FlagRulesOf(rules);
         if (group is { } groupId)
             return caller.SubjectId is { } member
                 && await _overviewService.GetGroupOverviewAsync(
-                    member, groupId, TokenScopesOf(caller), caller.AuthType, caller.LimitTo24Hours, ct)
+                    member, groupId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, flagRules,
+                    caller.LimitTo24Hours, ct)
                     is { } groupOverview
                 ? Ok(groupOverview)
                 : NoSuchGroup();
 
         // See ResolveOwnSubject for why a caller without a subject is answered, not refused.
         if (caller.SubjectId is not { } subjectId)
-            return Ok(new TenantOverviewResponse([], null));
+            return Ok(new TenantOverviewResponse([], null, 0));
 
         var overview = await _overviewService.GetOverviewAsync(
-            subjectId, TokenScopesOf(caller), caller.AuthType, caller.LimitTo24Hours, ct);
+            subjectId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, flagRules, caller.LimitTo24Hours, ct);
         return Ok(overview);
     }
 
@@ -168,15 +171,19 @@ public class MyTenantsController : ControllerBase
         if (group is { } groupId)
             return caller.SubjectId is { } subjectId
                 && await _overviewService.GetGroupReviewAsync(
-                    subjectId, groupId, TokenScopesOf(caller), caller.AuthType, days, caller.LimitTo24Hours, ct)
+                    subjectId, groupId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, days, caller.LimitTo24Hours, ct)
                     is { } groupReview
                 ? Ok(groupReview)
                 : NoSuchGroup();
 
         var review = await _overviewService.GetReviewAsync(
-            caller.SubjectId, TokenScopesOf(caller), caller.AuthType, days, caller.LimitTo24Hours, ct);
+            caller.SubjectId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, days, caller.LimitTo24Hours, ct);
         return Ok(review);
     }
+
+    /// <summary>The caller's own rules are judged only when asked for by name.</summary>
+    private static OverviewFlagRules FlagRulesOf(OverviewRuleSet? rules) =>
+        rules == OverviewRuleSet.All ? OverviewFlagRules.Judge : OverviewFlagRules.LeaveOut;
 
     /// <summary>A group the caller is not in as current staff reads as one that does not exist.</summary>
     private ObjectResult NoSuchGroup() =>
@@ -184,6 +191,7 @@ public class MyTenantsController : ControllerBase
 
     /// <inheritdoc cref="ITenantOverviewService.GetPersonAsync"/>
     /// <param name="tenantId">The person's tenant.</param>
+    /// <param name="rules">The flag rules judged beside the fixed reasons; the fixed reasons only when not given.</param>
     /// <param name="ct">Cancels the operation.</param>
     [HttpGet("overview/person")]
     [RemoteQuery]
@@ -191,7 +199,7 @@ public class MyTenantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TenantPersonDetail>> GetPerson(
-        [FromQuery] Guid tenantId, CancellationToken ct = default)
+        [FromQuery] Guid tenantId, [FromQuery] OverviewRuleSet? rules, CancellationToken ct = default)
     {
         var caller = HttpContext.GetAuthContext() ?? AuthContext.Unauthenticated();
         if (!caller.IsAuthenticated)
@@ -204,7 +212,8 @@ public class MyTenantsController : ControllerBase
                 title: "Bad Request");
 
         var person = await _overviewService.GetPersonAsync(
-            caller.SubjectId, tenantId, TokenScopesOf(caller), caller.AuthType, caller.LimitTo24Hours, ct);
+            caller.SubjectId, tenantId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, FlagRulesOf(rules),
+            caller.LimitTo24Hours, ct);
         return person is null
             ? Problem(
                 detail: "No such person.",
@@ -212,19 +221,6 @@ public class MyTenantsController : ControllerBase
                 title: "Not Found")
             : Ok(person);
     }
-
-    /// <summary>
-    /// The scopes the credential's grant allows. These endpoints are tenantless, so
-    /// MemberScopeMiddleware has not applied the membership restriction: the service resolves it
-    /// per tenant through MemberScopeResolver, which needs the credential type to know whether the
-    /// token's scopes are a ceiling at all. PlatformAccess is a superuser auth type, matching
-    /// MemberScopeMiddleware's handling: it never reaches membership resolution there, so stand in
-    /// a full-access grant.
-    /// </summary>
-    private IReadOnlySet<string> TokenScopesOf(AuthContext caller) =>
-        caller.AuthType is AuthType.PlatformAccess
-            ? new HashSet<string> { Scope.FullAccess }
-            : HttpContext.GetGrantedScopes();
 
     /// <inheritdoc cref="ITenantService.CreateAsync"/>
     [HttpPost]

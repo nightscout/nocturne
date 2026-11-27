@@ -112,6 +112,8 @@ public class ReadEndpointScopeEnforcementTests
             ["ChatIdentityController.GetPending"] = V4Reason.CapabilityToken,
             ["BackupSignInPromptController.GetBackupSignInPrompt"] = V4Reason.OwnData,
             ["RecoveryEmailController.GetRecoveryEmail"] = V4Reason.OwnDataInteractiveOnly,
+            ["FlagRulesController.GetFlagRules"] = V4Reason.OwnDataInteractiveOnly,
+            ["FlagRulesController.GetFlagRuleFacts"] = V4Reason.OwnDataInteractiveOnly,
             ["RecoveryEmailPromptController.GetRecoveryEmailPrompt"] = V4Reason.OwnData,
             ["MembershipRequestController.GetMyRequest"] = V4Reason.OwnData,
             ["MyPermissionsController.GetMyPermissions"] = V4Reason.OwnData,

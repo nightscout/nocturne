@@ -3,12 +3,15 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Nocturne.API.Extensions;
+using Nocturne.API.Reports.Datasets;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
+using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Reports;
 
@@ -69,8 +72,46 @@ internal sealed record FlagJudgement(
         new(FlagOutcome.CannotBeChecked, false, null, null, null, null, FlagUncheckable.MissingScope, scope);
 }
 
-/// <summary>Every condition judged for one person, in the order the conditions were given.</summary>
-internal sealed record FlagPersonJudgements(Guid TenantId, IReadOnlyList<FlagJudgement> Judgements);
+/// <summary>
+/// The reads the People overview already made for a person, which the current status facts and the pump's device
+/// status facts are judged on.
+/// </summary>
+/// <param name="ActiveTrackers">The running trackers; null where the caller may not read them.</param>
+/// <param name="Pump">The newest pump snapshot; null where there is none or the caller may not read it.</param>
+internal sealed record FlagLiveReads(SensorGlucose? Latest, IReadOnlyList<TrackerInstance>? ActiveTrackers, PumpSnapshot? Pump);
+
+/// <summary>What one overview read's judging found for a person.</summary>
+internal enum FlagPersonState
+{
+    /// <summary>Every condition judged (<see cref="FlagPersonJudging.Judgements"/>).</summary>
+    Judged,
+
+    /// <summary>A read is not kept, or is past its life. It is read in the background.</summary>
+    Pending,
+
+    /// <summary>The kept read failed. The person carries the fixed set until the keep runs out.</summary>
+    Failed,
+}
+
+/// <summary>A person's judging: every condition, in the order the conditions were given, when <see cref="State"/> is judged.</summary>
+internal sealed record FlagPersonJudging(FlagPersonState State, IReadOnlyList<FlagJudgement> Judgements)
+{
+    public static readonly FlagPersonJudging Pending = new(FlagPersonState.Pending, []);
+
+    public static readonly FlagPersonJudging Failed = new(FlagPersonState.Failed, []);
+}
+
+/// <summary>
+/// One read of a dataset for one person: its stat tiles row over the window (the last N days, or a live fact's default
+/// range, to the read), when it was read, and what it took from the tenant.
+/// </summary>
+internal sealed record FlagFigures(IReadOnlyDictionary<string, object?> Row, ReportWindow Window, DateTimeOffset ReadAt, ReportReadLog ReadLog);
+
+/// <summary>
+/// A read as the person's cache keeps it. <see cref="Figures"/> is null when the read failed, so the failure is kept,
+/// and logged, once per keep.
+/// </summary>
+internal sealed record FlagFactKeep(FlagFigures? Figures, DateTimeOffset ReadAt);
 
 /// <summary>
 /// Judges flag conditions for the people a caller follows, by the reports engine: each fact is read by its dataset,
@@ -80,29 +121,33 @@ internal sealed record FlagPersonJudgements(Guid TenantId, IReadOnlyList<FlagJud
 /// <remarks>
 /// <para>
 /// Conditions that name one dataset query over one range share one read (<see cref="FlagFactCondition.ReadKey"/>), so
-/// the glucose of a range is read once however many facts and values are taken from it. A period read's figures row is
-/// kept in the person's <see cref="ITenantCache"/> and compared with each condition on every call, so a changed value
-/// costs no read. Its key holds the read key, the fields asked for as the dataset reads by them
-/// (<see cref="IReportDataset.ReadVariant"/>) and the scopes it was read under, which decide the fields the row holds.
-/// A kept row is stale <see cref="KeepLife"/> after its own read by <see cref="TimeProvider"/>. A live fact is read on
-/// every call.
+/// the glucose of a range is read once however many facts and values are taken from it. A read's figures are kept in
+/// the person's local <see cref="ITenantCache"/> tier and compared with each condition on every call, so a changed
+/// value costs no read. The local tier, unlike the distributed one, is not cleared by each glucose write, which would
+/// leave a person whose data arrives every few minutes never judged. Its key holds the read key, the fields asked for
+/// as the dataset reads by them (<see cref="IReportDataset.ReadVariant"/>) and the scopes it was read under, which
+/// decide the fields the row holds. A keep serves for <see cref="KeepLife"/> after its own read by
+/// <see cref="TimeProvider"/>.
 /// </para>
 /// <para>
-/// People are read <see cref="PeopleAtOnce"/> at a time, each in a scope of its own, with its own contexts, cache and
-/// read logs. What they share is read only: the request's scope, to open theirs from it and to resolve singletons, and
-/// the caller's <see cref="IAuditContext"/>. The request's <see cref="HttpContext"/> is read before the people, and
-/// again when the audit rows are written after them, on the caller's own flow.
+/// A caller never reads a dataset and never waits on a read. The current status facts, and the pump's device status
+/// facts when the newest snapshot decides them (<see cref="DeviceStatusDataset.PumpRowOf"/>), are judged on the
+/// overview's own reads on every call. Every other fact is served from its keep. A person whose keep is missing or
+/// past its life is pending: the read runs in the background (<see cref="FlagFactReads"/>), and the person is judged
+/// on a later call. A keep of figures past <see cref="RefreshAfter"/> of its life is served and read again in the
+/// background, so a page that polls does not see it run out. A failed keep is read again only once its life is over.
 /// </para>
 /// <para>
 /// A caller limited to 24 hours for a person, or lacking a fact's scopes (<see cref="FlagFacts.Scopes"/>), is not read
-/// at all. A caller gets one read-audit row per person for each keep of figures they are served, read or kept, and one
-/// for each live read. Kept figures count as audited for a caller only once their row is enqueued, so a call that fails
-/// or is cancelled before a person's row leaves that row owed on the next call.
+/// at all. A caller gets one read-audit row per person for each period keep they are judged on, and for live facts,
+/// read by the overview or kept, one per <see cref="PeriodKeep"/>. A pending or failed person gets none. A read counts
+/// as audited for a caller only once its row is enqueued.
 /// </para>
 /// </remarks>
 internal sealed class FlagFactEvaluator(
     IReportDatasetRegistry registry,
     ReportSpecValidator validator,
+    FlagFactReads reads,
     IServiceProvider scope,
     IAuditContext audit,
     IHttpContextAccessor httpContextAccessor,
@@ -111,155 +156,275 @@ internal sealed class FlagFactEvaluator(
     /// <summary>The audit actor of a person's scope, and the read-audit row's endpoint.</summary>
     internal const string AuditEndpoint = "service:flag-facts";
 
+    private TimeProvider Time => time;
+
+    private FlagFactReads Reads => reads;
+
     /// <summary>The longest a period read's figures are kept.</summary>
     internal static readonly TimeSpan PeriodKeep = TimeSpan.FromMinutes(15);
 
-    /// <summary>The most <see cref="KeepLife"/> takes off <see cref="PeriodKeep"/>.</summary>
-    internal static readonly TimeSpan KeepSpread = TimeSpan.FromMinutes(5);
+    /// <summary>The longest the figures of a live fact the overview does not read itself are kept.</summary>
+    internal static readonly TimeSpan LiveKeep = TimeSpan.FromMinutes(5);
+
+    /// <summary>The most <see cref="KeepLife"/> takes off the longest keep of a kind, as a share of it.</summary>
+    internal const double KeepSpread = 1.0 / 3.0;
+
+    /// <summary>
+    /// The share of a keep's life after which a call that serves its figures reads it again in the background. The
+    /// shortest live life less this share of it (200 s less 133 s) is longer than the minute between a page's polls, so
+    /// a polled keep never runs out.
+    /// </summary>
+    internal const double RefreshAfter = 2.0 / 3.0;
 
     /// <summary>
     /// How long the figures of <paramref name="readKey"/> for <paramref name="tenantId"/> are kept: <see cref="PeriodKeep"/>
-    /// less an offset under <see cref="KeepSpread"/> from a stable hash of the two.
+    /// or <see cref="LiveKeep"/> by <paramref name="kind"/>, less an offset under <see cref="KeepSpread"/> of it from a
+    /// stable hash of the two.
     /// </summary>
     /// <remarks>
     /// One call reads every person it judges at one instant. Kept for one fixed time, their figures would all run out
-    /// together, and the call after would read every person again, every quarter hour. The offset spreads those reads.
+    /// together, and the call after would read every person again at once. The offset spreads those reads.
     /// </remarks>
-    internal static TimeSpan KeepLife(Guid tenantId, string readKey)
+    internal static TimeSpan KeepLife(Guid tenantId, string readKey, ReportFlagFactKind kind)
     {
+        var longest = kind == ReportFlagFactKind.Live ? LiveKeep : PeriodKeep;
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{tenantId:N}|{readKey}"));
-        var offset = BinaryPrimitives.ReadUInt64LittleEndian(hash) % (ulong)KeepSpread.Ticks;
-        return PeriodKeep - TimeSpan.FromTicks((long)offset);
+        var offset = BinaryPrimitives.ReadUInt64LittleEndian(hash) % (ulong)(longest.Ticks * KeepSpread);
+        return longest - TimeSpan.FromTicks((long)offset);
     }
-
-    /// <summary>
-    /// The people read at once. Each holds a pooled connection while it reads, and several staff may judge at once, so
-    /// the degree stays small.
-    /// </summary>
-    internal const int PeopleAtOnce = 8;
 
     /// <inheritdoc cref="FlagFactCondition.Check"/>
     public (FlagFactCondition? Condition, IReadOnlyList<ReportSpecError> Errors) Check(FlagCondition condition) =>
         FlagFactCondition.Check(condition, validator, registry);
 
     /// <summary>
-    /// Every condition for every person in <paramref name="people"/> (the people the caller follows, as
-    /// <see cref="ITenantOverviewService.GetGlucoseReadTenantsAsync"/> lists them). A person is limited to 24 hours as
-    /// the overview decides it (<see cref="MemberScopeResolver.IsHistoryClamped"/>).
+    /// A flag rule checked as <see cref="Check"/> checks a condition. A rule holds only the dataset's name, and its value
+    /// is in the fact's own unit (mg/dL for glucose), so the unit is the fact's.
     /// </summary>
-    public async Task<IReadOnlyList<FlagPersonJudgements>> JudgeAsync(
-        IReadOnlyList<GlucoseReadTenant> people,
-        IReadOnlyList<FlagFactCondition> conditions,
-        bool credentialLimitTo24Hours,
-        CancellationToken cancellationToken)
+    public (FlagFactCondition? Condition, IReadOnlyList<ReportSpecError> Errors) CheckRule(
+        string dataset, string field, int? days, FlagRuleComparison comparison, double value)
     {
-        var now = time.GetUtcNow();
-        var http = httpContextAccessor.HttpContext;
-        var viewer = $"{audit.SubjectId:N}|{audit.TokenId:N}|{http?.GetAuthContext()?.CredentialFingerprint}";
-        var judged = new FlagPersonJudgements[people.Count];
-        var unaudited = new IReadOnlyList<ServedRead>[people.Count];
-        await Parallel.ForEachAsync(
-            Enumerable.Range(0, people.Count),
-            new ParallelOptions { MaxDegreeOfParallelism = PeopleAtOnce, CancellationToken = cancellationToken },
-            async (i, token) =>
-            {
-                var (judgements, served) = await JudgePersonAsync(people[i], conditions, credentialLimitTo24Hours, viewer, now, token);
-                judged[i] = new FlagPersonJudgements(people[i].Tenant.Id, judgements);
-                unaudited[i] = served;
-            });
-
-        for (var i = 0; i < people.Count; i++)
-            if (unaudited[i].Count > 0)
-                await AuditAsync(people[i].Tenant, unaudited[i], http, cancellationToken);
-        return judged;
+        var unit = registry.Find(dataset) is { } named
+            ? FlagFacts.Of(named).FirstOrDefault(f => f.Name == field)?.ResolveUnit(useMmol: false).Unit
+            : null;
+        var condition = new FlagCondition(
+            JsonSerializer.SerializeToElement(new Dictionary<string, string> { ["name"] = dataset }),
+            field,
+            days,
+            comparison == FlagRuleComparison.Below ? FlagComparison.Below : FlagComparison.Above,
+            value,
+            unit);
+        return Check(condition);
     }
 
-    /// <summary>The person's judgements, and the reads served that <paramref name="viewer"/> has no row for yet.</summary>
-    private async Task<(IReadOnlyList<FlagJudgement> Judgements, IReadOnlyList<ServedRead> Unaudited)> JudgePersonAsync(
-        GlucoseReadTenant person,
-        IReadOnlyList<FlagFactCondition> conditions,
-        bool credentialLimitTo24Hours,
-        string viewer,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
+    /// <summary>
+    /// Why <paramref name="condition"/> cannot be checked for <paramref name="person"/>, or null when it can: the person
+    /// is limited to 24 hours as the overview decides it (<see cref="MemberScopeResolver.IsHistoryClamped"/>), or the
+    /// caller lacks a scope the fact needs there.
+    /// </summary>
+    public static FlagJudgement? Uncheckable(GlucoseReadTenant person, FlagFactCondition condition, bool credentialLimitTo24Hours)
     {
         if (MemberScopeResolver.IsHistoryClamped(credentialLimitTo24Hours, person.MembershipLimitTo24Hours, person.EffectivePermissions))
-            return ([.. conditions.Select(_ => FlagJudgement.HistoryLimited)], []);
-
-        var judgements = new FlagJudgement?[conditions.Count];
-        var pending = new List<int>();
-        for (var i = 0; i < conditions.Count; i++)
-        {
-            var needs = FlagFacts.Scopes(conditions[i].Dataset, conditions[i].Field);
-            if (needs.FirstOrDefault(s => !Scope.Satisfies(person.AllowedScopes, s)) is { } missing)
-                judgements[i] = FlagJudgement.WithoutScope(missing);
-            else
-                pending.Add(i);
-        }
-        if (pending.Count == 0)
-            return (judgements!, []);
-
-        await using var tenantScope = TenantOverviewService.OpenTenantScope(scope, person.Tenant, historyClamped: false, AuditEndpoint);
-        var services = tenantScope.ServiceProvider;
-        var cache = services.GetRequiredService<ITenantCache>();
-        var unaudited = new List<ServedRead>();
-        foreach (var group in pending.GroupBy(i => conditions[i].ReadKey))
-        {
-            var shared = group.Select(i => conditions[i]).ToList();
-            var (figures, keptKey) = await FiguresAsync(person.Tenant.Id, shared, services, cache, now, cancellationToken);
-            foreach (var i in group)
-                judgements[i] = JudgeOf(conditions[i], figures);
-            var mark = keptKey is null ? null : AuditedMark(viewer, keptKey, figures);
-            if (mark is null || !cache.TryGetLocal<bool>(mark, out _))
-                unaudited.Add(new ServedRead(figures, shared, mark));
-        }
-        return (judgements!, unaudited);
+            return FlagJudgement.HistoryLimited;
+        return FlagFacts.Scopes(condition.Dataset, condition.Field).FirstOrDefault(s => !Scope.Satisfies(person.AllowedScopes, s)) is { } missing
+            ? FlagJudgement.WithoutScope(missing)
+            : null;
     }
 
-    /// <summary>
-    /// One read of a dataset for one person: its stat tiles row over the window (the last N days, or a live fact's
-    /// default range, to the read), when it was read, and what it took from the tenant.
-    /// </summary>
-    private sealed record Figures(IReadOnlyDictionary<string, object?> Row, ReportWindow Window, DateTimeOffset ReadAt, ReportReadLog ReadLog);
-
-    /// <summary>
-    /// Figures a caller was served and has no row for, the conditions they were judged for, and for kept figures the
-    /// mark that says the caller's row for them is enqueued (<see cref="AuditedMark"/>).
-    /// </summary>
-    private sealed record ServedRead(Figures Figures, IReadOnlyList<FlagFactCondition> Conditions, string? Mark);
-
-    /// <summary>
-    /// The figures <paramref name="shared"/> are judged on: read now for a live fact, else kept, with the key a kept row
-    /// is held under (null for a live read).
-    /// </summary>
-    private static async Task<(Figures Figures, string? KeptKey)> FiguresAsync(
-        Guid tenantId,
-        IReadOnlyList<FlagFactCondition> shared,
-        IServiceProvider services,
-        ITenantCache cache,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
+    /// <summary>The judging of <paramref name="conditions"/> for the people of one overview read.</summary>
+    public FlagJudging Begin(IReadOnlyList<FlagFactCondition> conditions, bool credentialLimitTo24Hours)
     {
-        var first = shared[0];
-        var granted = shared.SelectMany(c => FlagFacts.Scopes(c.Dataset, c.Field)).ToHashSet(StringComparer.Ordinal);
-        var shape = new ReportReadShape([.. shared.Select(c => c.Field.Name).Distinct(StringComparer.Ordinal)]);
-        Task<Figures> Read() => ReadAsync(first, shape, granted, services, now, cancellationToken);
-        if (first.Fact.Kind == ReportFlagFactKind.Live)
-            return (await Read(), null);
-
-        var key = $"{TenantCacheFamily.Statistics}:flag-fact:{first.ReadKey}|{first.Dataset.ReadVariant(shape)}|"
-            + string.Join(',', granted.Order(StringComparer.Ordinal));
-        var life = KeepLife(tenantId, first.ReadKey);
-        var kept = await cache.GetOrSetAsync(key, Read, life, cancellationToken);
-        if (now - kept.ReadAt < life)
-            return (kept, key);
-
-        var fresh = await Read();
-        await cache.SetAsync(key, fresh, life, cancellationToken);
-        return (fresh, key);
+        var http = httpContextAccessor.HttpContext;
+        var viewer = $"{audit.SubjectId:N}|{audit.TokenId:N}|{http?.GetAuthContext()?.CredentialFingerprint}";
+        return new FlagJudging(this, conditions, credentialLimitTo24Hours, viewer, http);
     }
 
-    private static async Task<Figures> ReadAsync(
+    /// <summary>One overview read's judging. Its people are judged one at a time, on the request's own flow.</summary>
+    internal sealed class FlagJudging
+    {
+        private readonly FlagFactEvaluator _evaluator;
+        private readonly IReadOnlyList<FlagFactCondition> _conditions;
+        private readonly bool _credentialLimitTo24Hours;
+        private readonly string _viewer;
+        private readonly HttpContext? _http;
+        private readonly List<FlagFactReads.Warm> _warms = [];
+
+        internal FlagJudging(
+            FlagFactEvaluator evaluator,
+            IReadOnlyList<FlagFactCondition> conditions,
+            bool credentialLimitTo24Hours,
+            string viewer,
+            HttpContext? http)
+        {
+            _evaluator = evaluator;
+            _conditions = conditions;
+            _credentialLimitTo24Hours = credentialLimitTo24Hours;
+            _viewer = viewer;
+            _http = http;
+        }
+
+        /// <summary>How many people were pending.</summary>
+        public int Pending { get; private set; }
+
+        /// <summary>
+        /// Every condition for <paramref name="person"/>, read in <paramref name="personScope"/> (the overview's scope for
+        /// the person) and on <paramref name="live"/>. Pending while a period read is not kept. The person's read-audit
+        /// row is enqueued before it returns judged.
+        /// </summary>
+        public async Task<FlagPersonJudging> JudgeAsync(
+            GlucoseReadTenant person, IServiceProvider personScope, FlagLiveReads live, CancellationToken cancellationToken)
+        {
+            var now = _evaluator.Time.GetUtcNow();
+            var judgements = new FlagJudgement?[_conditions.Count];
+            var open = new List<int>();
+            for (var i = 0; i < _conditions.Count; i++)
+            {
+                if (Uncheckable(person, _conditions[i], _credentialLimitTo24Hours) is { } uncheckable)
+                    judgements[i] = uncheckable;
+                else
+                    open.Add(i);
+            }
+            if (open.Count == 0)
+                return new FlagPersonJudging(FlagPersonState.Judged, judgements!);
+
+            var cache = personScope.GetRequiredService<ITenantCache>();
+            var served = new List<ServedRead>();
+            var state = FlagPersonState.Judged;
+            void Serve(IReadOnlyList<int> judged, ServedRead read)
+            {
+                foreach (var i in judged)
+                    judgements[i] = JudgeOf(_conditions[i], read.Figures);
+                if (!cache.TryGetLocal<bool>(read.Mark, out _))
+                    served.Add(read);
+            }
+
+            foreach (var group in open.GroupBy(i => _conditions[i].ReadKey))
+            {
+                var rest = group.ToList();
+                if (OnOwnReads(rest, live, now) is { } own)
+                {
+                    Serve(own.Judged, own.Read);
+                    rest = [.. rest.Except(own.Judged)];
+                    if (rest.Count == 0)
+                        continue;
+                }
+
+                var (kept, keptState) = Kept(person, [.. rest.Select(i => _conditions[i])], personScope, cache, now);
+                state = Worse(state, keptState);
+                if (kept is not null)
+                    Serve(rest, kept);
+            }
+
+            if (state == FlagPersonState.Pending)
+            {
+                Pending++;
+                return FlagPersonJudging.Pending;
+            }
+            if (state == FlagPersonState.Failed)
+                return FlagPersonJudging.Failed;
+
+            if (served.Count > 0)
+                await _evaluator.AuditAsync(person.Tenant, served, cache, _http, cancellationToken);
+            return new FlagPersonJudging(FlagPersonState.Judged, judgements!);
+        }
+
+        /// <summary>Starts the background reads this judging found missing or ageing. It does not wait for them.</summary>
+        public void Finish()
+        {
+            _evaluator.Reads.Start([.. _warms]);
+            _warms.Clear();
+        }
+
+        private static FlagPersonState Worse(FlagPersonState a, FlagPersonState b) =>
+            a == FlagPersonState.Pending || b == FlagPersonState.Pending ? FlagPersonState.Pending
+            : a == FlagPersonState.Failed || b == FlagPersonState.Failed ? FlagPersonState.Failed
+            : FlagPersonState.Judged;
+
+        /// <summary>
+        /// The conditions of <paramref name="group"/>, one read's, that are judged on <paramref name="live"/>, with the
+        /// figures they are judged on; null when none are.
+        /// </summary>
+        private (IReadOnlyList<int> Judged, ServedRead Read)? OnOwnReads(IReadOnlyList<int> group, FlagLiveReads live, DateTimeOffset now)
+        {
+            var first = _conditions[group[0]];
+            var from = now - first.Dataset.DefaultRange;
+            var readLog = new ReportReadLog();
+            IReadOnlyList<int> judged;
+            Dictionary<string, object?>? row;
+            if (first.Dataset.Name == CurrentStatusParameters.Name)
+            {
+                judged = group;
+                var trackers = group.Any(i => _conditions[i].Field.Scope == Scope.AlertsRead) ? live.ActiveTrackers : null;
+                row = CurrentStatusDataset.RowOf(live.Latest, trackers, now, readLog);
+            }
+            else if (first.Dataset.Name == DeviceStatusParameters.Name)
+            {
+                judged = [.. group.Where(i => DeviceStatusDataset.PumpFields.Contains(_conditions[i].Field.Name))];
+                row = judged.Count > 0 ? DeviceStatusDataset.PumpRowOf(live.Pump, from, now, readLog) : null;
+            }
+            else
+            {
+                return null;
+            }
+            if (row is null)
+                return null;
+
+            var figures = new FlagFigures(row, new ReportWindow(from.ToUnixTimeMilliseconds(), now.ToUnixTimeMilliseconds()), now, readLog);
+            return (judged, new ServedRead(figures, [.. judged.Select(i => _conditions[i])], LiveMark(first.ReadKey, now)));
+        }
+
+        /// <summary>
+        /// The read-audit mark of live figures judged under <paramref name="key"/>: one row per viewer, person and key
+        /// per <see cref="PeriodKeep"/>, however often the figures are read.
+        /// </summary>
+        private string LiveMark(string key, DateTimeOffset now) => $"flag-fact-audited:{_viewer}:live:{key}:{now.UtcTicks / PeriodKeep.Ticks}";
+
+        private (ServedRead? Read, FlagPersonState State) Kept(
+            GlucoseReadTenant person,
+            IReadOnlyList<FlagFactCondition> shared,
+            IServiceProvider personScope,
+            ITenantCache cache,
+            DateTimeOffset now)
+        {
+            var first = shared[0];
+            var (shape, granted) = ShapeOf(shared);
+            var key = KeepKey(first, shape, granted);
+            var life = KeepLife(person.Tenant.Id, first.ReadKey, first.Fact.Kind);
+            if (!cache.TryGetLocal<FlagFactKeep>(key, out var keep) || keep is null || now - keep.ReadAt >= life)
+            {
+                _warms.Add(new FlagFactReads.Warm(person.Tenant.Id, TenantReader.Of(personScope), first, shape, granted, key, life));
+                return (null, FlagPersonState.Pending);
+            }
+
+            if (keep.Figures is not { } figures)
+                return (null, FlagPersonState.Failed);
+
+            if (now - keep.ReadAt >= life * RefreshAfter)
+                _warms.Add(new FlagFactReads.Warm(person.Tenant.Id, TenantReader.Of(personScope), first, shape, granted, key, life));
+            var mark = first.Fact.Kind == ReportFlagFactKind.Live
+                ? LiveMark(key, now)
+                : $"flag-fact-audited:{_viewer}:{key}:{keep.ReadAt.UtcTicks}";
+            return (new ServedRead(figures, shared, mark), FlagPersonState.Judged);
+        }
+    }
+
+    /// <summary>The fields <paramref name="shared"/> ask of one read, and the scopes it is read under.</summary>
+    private static (ReportReadShape Shape, IReadOnlySet<string> Granted) ShapeOf(IReadOnlyList<FlagFactCondition> shared) =>
+        (new ReportReadShape([.. shared.Select(c => c.Field.Name).Distinct(StringComparer.Ordinal)]),
+            shared.SelectMany(c => FlagFacts.Scopes(c.Dataset, c.Field)).ToHashSet(StringComparer.Ordinal));
+
+    /// <summary>The local key a period read's <see cref="FlagFactKeep"/> is held under in the person's cache.</summary>
+    private static string KeepKey(FlagFactCondition first, ReportReadShape shape, IReadOnlySet<string> granted) =>
+        $"flag-fact:{first.ReadKey}|{first.Dataset.ReadVariant(shape)}|{string.Join(',', granted.Order(StringComparer.Ordinal))}";
+
+    /// <summary>
+    /// Figures a caller was judged on, the conditions they were judged for, and the local mark that says the caller's
+    /// read-audit row for them is enqueued. A mark is held on this instance only, so another instance audits again.
+    /// </summary>
+    private sealed record ServedRead(FlagFigures Figures, IReadOnlyList<FlagFactCondition> Conditions, string Mark);
+
+    /// <summary>One read of <paramref name="condition"/>'s dataset in <paramref name="services"/>, a scope for the person.</summary>
+    internal static async Task<FlagFigures> ReadAsync(
         FlagFactCondition condition,
         ReportReadShape shape,
         IReadOnlySet<string> granted,
@@ -275,17 +440,10 @@ internal sealed class FlagFactEvaluator(
                 HistoryClamped: false, Now: now, Fields: shape.Fields),
             cancellationToken);
         var window = output.Window ?? new ReportWindow(from.ToUnixTimeMilliseconds(), now.ToUnixTimeMilliseconds());
-        return new Figures(output.Rows.Count > 0 ? output.Rows[0] : new Dictionary<string, object?>(), window, now, readLog);
+        return new FlagFigures(output.Rows.Count > 0 ? output.Rows[0] : new Dictionary<string, object?>(), window, now, readLog);
     }
 
-    /// <summary>
-    /// The local key that says <paramref name="viewer"/>'s row for the figures kept under <paramref name="key"/> is
-    /// enqueued. It is held on this instance only, so another instance audits again.
-    /// </summary>
-    private static string AuditedMark(string viewer, string key, Figures figures) =>
-        $"flag-fact-audited:{viewer}:{key}:{figures.ReadAt.UtcTicks}";
-
-    private static FlagJudgement JudgeOf(FlagFactCondition condition, Figures figures)
+    private static FlagJudgement JudgeOf(FlagFactCondition condition, FlagFigures figures)
     {
         var row = figures.Row;
         var window = condition.Fact.Kind == ReportFlagFactKind.Period ? figures.Window : null;
@@ -315,10 +473,12 @@ internal sealed class FlagFactEvaluator(
     };
 
     /// <summary>
-    /// The person's read-audit row: what the figures the caller was served, and has no row for, took from the tenant, and
-    /// the facts they were for. None when they took nothing. Once the row is enqueued, the kept figures in it are marked.
+    /// The person's read-audit row: what the figures the caller was judged on, and has no row for, took from the tenant,
+    /// and the facts they were for. None when they took nothing. Once the row is enqueued, the reads in it are marked in
+    /// <paramref name="cache"/>, the person's.
     /// </summary>
-    private async Task AuditAsync(TenantRecord tenant, IReadOnlyList<ServedRead> served, HttpContext? http, CancellationToken cancellationToken)
+    private async Task AuditAsync(
+        TenantRecord tenant, IReadOnlyList<ServedRead> served, ITenantCache cache, HttpContext? http, CancellationToken cancellationToken)
     {
         var readLog = ReportReadLog.Of(served.Select(s => s.Figures.ReadLog));
         if (readLog.Datasets.Count == 0)
@@ -333,12 +493,10 @@ internal sealed class FlagFactEvaluator(
             : JsonSerializer.Serialize(new Dictionary<string, object> { ["facts"] = ReportReadAudit.Filtered });
         var enqueued = await ReportReadAudit.WriteAsync(scope, tenant.Id, AuditEndpoint, id => ReportReadAudit.BuildEntry(
             id, AuditEndpoint, arguments, StatusCodes.Status200OK, readLog, audit, http, time.GetUtcNow().UtcDateTime), cancellationToken);
-        if (!enqueued || served.All(s => s.Mark is null))
+        if (!enqueued)
             return;
 
-        await using var tenantScope = TenantOverviewService.OpenTenantScope(scope, tenant, historyClamped: false, AuditEndpoint);
-        var cache = tenantScope.ServiceProvider.GetRequiredService<ITenantCache>();
-        foreach (var mark in served.Select(s => s.Mark).OfType<string>())
-            cache.SetLocal(mark, true, PeriodKeep);
+        foreach (var read in served)
+            cache.SetLocal(read.Mark, true, PeriodKeep);
     }
 }

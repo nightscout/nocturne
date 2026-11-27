@@ -5,7 +5,7 @@
   import { page } from "$app/state";
   import { isHttpError } from "@sveltejs/kit";
   import { getGroups, getReview } from "#lib/api/generated/myTenants.generated.remote.js";
-  import type { TenantOverviewItem } from "@nocturne/api-client";
+  import { OverviewRuleSet, type TenantOverviewItem } from "@nocturne/api-client";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/shared/index.js";
   import * as Sheet from "#lib/components/ui/sheet/index.js";
@@ -13,6 +13,7 @@
   import { Now } from "#lib/hooks/now.svelte.js";
   import { formatMediumDateRange } from "#lib/utils/formatting.js";
   import { plural } from "#lib/utils/plural.js";
+  import Flag from "@lucide/svelte/icons/flag";
   import Monitor from "@lucide/svelte/icons/monitor";
   import Users from "@lucide/svelte/icons/users";
   import PeopleRoster from "./PeopleRoster.svelte";
@@ -62,7 +63,8 @@
   const groups = $derived(groupsQuery.current ?? []);
   const overview = followPeople(
     () => group,
-    () => void groupsQuery.refresh().catch(() => {})
+    () => void groupsQuery.refresh().catch(() => {}),
+    OverviewRuleSet.All
   );
   const overviewQuery = $derived(overview.query);
   const clock = new Now();
@@ -299,6 +301,14 @@
         <ToggleGroup.Item value="now" class="flex-1 @2xl:flex-none">Now</ToggleGroup.Item>
         <ToggleGroup.Item value="review" class="flex-1 @2xl:flex-none">Review</ToggleGroup.Item>
       </ToggleGroup.Root>
+      <Button
+        variant="outline"
+        size="sm"
+        href={resolve("/(authenticated)/people/rules")}
+      >
+        <Flag class="size-4" aria-hidden="true" />
+        Your flag rules
+      </Button>
       {#if lens === "now"}
         <Button
           variant="outline"

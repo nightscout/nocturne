@@ -55,13 +55,6 @@ public interface ITenantCache
         where T : class;
 
     /// <summary>
-    /// Writes <paramref name="value"/> to the distributed tier under <paramref name="key"/> for
-    /// <paramref name="ttl"/>, replacing what it held: for a value its reader judges stale by its own clock.
-    /// </summary>
-    Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken ct)
-        where T : class;
-
-    /// <summary>
     /// Removes every distributed-tier key of the current tenant that starts with
     /// <paramref name="family"/> followed by <c>:</c>, in every partition and demo segment.
     /// </summary>
@@ -75,4 +68,10 @@ public interface ITenantCache
     void SetLocal<T>(string key, T value, TimeSpan ttl);
 
     Task<T> GetOrCreateLocalAsync<T>(string key, Func<Task<T>> factory, TimeSpan ttl, CancellationToken ct = default);
+
+    /// <summary>
+    /// As <see cref="GetOrCreateLocalAsync{T}(string, Func{Task{T}}, TimeSpan, CancellationToken)"/>, but a held value
+    /// that <paramref name="isFresh"/> rejects is made again, for a value its reader dates by its own clock.
+    /// </summary>
+    Task<T> GetOrCreateLocalAsync<T>(string key, Func<Task<T>> factory, TimeSpan ttl, Func<T, bool> isFresh, CancellationToken ct);
 }

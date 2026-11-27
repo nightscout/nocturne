@@ -63,26 +63,11 @@ internal sealed class CurrentStatusDataset : IReportDataset
         var services = request.Services;
         var now = request.Now ?? services.GetRequiredService<TimeProvider>().GetUtcNow();
         var latest = await services.GetRequiredService<ICanonicalGlucoseService>().GetLatestAsync(cancellationToken);
-        if (latest is not null)
-            request.ReadLog.Record("glucose", 1);
-
-        var row = new Dictionary<string, object?>
-        {
-            [HoursSinceReading] = latest is null
-                ? null
-                : ScaledRounding.Round(Math.Max(0, (now.UtcDateTime - latest.Timestamp).TotalHours), 1),
-        };
-
         var trackers = request.HasScope(Scope.AlertsRead);
-        if (trackers)
-        {
-            var statuses = TrackerStatusCondenser.All(
-                await services.GetRequiredService<ITrackerRepository>().GetActiveInstancesAsync(cancellationToken), now.UtcDateTime);
-            if (statuses.Count > 0)
-                request.ReadLog.Record("trackers", statuses.Count);
-            row[SensorHoursLeft] = Soonest(statuses, TrackerCategory.Sensor);
-            row[SiteHoursLeft] = Soonest(statuses, TrackerCategory.Cannula, TrackerCategory.Pod);
-        }
+        var active = trackers
+            ? await services.GetRequiredService<ITrackerRepository>().GetActiveInstancesAsync(cancellationToken)
+            : null;
+        var row = RowOf(latest, active, now, request.ReadLog);
 
         IReadOnlyList<ReportOmittedField> omitted = trackers
             ? []
@@ -100,6 +85,35 @@ internal sealed class CurrentStatusDataset : IReportDataset
             Context = $"Now, {ReportFacts.Instant(now, request.Clock)}.",
             Omitted = omitted,
         };
+    }
+
+    /// <summary>
+    /// The row from a latest reading and the running trackers already read, and what they took recorded in
+    /// <paramref name="readLog"/>. <paramref name="active"/> is null for a reader without <see cref="Scope.AlertsRead"/>,
+    /// whose row leaves the tracker fields out. The People overview reads both for each person, so it judges these
+    /// facts on its own reads.
+    /// </summary>
+    internal static Dictionary<string, object?> RowOf(
+        SensorGlucose? latest, IEnumerable<TrackerInstance>? active, DateTimeOffset now, ReportReadLog readLog)
+    {
+        if (latest is not null)
+            readLog.Record("glucose", 1);
+
+        var row = new Dictionary<string, object?>
+        {
+            [HoursSinceReading] = latest is null
+                ? null
+                : ScaledRounding.Round(Math.Max(0, (now.UtcDateTime - latest.Timestamp).TotalHours), 1),
+        };
+        if (active is null)
+            return row;
+
+        var statuses = TrackerStatusCondenser.All(active, now.UtcDateTime);
+        if (statuses.Count > 0)
+            readLog.Record("trackers", statuses.Count);
+        row[SensorHoursLeft] = Soonest(statuses, TrackerCategory.Sensor);
+        row[SiteHoursLeft] = Soonest(statuses, TrackerCategory.Cannula, TrackerCategory.Pod);
+        return row;
     }
 
     private static double? Soonest(IEnumerable<TrackerStatusCondenser.TrackerStatusNow> statuses, params TrackerCategory[] categories) =>

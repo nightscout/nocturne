@@ -179,6 +179,18 @@ public static class HttpContextExtensions
     }
 
     /// <summary>
+    /// The scopes <paramref name="caller"/>'s grant allows, for a tenantless endpoint that resolves each tenant's scopes
+    /// itself. MemberScopeMiddleware has not applied the membership restriction there: the service resolves it per
+    /// tenant through MemberScopeResolver, which needs the credential type to know whether the token's scopes are a
+    /// ceiling at all. PlatformAccess is a superuser auth type, matching MemberScopeMiddleware's handling: it never
+    /// reaches membership resolution there, so it stands in a full-access grant.
+    /// </summary>
+    public static IReadOnlySet<string> GetTenantlessTokenScopes(this HttpContext context, AuthContext caller) =>
+        caller.AuthType is AuthType.PlatformAccess
+            ? new HashSet<string> { Scope.FullAccess }
+            : context.GetGrantedScopes();
+
+    /// <summary>
     /// Check if the current request has a specific OAuth scope.
     /// Handles readwrite implying read, and * implying everything.
     /// </summary>

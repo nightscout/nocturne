@@ -1,6 +1,7 @@
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Services;
+using static Nocturne.API.Helpers.ExecutionFlow;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -252,14 +253,6 @@ public sealed class AlertFactEvaluationScheduler : IHostedLifecycleService, IDis
     }
 
     private static TimeSpan Min(TimeSpan a, TimeSpan b) => a < b ? a : b;
-
-    private static T WithoutFlow<T>(Func<T> start)
-    {
-        if (ExecutionContext.IsFlowSuppressed())
-            return start();
-        using (ExecutionContext.SuppressFlow())
-            return start();
-    }
 
     /// <summary>
     /// Starts every pending evaluation at once and waits for every evaluation to end, including those

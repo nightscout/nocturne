@@ -7,6 +7,7 @@ import {
 } from "@nocturne/api-client";
 import { plural } from "#lib/utils/plural.js";
 import { canonicalDirection } from "@nocturne/ui/glucose";
+import { ruleReasonPhrase } from "./flag-rule-text.svelte.js";
 
 function durationText(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
@@ -134,6 +135,8 @@ export function attentionPhrase(
     }
     case TenantOverviewAttentionKind.TrackerDue:
       return trackerPhrase(reason);
+    case TenantOverviewAttentionKind.FlagRule:
+      return reason.rule ? ruleReasonPhrase(reason.rule) : "";
     default:
       return "";
   }
