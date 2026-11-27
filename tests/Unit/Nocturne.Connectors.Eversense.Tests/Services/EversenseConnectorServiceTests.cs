@@ -553,6 +553,33 @@ public class EversenseConnectorServiceTests
             .And.Contain("endDate=2026-10-16T12%3A05%3A00");
     }
 
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_AsksFromMaxHistoryDaysBeforeTheClock(string shape)
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 10, 16, 12, 0, 0, TimeSpan.Zero));
+        var fixture = new ServiceFixture(
+            httpResponses: new Dictionary<string, HttpResponseMessage>
+            {
+                [EversenseConstants.Endpoints.GetFollowingPatientList] =
+                    CreateJsonResponse(new List<EversensePatientDatum>
+                    {
+                        CreateFollowedPatient(userId: 42, glucose: 125, cgTime: "2026-10-16T11:58:00Z")
+                    }),
+                [EversenseConstants.Endpoints.GetFollowingUserSensorGlucose] =
+                    CreateJsonResponse(new List<EversenseUserEvent>())
+            },
+            publisher: CreatePublisher().Object,
+            clock: clock);
+
+        await fixture.Service.SyncDataAsync(
+            NoLowerBound.Request(shape, clock.GetUtcNow().UtcDateTime, [SyncDataType.Glucose]),
+            fixture.Config, CancellationToken.None);
+
+        fixture.RequestedUris.First(u => u.AbsolutePath == EversenseConstants.Endpoints.GetFollowingUserSensorGlucose)
+            .Query.Should().Contain("startDate=2026-09-16T12%3A00%3A00");
+    }
+
     /// <summary>
     /// A second scheduled run asks for history only from the first run's newest reading, less the
     /// catch-up overlap. Each run has its own service, as each scheduled run does.

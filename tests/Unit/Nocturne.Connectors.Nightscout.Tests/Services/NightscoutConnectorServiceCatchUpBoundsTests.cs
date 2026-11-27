@@ -276,6 +276,40 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
         handler.CrawlOf("devicestatus").Should().Contain(LowerBound(askedFrom));
     }
 
+    public static TheoryData<string, SyncDataType, string> NoLowerBoundFamilies()
+    {
+        var data = new TheoryData<string, SyncDataType, string>();
+        foreach (var shape in new[] { NoLowerBound.Reset, NoLowerBound.RangedSync })
+        foreach (var (type, collection) in new[]
+                 {
+                     (SyncDataType.Glucose, "entries"), (SyncDataType.Boluses, "treatments"),
+                     (SyncDataType.DeviceStatus, "devicestatus"), (SyncDataType.Activity, "activity"),
+                 })
+            data.Add(shape, type, collection);
+        return data;
+    }
+
+    /// <summary>
+    /// A window naming no lower bound reads the whole source: past every family's resume point and
+    /// past the history limit, which bounds only an open-ended sync.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(NoLowerBoundFamilies))]
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_CrawlsTheWholeSource(
+        string shape, SyncDataType dataType, string collection)
+    {
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        await service.SyncDataAsync(
+            NoLowerBound.Request(shape, DateTime.UtcNow, [dataType]),
+            NewConfig(historyDays: 30),
+            CancellationToken.None);
+
+        handler.RequestsTo(collection).Where(r => r.Contains("$lte", StringComparison.Ordinal))
+            .Should().NotBeEmpty().And.OnlyContain(r => !r.Contains("$gte", StringComparison.Ordinal));
+    }
+
     private static DateTime LowerBoundOf(string request)
     {
         const string marker = "find[created_at][$gte]=";
@@ -389,8 +423,10 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
         /// The crawl request for <paramref name="collection"/>, as the source reads it. A treatments
         /// catch-up follows it with a re-read of the recent window, which is not the crawl.
         /// </summary>
-        internal string CrawlOf(string collection) =>
-            _requests.First(u => u.Contains($"/api/v1/{collection}.json", StringComparison.Ordinal));
+        internal string CrawlOf(string collection) => RequestsTo(collection).First();
+
+        internal IEnumerable<string> RequestsTo(string collection) =>
+            _requests.Where(u => u.Contains($"/api/v1/{collection}.json", StringComparison.Ordinal));
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)

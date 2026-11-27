@@ -165,9 +165,12 @@ public class ConnectorFoodEntryImport
     [JsonPropertyName("loggedAt")]
     public DateTimeOffset? LoggedAt { get; set; }
 
-    /// <summary>Meal name or context (e.g., "Breakfast")</summary>
+    /// <summary>
+    /// Meal name or context (e.g., "Breakfast"), or null when the source did not name the meal this
+    /// time, which keeps the name already stored for the entry.
+    /// </summary>
     [JsonPropertyName("mealName")]
-    public string MealName { get; set; } = string.Empty;
+    public string? MealName { get; set; }
 
     /// <summary>Carbohydrate amount in grams for the consumed serving</summary>
     [JsonPropertyName("carbs")]

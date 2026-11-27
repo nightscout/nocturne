@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Glooko.Configurations;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -66,6 +67,24 @@ public class GlookoConnectorServiceSyncWindowTests
         var expectedTo = now.UtcDateTime.AddHours(deviceOffsetHours).AddDays(1);
         Parse(handler.Windows[0].Start).Should().Be(expectedFrom);
         Parse(handler.Windows[^1].End).Should().Be(expectedTo);
+    }
+
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_ReachesBackTheFullWalk(string shape)
+    {
+        var now = new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+        var handler = new GlookoEndpointHandler();
+        var service = GlookoSyncHarness.Service(handler, clock: new FakeTimeProvider(now));
+        var config = GlookoSyncHarness.Config(useV3Api: false);
+        config.TimezoneOffset = 0;
+
+        var result = await service.SyncDataAsync(
+            NoLowerBound.Request(shape, now.UtcDateTime, [SyncDataType.TempBasals]), config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        Parse(handler.Windows[0].Start).Should().Be(
+            now.UtcDateTime.AddMonths(-GlookoConstants.FullWalkMonths).AddDays(-1));
     }
 
     private static DateTime Parse(string timestamp) =>

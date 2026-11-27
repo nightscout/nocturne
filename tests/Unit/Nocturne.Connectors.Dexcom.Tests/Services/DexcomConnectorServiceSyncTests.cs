@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Web;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -107,6 +108,27 @@ public class DexcomConnectorServiceSyncTests
         await service.SyncDataAsync(syncRequest, Config(), CancellationToken.None);
 
         query.Should().Contain($"minutes={expectedMinutes}").And.Contain($"maxCount={expectedMaxCount}");
+    }
+
+    /// <summary>The beginning of Share is the last day of readings.</summary>
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_AsksShareFromOneDayBeforeTheClock(string shape)
+    {
+        var clock = new FakeTimeProvider(Instant);
+        string? query = null;
+        var service = Service((request, _) =>
+        {
+            query = request.RequestUri!.Query;
+            return Task.FromResult(Json("[]"));
+        }, clock: clock);
+
+        await service.SyncDataAsync(
+            NoLowerBound.Request(shape, Instant.UtcDateTime, [SyncDataType.Glucose]), Config(), CancellationToken.None);
+
+        var minutes = int.Parse(HttpUtility.ParseQueryString(query!)["minutes"]!);
+        Instant.UtcDateTime.AddMinutes(-minutes).Should().BeCloseTo(
+            Instant.UtcDateTime.AddDays(-1), TimeSpan.FromMinutes(5), "the window is rounded to whole readings");
     }
 
     /// <summary>A batch is stamped with the service's clock, once, whatever time its entries carry.</summary>

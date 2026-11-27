@@ -298,6 +298,26 @@ public class GoogleHealthConnectorServiceTests
         Assert.Equal(today.AddDays(-7) > monthStart ? today.AddDays(-7) : monthStart, requestedFrom[1].UtcDateTime.Date);
     }
 
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task A_window_without_a_lower_bound_reads_from_the_earliest_supported_date(string shape)
+    {
+        var requestedFrom = new List<DateTimeOffset>();
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") => CaptureRange(request, requestedFrom.Add),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        }, new FixedTimeProvider(Now));
+        fixture.StoredConfiguration = JsonSerializer.Serialize(new { importFrom = (string?)null });
+
+        var result = await fixture.Service.SyncDataAsync(
+            NoLowerBound.Request(shape, Now.UtcDateTime), fixture.Configuration(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(new DateTimeOffset(GoogleHealthState.EarliestSupportedDate), requestedFrom.Min());
+    }
+
     [Fact]
     public async Task After_a_purge_that_keeps_imports_out_the_next_sync_continues_from_the_kept_position()
     {

@@ -4,6 +4,13 @@ namespace Nocturne.Connectors.Core.Models;
 
 public class SyncRequest
 {
+    /// <summary>
+    ///     The window's lower bound. On a request that names a <see cref="To"/> (every cursor reset,
+    ///     every ranged manual sync) a null one means from the beginning: the connector's base resolves
+    ///     it to <see cref="Services.BaseConnectorService{TConfig}.HistoryStart"/>, as far back as the
+    ///     source serves, before the connector reads it. A request with neither bound is a catch-up:
+    ///     each connector reads it as its own recent window or resume point.
+    /// </summary>
     public DateTime? From { get; init; }
     public DateTime? To { get; init; }
     public List<SyncDataType> DataTypes { get; set; } = [];
@@ -24,7 +31,8 @@ public class SyncRequest
     public bool IsReset { get; private init; }
 
     /// <summary>
-    ///     A cursor reset over <paramref name="from"/> (no lower bound when null) to <paramref name="to"/>.
+    ///     A cursor reset over <paramref name="from"/> (from the beginning when null, as <see cref="From"/>
+    ///     says) to <paramref name="to"/>.
     ///     The connector clears what <see cref="Services.BaseConnectorService{TConfig}"/> says a reset
     ///     clears, inside the run once it has signed in, then fetches the window.
     /// </summary>

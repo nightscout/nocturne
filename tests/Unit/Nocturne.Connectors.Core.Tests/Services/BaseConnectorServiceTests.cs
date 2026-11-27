@@ -8,6 +8,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Connectors;
 using Xunit;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
@@ -77,6 +78,77 @@ public class BaseConnectorServiceTests
         clock.Advance(TimeSpan.FromDays(31));
 
         service.CallDefaultInitialSyncFloor().Should().Be(new DateTime(2025, 10, 1, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    /// <summary>A connector whose source starts at <paramref name="historyStart"/>, recording the request its run is handed.</summary>
+    private sealed class WindowProbe(DateTime? historyStart)
+        : BaseConnectorService<TestConfig>(
+            new HttpClient(),
+            new ConnectorServerResolver<TestConfig>(null, null, null),
+            NullLogger<WindowProbe>.Instance,
+            new RecordingRetryDelayStrategy())
+    {
+        public SyncRequest? Handed { get; private set; }
+
+        protected override string ConnectorSource => "test";
+        public override string ServiceName => "Test";
+        protected override DateTime? HistoryStart => historyStart;
+
+        protected override Task<SyncResult> PerformSyncInternalAsync(
+            SyncRequest request, TestConfig config, CancellationToken cancellationToken)
+        {
+            Handed = request;
+            return Task.FromResult(new SyncResult { Success = true });
+        }
+    }
+
+    private static readonly DateTime SourceStart = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime WindowEnd = new(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_ReachesTheConnectorFromItsHistoryStart(string shape)
+    {
+        var probe = new WindowProbe(SourceStart);
+
+        await probe.SyncDataAsync(NoLowerBound.Request(shape, WindowEnd), new TestConfig(), CancellationToken.None);
+
+        probe.Handed!.From.Should().Be(SourceStart);
+        probe.Handed.To.Should().Be(WindowEnd);
+    }
+
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_StaysOpenForASourceReadFromAnOpenStart(string shape)
+    {
+        var probe = new WindowProbe(historyStart: null);
+
+        await probe.SyncDataAsync(NoLowerBound.Request(shape, WindowEnd), new TestConfig(), CancellationToken.None);
+
+        probe.Handed!.From.Should().BeNull("an open start is how such a source reads its whole history");
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_AWindowWithALowerBound_KeepsIt()
+    {
+        var asked = SourceStart.AddDays(-10);
+        var probe = new WindowProbe(SourceStart);
+
+        await probe.SyncDataAsync(
+            new SyncRequest { From = asked, To = WindowEnd }, new TestConfig(), CancellationToken.None);
+
+        probe.Handed!.From.Should().Be(asked);
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_ARequestWithNeitherBound_IsACatchUpAndGetsNoStart()
+    {
+        var probe = new WindowProbe(SourceStart);
+
+        await probe.SyncDataAsync(new SyncRequest(), new TestConfig(), CancellationToken.None);
+
+        probe.Handed!.From.Should().BeNull();
+        probe.Handed.To.Should().BeNull();
     }
 
     /// <summary>A connector whose run is <paramref name="run"/>, so a test can script what the run does.</summary>

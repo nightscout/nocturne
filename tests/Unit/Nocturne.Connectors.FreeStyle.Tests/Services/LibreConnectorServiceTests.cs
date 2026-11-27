@@ -242,6 +242,38 @@ public class LibreConnectorServiceTests
         starts.Should().ContainSingle().Which.CreatedAt.Should().Be(now);
     }
 
+    /// <summary>The graph is all LibreLinkUp serves, so a window naming no lower bound publishes all of it.</summary>
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_PublishesTheWholeGraph(string shape)
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var fixture = new ServiceFixture(
+            connectionsJson: Connections,
+            graphJson: "{\"data\":{\"connection\":{\"glucoseMeasurement\":"
+                       + "{\"factoryTimestamp\":\"3/1/2026 11:55:00 AM\",\"valueInMgPerDl\":110,\"trendArrow\":3},"
+                       + "\"sensor\":null},"
+                       + "\"graphData\":[{\"factoryTimestamp\":\"2/28/2026 11:40:00 PM\",\"valueInMgPerDl\":100,\"trendArrow\":3},"
+                       + "{\"factoryTimestamp\":\"3/1/2026 11:52:00 AM\",\"valueInMgPerDl\":105,\"trendArrow\":3}]}}",
+            clock: clock);
+        fixture.Glucose.Setup(g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DateTime(2026, 3, 1, 11, 50, 0, DateTimeKind.Utc));
+        IEnumerable<SensorGlucose>? published = null;
+        fixture.Glucose
+            .Setup(g => g.PublishSensorGlucoseAsync(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
+                (records, _, _, _) => published = records.ToList())
+            .ReturnsAsync(true);
+
+        await fixture.Service.SyncDataAsync(
+            NoLowerBound.Request(shape, clock.GetUtcNow().UtcDateTime, [SyncDataType.Glucose]),
+            fixture.Config, CancellationToken.None);
+
+        published!.Select(sg => sg.Mgdl).Should().BeEquivalentTo([100d, 105d, 110d]);
+    }
+
     /// <summary>
     /// LibreLinkUp always answers with its whole graph, so a second scheduled run publishes only the
     /// readings after the first run's newest one, less the catch-up overlap.

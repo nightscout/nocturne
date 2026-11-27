@@ -512,8 +512,8 @@ public class ConnectorStateResetTests
         protected override async Task<SyncResult> PerformSyncInternalAsync(
             SyncRequest request, TestConfig config, CancellationToken cancellationToken)
         {
-            var from = request.To is null && ReadsTheResumePoint
-                ? ResumeFrom(request.From, await ResumePointAsync("DeviceStatus", storedWatermark, cancellationToken))
+            var from = ReadsTheResumePoint
+                ? await ResumeFromAsync(request, () => ResumePointAsync("DeviceStatus", storedWatermark, cancellationToken))
                 : request.From;
             FromSeen.Add(from);
 

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Timezones;
@@ -104,7 +105,7 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
     /// SyncIdentifier, so timestamps move without duplicating. Intended to be called after the user
     /// confirms the affected window. Runs synchronously; the window is bounded.
     /// </summary>
-    /// <param name="request">Optional lower bound (UTC). When null, the connector's default window is used.</param>
+    /// <param name="request">Optional lower bound (UTC). When null, a Glooko full walk (<see cref="GlookoConnectorService.FullWalkStart"/>).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPost("recorrect")]
     [RequireDeclaredWriteScope]
@@ -115,15 +116,16 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
         [FromBody] RecorrectRequest request,
         CancellationToken cancellationToken)
     {
+        var now = DateTime.UtcNow;
         var syncRequest = new SyncRequest
         {
-            From = request.From,
-            To = DateTime.UtcNow,
+            From = request.From ?? GlookoConnectorService.FullWalkStart(now),
+            To = now,
             DataTypes = [],
         };
 
         _logger.LogInformation(
-            "Timezone re-correction requested: re-syncing Glooko from {From} to now", request.From?.ToString("o", CultureInfo.InvariantCulture) ?? "default");
+            "Timezone re-correction requested: re-syncing Glooko from {From} to now", syncRequest.From.Value.ToString("o", CultureInfo.InvariantCulture));
 
         var result = await _syncService.TriggerSyncAsync(GlookoConnectorId, syncRequest, cancellationToken);
 

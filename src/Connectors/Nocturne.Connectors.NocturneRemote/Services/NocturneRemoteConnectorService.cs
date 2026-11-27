@@ -207,10 +207,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         // ResumeFrom from the request and its own resume point, because each is fetched from its
         // own endpoint. An explicit range (request.To set, as a cursor reset sends) bypasses the
         // catch-up bounds entirely.
-        var openEnded = request.To is null;
-
-        async Task<DateTime?> BoundAsync(SyncDataType type, Func<DateTime?> resumePoint) =>
-            openEnded ? ResumeFrom(request.From, await ResumePointAsync(type.ToString(), resumePoint(), cancellationToken)) : request.From;
+        Task<DateTime?> BoundAsync(SyncDataType type, Func<DateTime?> resumePoint) =>
+            ResumeFromAsync(request, () => ResumePointAsync(type.ToString(), resumePoint(), cancellationToken));
 
         Task<DateTime?> TreatmentFromAsync(SyncDataType type) =>
             BoundAsync(type, () => request.Resume.Point(type));

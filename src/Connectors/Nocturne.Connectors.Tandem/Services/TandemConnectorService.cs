@@ -414,17 +414,17 @@ public class TandemConnectorService
     /// </summary>
     private DateTime ResolveStart(SyncRequest request, TandemBffPump device, TandemTimeResolver time)
     {
-        DateTime ResumePoint()
+        DateTime? ResumePoint()
         {
             var candidates = new[] { request.Resume.Point(ResumeFamily.Glucose), request.Resume.Point(ResumeFamily.Treatments) }
                 .Where(d => d.HasValue).Select(d => d!.Value).ToList();
             return candidates.Count > 0 ? candidates.Min() : DefaultInitialSyncFloor();
         }
 
-        // The pump's own range is how far back this source goes, and the floor a range naming no
-        // lower bound resolves to — named, rather than left to the clamp below to arrive at.
+        // The pump's own range is how far back this source goes, so an open start begins at its
+        // first event.
         var first = FirstEvent(device, time);
-        var start = ResumeFrom(request, ResumePoint, first ?? DefaultInitialSyncFloor());
+        var start = ResumeFrom(request, ResumePoint) ?? first ?? DefaultInitialSyncFloor();
 
         return Later(start, first);
     }

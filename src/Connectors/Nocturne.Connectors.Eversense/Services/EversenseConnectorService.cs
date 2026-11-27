@@ -173,6 +173,10 @@ public class EversenseConnectorService
     /// </summary>
     protected override DateTime? InitialSyncFloor => Clock.GetUtcNow().UtcDateTime.AddDays(-1);
 
+    protected override DateTime? HistoryStart => HistoryFloor(Clock.GetUtcNow().UtcDateTime);
+
+    private static DateTime HistoryFloor(DateTime now) => now.AddDays(-EversenseConnectorConfiguration.MaxHistoryDays);
+
     /// <summary>
     ///     The request windows for a sync from <paramref name="from"/> to <paramref name="to"/>, oldest
     ///     first. The end runs five minutes past now, as the NOW app asks, so a reading stamped by a
@@ -182,7 +186,7 @@ public class EversenseConnectorService
         DateTime? from, DateTime? to, DateTime now)
     {
         var end = to ?? now.AddMinutes(5);
-        var floor = now.AddDays(-EversenseConnectorConfiguration.MaxHistoryDays);
+        var floor = HistoryFloor(now);
         var start = from ?? now - DefaultHistoryWindow;
         if (start < floor) start = floor;
 

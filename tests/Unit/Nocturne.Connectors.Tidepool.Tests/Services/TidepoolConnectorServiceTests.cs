@@ -374,6 +374,21 @@ public class TidepoolConnectorServiceTests
             .And.OnlyContain(q => q.Contains("startDate=2026-03-01T11:45:00.0000000Z"));
     }
 
+    /// <summary>Tidepool serves its whole history to a query with no start date.</summary>
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_AsksWithNoStartDate(string shape)
+    {
+        var handler = new TidepoolFakeHandler();
+        var fixture = new ServiceFixture(handler, withPublisher: true);
+
+        await fixture.Service.SyncDataAsync(
+            NoLowerBound.Request(shape, new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc)),
+            fixture.Config, CancellationToken.None);
+
+        handler.DataQueries.Should().NotBeEmpty().And.OnlyContain(q => !q.Contains("startDate="));
+    }
+
     /// <summary>Wires the connector service and a real token provider onto one fake handler.</summary>
     private sealed class ServiceFixture
     {

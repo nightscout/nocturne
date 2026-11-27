@@ -59,6 +59,9 @@ public class DexcomConnectorService
     protected override bool NeedsSignIn(SyncRequest request, DexcomConnectorConfiguration config) =>
         ResolveActiveTypes(request, config).Contains(SyncDataType.Glucose);
 
+    /// <summary>Share serves only the last day of readings.</summary>
+    protected override DateTime? HistoryStart => Clock.GetUtcNow().UtcDateTime.AddDays(-1);
+
     protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, DexcomConnectorConfiguration config) =>
         WindowResumesFrom(request, ResumeFamily.Glucose);
 
