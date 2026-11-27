@@ -42,12 +42,34 @@ describe("LoopPill last enacted action", () => {
     await expect.element(page.getByText("Temp basal canceled")).toBeVisible();
   });
 
+  it("says an automatic bolus came with a canceled temp basal", async () => {
+    render(LoopPill, { data: loop({ type: "cancel", bolusVolume: 0.3 }) });
+
+    await openPopover();
+    await expect.element(page.getByText("0.3U (temp basal canceled)")).toBeVisible();
+  });
+
+  it("gives the reason, IOB, COB and eventual glucose as items of their own", async () => {
+    render(LoopPill, {
+      data: { ...loop({ type: "temp_basal", rate: 1, duration: 30, reason: "Low predicted" }), iob: 1.234, cob: 20.4, eventualBG: 108 },
+    });
+
+    await openPopover();
+    await expect.element(page.getByText("Reason", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Low predicted", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("IOB", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("1.23U", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("COB", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("20g", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Eventual BG", { exact: true })).toBeVisible();
+  });
+
   it("states the rate and duration of a started temp basal", async () => {
     render(LoopPill, { data: loop({ type: "temp_basal", rate: 1.5, duration: 30 }) });
 
     await openPopover();
     await expect.element(page.getByText("Temp basal started")).toBeVisible();
-    await expect.element(page.getByText(/1\.50U\/hour for 30m/)).toBeVisible();
+    await expect.element(page.getByText("1.50U/h for 30 mins")).toBeVisible();
   });
 });
 

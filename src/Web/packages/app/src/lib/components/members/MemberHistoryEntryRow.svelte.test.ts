@@ -93,7 +93,7 @@ describe("MemberHistoryEntryRow sentences", () => {
     await expect.element(row).toHaveTextContent("Alex changed the permissions of the role Caretaker.");
     await expect
       .element(row)
-      .toHaveTextContent("Permissions added: View glucose readings, custom.thing");
+      .toHaveTextContent("Permissions added: View glucose readings and custom.thing");
     await expect.element(row).toHaveTextContent("Permissions removed: View treatments");
   });
 
@@ -304,21 +304,21 @@ describe("MemberHistoryEntryRow team access sentences", () => {
       { roles: ["viewer"], historyLimit: MemberHistoryLimit.TwentyFourHours, accessEndsAt: END },
       `Alex gave the team Clinic access with the role Viewer to the last 24 hours only, until ${formatMediumDate(new Date(2026, 11, 31))}.`,
     ],
-    ["two roles", { roles: ["viewer", "caretaker"] }, "Alex gave the team Clinic access with the roles Viewer, Caretaker."],
+    ["two roles", { roles: ["viewer", "caretaker"] }, "Alex gave the team Clinic access with the roles Viewer and Caretaker."],
     [
       "two roles and the 24-hour limit",
       { roles: ["viewer", "caretaker"], historyLimit: MemberHistoryLimit.TwentyFourHours },
-      "Alex gave the team Clinic access with the roles Viewer, Caretaker to the last 24 hours only.",
+      "Alex gave the team Clinic access with the roles Viewer and Caretaker to the last 24 hours only.",
     ],
     [
       "two roles and an end",
       { roles: ["viewer", "caretaker"], accessEndsAt: END },
-      `Alex gave the team Clinic access with the roles Viewer, Caretaker until ${formatMediumDate(new Date(2026, 11, 31))}.`,
+      `Alex gave the team Clinic access with the roles Viewer and Caretaker until ${formatMediumDate(new Date(2026, 11, 31))}.`,
     ],
     [
       "two roles, the limit and an end",
       { roles: ["viewer", "caretaker"], historyLimit: MemberHistoryLimit.TwentyFourHours, accessEndsAt: END },
-      `Alex gave the team Clinic access with the roles Viewer, Caretaker to the last 24 hours only, until ${formatMediumDate(new Date(2026, 11, 31))}.`,
+      `Alex gave the team Clinic access with the roles Viewer and Caretaker to the last 24 hours only, until ${formatMediumDate(new Date(2026, 11, 31))}.`,
     ],
   ])("states access given with %s", async (_case, overrides, text) => {
     const row = await given(overrides as Partial<MemberHistoryEntry>);
@@ -395,7 +395,7 @@ describe("MemberHistoryEntryRow team access with no team name", () => {
     await expect
       .element(row)
       .toHaveTextContent(
-        `Alex gave a team that was deleted access with the roles Viewer, other to the last 24 hours only, until ${formatMediumDate(new Date(2026, 11, 31))}.`,
+        `Alex gave a team that was deleted access with the roles Viewer and other to the last 24 hours only, until ${formatMediumDate(new Date(2026, 11, 31))}.`,
       );
   });
 
@@ -436,21 +436,21 @@ describe("MemberHistoryEntryRow a team's access changed", () => {
       { roles: ["viewer"], historyLimit: MemberHistoryLimit.TwentyFourHours, accessEndsAt: END },
       () => `After this change, the team had access with the role Viewer to the last 24 hours only, until ${endText()}.`,
     ],
-    ["two roles", { roles: ["viewer", "caretaker"] }, () => "After this change, the team had access with the roles Viewer, Caretaker."],
+    ["two roles", { roles: ["viewer", "caretaker"] }, () => "After this change, the team had access with the roles Viewer and Caretaker."],
     [
       "two roles and the 24-hour limit",
       { roles: ["viewer", "caretaker"], historyLimit: MemberHistoryLimit.TwentyFourHours },
-      () => "After this change, the team had access with the roles Viewer, Caretaker to the last 24 hours only.",
+      () => "After this change, the team had access with the roles Viewer and Caretaker to the last 24 hours only.",
     ],
     [
       "two roles and an end",
       { roles: ["viewer", "caretaker"], accessEndsAt: END },
-      () => `After this change, the team had access with the roles Viewer, Caretaker until ${endText()}.`,
+      () => `After this change, the team had access with the roles Viewer and Caretaker until ${endText()}.`,
     ],
     [
       "two roles, the limit and an end",
       { roles: ["viewer", "caretaker"], historyLimit: MemberHistoryLimit.TwentyFourHours, accessEndsAt: END },
-      () => `After this change, the team had access with the roles Viewer, Caretaker to the last 24 hours only, until ${endText()}.`,
+      () => `After this change, the team had access with the roles Viewer and Caretaker to the last 24 hours only, until ${endText()}.`,
     ],
   ])("states the change and the access it now gives with %s", async (_case, overrides, text) => {
     const row = await changed(overrides as Partial<MemberHistoryEntry>);

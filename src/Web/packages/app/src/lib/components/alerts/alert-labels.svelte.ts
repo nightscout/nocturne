@@ -77,10 +77,13 @@ export function limitSourceLabel(source: "value" | AlertLimitFact): string {
 export function limitFactWords(fact: AlertLimitFact): string {
 	switch (fact) {
 		case AlertLimitFact.TargetLow:
+			// @wc-include
 			return "target low";
 		case AlertLimitFact.TargetHigh:
+			// @wc-include
 			return "target high";
 		case AlertLimitFact.LatestGlucose:
+			// @wc-include
 			return "latest glucose";
 		default:
 			return unknownValue(fact);

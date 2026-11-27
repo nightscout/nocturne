@@ -212,6 +212,54 @@ export interface CaptionPart {
   before: string;
 }
 
+export type ClauseKind = "signals" | "lens" | "range";
+
+/** Stands for a part of a caption's clause inside the message that lays the clause out. */
+export const CLAUSE_MARKS: Record<ClauseKind, string> = { signals: "\uE000", lens: "\uE001", range: "\uE002" };
+
+const CLAUSE_KINDS: readonly ClauseKind[] = ["signals", "lens", "range"];
+
+function clauseMessage(withSignals: boolean): string {
+  const { signals, lens, range } = CLAUSE_MARKS;
+  if (withSignals) {
+    // @wc-include
+    // @wc-context: caption-clause
+    return `${signals} ${lens} ${range}`;
+  }
+  // @wc-include
+  // @wc-context: caption-clause-without-signals
+  return `${lens} ${range}`;
+}
+
+/** The parts of a caption's clause in the order the language puts them, each with the text before it. */
+export interface ClauseLayout {
+  slots: { kind: ClauseKind; before: string }[];
+  /** What the message puts after its last part. */
+  after: string;
+}
+
+/**
+ * Reads the order of `kinds` and the text between them from a clause message. A message that
+ * holds a part twice or not at all is not a layout of those parts, so the English one is used.
+ */
+export function parseClauseLayout(message: string, kinds: readonly ClauseKind[]): ClauseLayout {
+  const slots: ClauseLayout["slots"] = [];
+  let before = "";
+  for (const piece of message.split(/([\uE000-\uE002])/)) {
+    const kind = CLAUSE_KINDS.find((k) => CLAUSE_MARKS[k] === piece);
+    if (kind) {
+      slots.push({ kind, before });
+      before = "";
+    } else before = piece;
+  }
+  const exact = slots.length === kinds.length && kinds.every((k) => slots.filter((slot) => slot.kind === k).length === 1);
+  return exact ? { slots, after: before } : { slots: kinds.map((kind, i) => ({ kind, before: i === 0 ? "" : " " })), after: "" };
+}
+
+function clauseLayout(withSignals: boolean): ClauseLayout {
+  return parseClauseLayout(clauseMessage(withSignals), withSignals ? CLAUSE_KINDS : CLAUSE_KINDS.filter((k) => k !== "signals"));
+}
+
 /**
  * Where a moment's events land in the result: a layer, and the cohort (from 1)
  * inside it.
@@ -2577,7 +2625,7 @@ export class Workspace {
 
   /**
    * The chart as one sentence, in parts the UI can style. The signals, lens and range read as one
-   * clause, a space apart; the groups and options follow it as the items of a list.
+   * clause, laid out by one message; the groups and options follow it as the items of a list.
    */
   caption(): CaptionPart[] {
     const parts = this.#captionParts();
@@ -2585,14 +2633,22 @@ export class Workspace {
       !this.eventList && (p.kind === "signals" || p.kind === "lens" || p.kind === "range");
     const clause = parts.filter(inClause);
     const listed = parts.filter((p) => !inClause(p));
-    const items = [...(clause.length > 0 ? [clause.map((p) => p.text).join(" ")] : []), ...listed.map((p) => p.text)];
-    const separators = listSeparators(items);
-    const first = clause.length > 0 ? 1 : 0;
-    return parts.map((p) => {
-      if (inClause(p)) return { ...p, before: p === clause[0] ? "" : " " };
-      const at = first + listed.indexOf(p);
-      return { ...p, before: at === 0 ? "" : separators[at - 1] };
+    const layout = clause.length === 0 ? null : clauseLayout(clause.some((p) => p.kind === "signals"));
+    const placed: CaptionPart[] = (layout?.slots ?? []).flatMap((slot) => {
+      const part = clause.find((p) => p.kind === slot.kind);
+      return part ? [{ ...part, before: slot.before }] : [];
     });
+    if (layout && placed.length > 0) placed[placed.length - 1].text += layout.after;
+    const items = [...(placed.length > 0 ? [placed.map((p) => p.before + p.text).join("")] : []), ...listed.map((p) => p.text)];
+    const separators = listSeparators(items);
+    const first = placed.length > 0 ? 1 : 0;
+    return [
+      ...placed,
+      ...listed.map((p) => {
+        const at = first + listed.indexOf(p);
+        return { ...p, before: at === 0 ? "" : separators[at - 1] };
+      }),
+    ];
   }
 
   #captionParts(): Omit<CaptionPart, "before">[] {

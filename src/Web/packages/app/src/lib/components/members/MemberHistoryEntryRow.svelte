@@ -10,7 +10,7 @@
     type TenantRoleDto,
   } from "@nocturne/api-client";
   import { scopeLabels } from "#lib/constants/scope-labels.svelte.js";
-  import { formatDateTime, formatMediumDate } from "#lib/utils/formatting.js";
+  import { formatDateTime, formatList, formatMediumDate } from "#lib/utils/formatting.js";
   import { accessEndDate } from "#lib/components/members/access-end.js";
   import { RULE_OWNER_APPROVES, RULE_TEAM_DECIDES, RULE_TEAM_TRUSTED } from "#lib/teams/site-staff.svelte.js";
   import { REACH_EVERY_PERSON, REACH_THEIR_GROUPS } from "#lib/teams/staff-reach.svelte.js";
@@ -48,8 +48,10 @@
   }
 
   const actor = $derived(actorName(entry.actor));
+  // @wc-include
   const member = $derived(entry.member?.name ?? "a deleted member");
   const memberFirst = $derived(entry.member?.name ?? "A deleted member");
+  // @wc-include
   const by = $derived(entry.by ? (entry.by.name ?? "a deleted member") : undefined);
   const approver = $derived(entry.by ? (entry.by.name ?? "A deleted member") : actor);
   const role = $derived(
@@ -73,11 +75,11 @@
   );
   const teamRoleCount = $derived(entry.roles?.length ?? 0);
   const teamRoles = $derived(
-    (entry.roles ?? []).map((slug) => roles.find((r) => r.slug === slug)?.name ?? slug).join(", "),
+    formatList((entry.roles ?? []).map((slug) => roles.find((r) => r.slug === slug)?.name ?? slug)),
   );
   const teamLimited = $derived(entry.historyLimit === MemberHistoryLimit.TwentyFourHours);
-  const gained = $derived((entry.gained ?? []).map((p) => labels[p] ?? p).join(", "));
-  const lost = $derived((entry.lost ?? []).map((p) => labels[p] ?? p).join(", "));
+  const gained = $derived(formatList((entry.gained ?? []).map((p) => labels[p] ?? p)));
+  const lost = $derived(formatList((entry.lost ?? []).map((p) => labels[p] ?? p)));
 </script>
 
 <li class="@container flex flex-col gap-1 p-4 @md:flex-row @md:gap-6">

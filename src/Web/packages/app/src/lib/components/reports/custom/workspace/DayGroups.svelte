@@ -75,15 +75,15 @@
   }
 
   /** How many days group `g` of what happened kept, from the run's counts, and why the rest are in neither group. */
-  function countLine(g: number): string | null {
+  function countSentences(g: number): string[] {
     const days = findLayer(report, ws.dayGroupLayersOf(g)[0])?.days;
-    if (!days) return null;
+    if (!days) return [];
     const parts = [`${days.kept} of ${days.total} days.`];
     if (days.partial === 1) parts.push("One day is only partly in the range and is in neither group.");
     else if (days.partial > 1) parts.push(`${days.partial} days are only partly in the range and are in neither group.`);
     if (days.undecided === 1) parts.push("One day is before the history your access reads.");
     else if (days.undecided > 1) parts.push(`${days.undecided} days are before the history your access reads.`);
-    return parts.join(" ");
+    return parts;
   }
 
   const modeReason = $derived(
@@ -230,16 +230,18 @@
     {/if}
     <ul class="divide-y divide-border border-y border-border">
       {#each ws.dayFilterGroups as label, g (g)}
-        {@const count = countLine(g)}
+        {@const sentences = countSentences(g)}
         <li class="flex flex-wrap items-center gap-3 py-2" data-testid="day-group-row">
           <span class="flex w-8 shrink-0 items-center gap-1.5 text-sm font-medium">
             <Swatch swatch={dayGroupSwatch(report, ws.dayGroupLayersOf(g)[0])} />
             <span aria-hidden="true">{GROUP_LETTERS[g]}</span><span class="sr-only">Group {GROUP_LETTERS[g]}</span>
           </span>
           <span class="text-sm">{label}</span>
-          {#if count}
-            <span class="ml-auto text-xs text-muted-foreground" data-testid="day-count">
-              {count}
+          {#if sentences.length > 0}
+            <span class="ml-auto flex flex-col items-end text-xs text-muted-foreground" data-testid="day-count">
+              {#each sentences as sentence, i (i)}
+                <span>{sentence}</span>
+              {/each}
             </span>
           {/if}
         </li>

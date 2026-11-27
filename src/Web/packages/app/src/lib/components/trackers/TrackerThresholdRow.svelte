@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import { plural } from "#lib/utils/plural.js";
   import { NotificationUrgency, TrackerMode } from "#lib/api/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { enumValue } from "#lib/components/ui/enum-value.js";
@@ -12,6 +13,7 @@
     joinHours,
     splitHours,
     thresholdIssue,
+    ThresholdUnits,
     type ThresholdSide,
     type ThresholdUnit,
   } from "./threshold-time";
@@ -60,14 +62,23 @@
     }
   }
 
-  function unitLabel(unit: ThresholdUnit, one = false): string {
-    if (unit === "days") return one ? "day" : "days";
-    return one ? "hour" : "hours";
+  function unitLabel(unit: ThresholdUnit, amount: number): string {
+    if (unit === ThresholdUnits.Days) {
+      // @wc-context: threshold-unit
+      return plural(amount, ["day", "days"]);
+    }
+    // @wc-context: threshold-unit
+    return plural(amount, ["hour", "hours"]);
   }
 
   function sideLabel(side: ThresholdSide): string {
-    if (mode === TrackerMode.Event) return side === "before" ? "before the date" : "after the date";
-    return side === "before" ? "before it ends" : "after it starts";
+    const before = side === "before";
+    if (mode === TrackerMode.Event) {
+      // @wc-include
+      return before ? "before the date" : "after the date";
+    }
+    // @wc-include
+    return before ? "before it ends" : "after it starts";
   }
 
   // The amount is the person's own text, and the unit their own choice: 48 hours stays "48 hours"
@@ -141,7 +152,7 @@
           type="number"
           inputmode="decimal"
           min="0"
-          step={unit === "days" ? 0.5 : 1}
+          step={unit === ThresholdUnits.Days ? 0.5 : 1}
           class="w-20 tabular-nums"
           aria-invalid={issue !== null}
           value={text}
@@ -154,16 +165,16 @@
           type="single"
           value={unit}
           onValueChange={(v) => {
-            unit = v === "hours" ? "hours" : "days";
+            unit = v === ThresholdUnits.Hours ? ThresholdUnits.Hours : ThresholdUnits.Days;
             commit();
           }}
         >
           <Select.Trigger class="w-24" aria-label="Unit" data-testid="threshold-unit-{index}">
-            {unitLabel(unit, Number(text) === 1)}
+            {unitLabel(unit, Number(text))}
           </Select.Trigger>
           <Select.Content>
-            <Select.Item value="hours" label={unitLabel("hours")} />
-            <Select.Item value="days" label={unitLabel("days")} />
+            <Select.Item value="hours" label={unitLabel(ThresholdUnits.Hours, Number(text))} />
+            <Select.Item value="days" label={unitLabel(ThresholdUnits.Days, Number(text))} />
           </Select.Content>
         </Select.Root>
         <Select.Root

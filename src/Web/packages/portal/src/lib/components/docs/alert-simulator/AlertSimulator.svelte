@@ -9,6 +9,7 @@
     import * as Select from "@nocturne/ui/ui/select";
     import * as ToggleGroup from "@nocturne/ui/ui/toggle-group";
     import { glucoseUnits } from "@nocturne/app/stores/appearance-store.svelte";
+    import { formatList } from "@nocturne/app/utils/formatting";
     import ReplayView from "@nocturne/app/components/alerts/ReplayView.svelte";
     import { createStaticChartView, type TransformedChartData } from "@nocturne/charts";
     import type { AlertReplayResult } from "@nocturne/api-client";
@@ -95,16 +96,28 @@
         nextIndex = rules.length;
     }
 
-    const issueText: Record<string, string> = {
-        minutes_not_positive: "a time of at least 1 minute",
-        empty_window: "a time window that opens: from and to cannot be the same",
-        invalid_time: "times written as HH:mm",
-        "list_empty:conditions": "at least one condition in every group",
-    };
+    function issueText(key: string): string | undefined {
+        switch (key) {
+            case "minutes_not_positive":
+                // @wc-include
+                return "a time of at least 1 minute";
+            case "empty_window":
+                // @wc-include
+                return "a time window that opens: from and to cannot be the same";
+            case "invalid_time":
+                // @wc-include
+                return "times written as HH:mm";
+            case "list_empty:conditions":
+                // @wc-include
+                return "at least one condition in every group";
+            default:
+                return undefined;
+        }
+    }
 
     function describeIssue(issue: { reason: string; field?: string | null }): string {
         const key = issue.field ? `${issue.reason}:${issue.field}` : undefined;
-        return (key !== undefined ? issueText[key] : undefined) ?? issueText[issue.reason] ?? issue.reason;
+        return (key !== undefined ? issueText(key) : undefined) ?? issueText(issue.reason) ?? issue.reason;
     }
 </script>
 
@@ -183,7 +196,7 @@
                     {#if issues[index]?.length}
                         <p class="text-sm text-destructive">
                             A save would be refused: this rule needs
-                            {issues[index].map(describeIssue).join(", ")}.
+                            {formatList(issues[index].map(describeIssue))}.
                         </p>
                     {/if}
                 </div>

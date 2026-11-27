@@ -32,7 +32,9 @@
   const sides = $derived(
     glucose
       ? [
+          // @wc-include
           { label: "7 days before", window: glucose.before },
+          // @wc-include
           { label: "7 days after", window: glucose.after },
         ]
       : []

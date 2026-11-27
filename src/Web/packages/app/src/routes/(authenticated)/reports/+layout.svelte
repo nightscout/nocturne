@@ -123,20 +123,7 @@
         const declared = registryTitles.get(page.url.pathname) ?? reportSubRouteTitle(page.url.pathname);
         if (declared) return declared;
 
-        const pathSegments = page.url.pathname.split("/");
-        const reportSegment = pathSegments[pathSegments.length - 1];
-
-        if (!reportSegment || reportSegment === "reports") {
-            return "Reports";
-        }
-
-        // Convert kebab-case to title case
-        return (
-            reportSegment
-                .split("-")
-                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(" ") + " Report"
-        );
+        return /^\/reports\/?$/.test(page.url.pathname) ? "Reports" : "Report";
     });
 
     const description = $derived(reportDescription(page.url.pathname));

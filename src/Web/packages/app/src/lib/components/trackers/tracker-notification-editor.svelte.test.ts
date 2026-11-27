@@ -74,7 +74,7 @@ describe("TrackerNotificationEditor", () => {
 		});
 
 		await page.getByLabelText("Unit").click();
-		await page.getByRole("option", { name: "hours" }).click();
+		await page.getByRole("option", { name: "hour" }).click();
 		await page.getByLabelText("Time").fill("48");
 
 		await expect.element(page.getByLabelText("Unit")).toHaveTextContent("hours");

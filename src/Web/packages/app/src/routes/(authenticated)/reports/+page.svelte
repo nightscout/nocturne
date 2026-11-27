@@ -92,6 +92,7 @@
       firstEntry.high !== undefined;
     const rangeLabel = singleEntry
       ? formatGlucoseRange(firstEntry.low!, firstEntry.high!, units)
+      // @wc-include
       : "your schedule";
     return {
       belowPercent: singleEntry ? personalRange.belowRangePercent : undefined,

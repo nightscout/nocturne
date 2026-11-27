@@ -8,6 +8,8 @@ export type { GlucoseUnits };
  */
 export interface ChartFormat {
 	locale: string;
+	/** The interface language, for the words of a list; the regional `locale` when absent. */
+	language?: string;
 	hour12: boolean;
 	/** IANA zone times are written in; the browser's when absent. */
 	timeZone?: string;

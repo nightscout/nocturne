@@ -1,10 +1,11 @@
 <script lang="ts">
   import StatusPill from "./StatusPill.svelte";
   import { bg, bgLabel, relativeAge, time } from "#lib/utils/formatting.js";
-  import type {
-    LoopPillData,
-    PillInfoItem,
-    AlertLevel,
+  import {
+    LoopStatus,
+    type LoopPillData,
+    type PillInfoItem,
+    type AlertLevel,
   } from "#lib/types/status-pills.js";
 
   interface LoopPillProps {
@@ -22,50 +23,35 @@
     const items: PillInfoItem[] = [];
 
     // Last enacted action
-    if (data.lastEnacted) {
-      const timeAgo = relativeAge(data.lastEnacted.time);
-
+    const enacted = data.lastEnacted;
+    if (enacted) {
       let lead: string | undefined;
-      let actionText = "";
-      if (data.lastEnacted.bolusVolume) {
+      let value = "";
+      if (enacted.bolusVolume) {
         lead = "Automatic bolus";
-        actionText = ` ${data.lastEnacted.bolusVolume}U`;
-        if (data.lastEnacted.type === "cancel") {
-          actionText += " (Temp Basal Canceled)";
+        if (enacted.type === "cancel") {
+          // @wc-include
+          value = `${enacted.bolusVolume}U (temp basal canceled)`;
+        } else {
+          value = `${enacted.bolusVolume}U`;
         }
-      } else if (data.lastEnacted.type === "cancel") {
+      } else if (enacted.type === "cancel") {
         lead = "Temp basal canceled";
-      } else if (data.lastEnacted.rate != null) {
+      } else if (enacted.rate != null) {
         lead = "Temp basal started";
-        actionText = ` ${data.lastEnacted.rate.toFixed(2)}U/hour for ${data.lastEnacted.duration}m`;
+        // @wc-include
+        value = `${enacted.rate.toFixed(2)}U/h for ${enacted.duration} mins`;
       }
 
-      if (data.lastEnacted.reason) {
-        actionText += `, ${data.lastEnacted.reason}`;
-      }
-
-      // Add IOB/COB info from loop
-      if (data.iob != null) {
-        actionText += `, IOB: ${data.iob.toFixed(2)}U`;
-      }
-      if (data.cob != null) {
-        actionText += `, COB: ${Math.round(data.cob)}g`;
-      }
-
-      // Add eventual BG
-      if (data.eventualBG != null) {
-        actionText += `, Eventual BG: ${bg(data.eventualBG)}`;
-      }
-
-      items.push({
-        label: timeAgo,
-        lead,
-        value: actionText,
-      });
+      items.push({ label: relativeAge(enacted.time), lead, value });
+      if (enacted.reason) items.push({ label: "Reason", value: enacted.reason });
+      if (data.iob != null) items.push({ label: "IOB", value: `${data.iob.toFixed(2)}U` });
+      if (data.cob != null) items.push({ label: "COB", value: `${Math.round(data.cob)}g` });
+      if (data.eventualBG != null) items.push({ label: "Eventual BG", value: bg(data.eventualBG) });
     }
 
     // Error information
-    if (data.status === "error" && data.failureReason) {
+    if (data.status === LoopStatus.Error && data.failureReason) {
       items.push({
         label: "Error",
         value: data.failureReason,
@@ -78,15 +64,25 @@
 
   const statusWord = $derived.by((): string => {
     switch (data?.status) {
-      case "enacted":
+      case LoopStatus.Enacted:
+        // @wc-include
+        // @wc-context: loop-status
         return "enacted";
-      case "recommendation":
+      case LoopStatus.Recommendation:
+        // @wc-include
+        // @wc-context: loop-status
         return "suggested";
-      case "looping":
+      case LoopStatus.Looping:
+        // @wc-include
+        // @wc-context: loop-status
         return "looping";
-      case "error":
+      case LoopStatus.Error:
+        // @wc-include
+        // @wc-context: loop-status
         return "error";
       default:
+        // @wc-include
+        // @wc-context: loop-status
         return "not recent";
     }
   });
@@ -94,15 +90,15 @@
   // The symbols lib/plugins/loop.js shows for each status.
   const nightscoutSymbol = $derived.by((): string => {
     switch (data?.status) {
-      case "enacted":
+      case LoopStatus.Enacted:
         return "⌁";
-      case "recommendation":
+      case LoopStatus.Recommendation:
         return "⏀";
-      case "looping":
+      case LoopStatus.Looping:
         return "↻";
-      case "warning":
+      case LoopStatus.Warning:
         return "⚠";
-      case "error":
+      case LoopStatus.Error:
         return "x";
       default:
         return "?";

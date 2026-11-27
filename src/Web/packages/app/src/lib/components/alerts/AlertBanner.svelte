@@ -8,7 +8,7 @@
   import { formatDateTimeCompact, relativeAge, time, toDate } from "#lib/utils/formatting.js";
   import { severity } from "./severity";
   import { severityLabel } from "./severityLabel.svelte";
-  import { seenBy } from "./receipts";
+  import { seenBy } from "./receipts.svelte.js";
   import { conditionLabel } from "./conditionLabel.svelte";
   import { createAlertActions, SNOOZE_MINUTES } from "./alert-actions.svelte";
 

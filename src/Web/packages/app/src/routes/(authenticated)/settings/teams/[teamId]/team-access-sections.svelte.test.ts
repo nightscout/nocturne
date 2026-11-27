@@ -276,7 +276,7 @@ describe("team page access sections", () => {
 
     await expect.element(page.getByText("Sites this team has access to")).toBeVisible();
     await expect.element(page.getByText("Sam's site")).toBeVisible();
-    await expect.element(page.getByText("Roles: Caretaker, Viewer")).toBeVisible();
+    await expect.element(page.getByText("Roles: Caretaker and Viewer")).toBeVisible();
     await expect.element(page.getByText("Roles: Viewer", { exact: true })).toBeVisible();
     await expect.element(page.getByText("Access does not end", { exact: false })).toBeVisible();
     await expect.element(page.getByText("All history", { exact: false })).toBeVisible();

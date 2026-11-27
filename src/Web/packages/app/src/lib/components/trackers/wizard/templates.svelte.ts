@@ -3,6 +3,7 @@ import type {
 	TrackerTemplateDto,
 } from "@nocturne/api-client";
 import { getNightscoutEventTypeLabel } from "#lib/constants/device-event-types.svelte.js";
+import { formatList } from "#lib/utils/formatting.js";
 
 /**
  * The tracker types the wizard has a name and a description for. The API's templates say which of
@@ -80,5 +81,5 @@ export function templateDescription(id: TrackerTemplateId): string {
 
 /** The device events in `types` as a person reads them: "Sensor start, Sensor change". */
 export function eventList(types: readonly string[]): string {
-	return types.map(getNightscoutEventTypeLabel).join(", ");
+	return formatList(types.map(getNightscoutEventTypeLabel), "unit");
 }

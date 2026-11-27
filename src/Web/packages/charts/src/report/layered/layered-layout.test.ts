@@ -13,6 +13,7 @@ import {
   labelledGlyphs,
   laneNames,
   legend,
+  legendDescription,
   nearestSlot,
   MINUTE_ORIGIN,
   paintOrder,
@@ -410,6 +411,31 @@ describe("tracks along different axes", () => {
 
     expect(split[1].top - split[0].bottom).toBe(10 + AXIS_ROOM);
     expect(split[1].bottom).toBeCloseTo(plain[1].bottom);
+  });
+});
+
+describe("a chart's description", () => {
+  const entries = [
+    { title: "Low", unit: "mg/dL", group: null },
+    { title: "High", unit: "mg/dL", group: "Breakfast" },
+    { title: "Mean", unit: null, group: null },
+  ];
+
+  it("lists the layers as one image, in the interface language", () => {
+    expect(legendDescription(entries, { locale: "en", language: "en", hour12: false })).toBe(
+      "Low (mg/dL), High (mg/dL, Breakfast), and Mean"
+    );
+    expect(legendDescription(entries, { locale: "en", language: "de", hour12: false })).toBe(
+      "Low (mg/dL), High (mg/dL, Breakfast) und Mean"
+    );
+  });
+
+  it("uses the regional format's words when no language is given", () => {
+    expect(legendDescription(entries, { locale: "de-DE", hour12: false })).toBe("Low (mg/dL), High (mg/dL, Breakfast) und Mean");
+  });
+
+  it("is empty for a chart with no layers", () => {
+    expect(legendDescription([], { locale: "en", hour12: false })).toBe("");
   });
 });
 

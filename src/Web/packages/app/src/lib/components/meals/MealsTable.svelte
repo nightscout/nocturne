@@ -16,7 +16,7 @@
   import CarbBreakdownBar from "#lib/components/treatments/CarbBreakdownBar.svelte";
   import FoodEntryDetails from "#lib/components/treatments/FoodEntryDetails.svelte";
   import { getMealNameForTime } from "#lib/constants/meal-times.js";
-  import { time } from "#lib/utils/formatting.js";
+  import { formatList, time } from "#lib/utils/formatting.js";
   import { PaintedMoment } from "#lib/forms/index.js";
 
   interface MealsByDay {
@@ -86,7 +86,7 @@
 
   function getFoodsSummary(foods: TreatmentFood[] | undefined): string {
     if (!foods || foods.length === 0) return "No foods attributed";
-    return foods.map((f) => f.foodName ?? f.note ?? "Other").join(", ");
+    return formatList(foods.map((f) => f.foodName ?? f.note ?? "Other"));
   }
 </script>
 

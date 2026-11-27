@@ -134,6 +134,7 @@
   function foodsText(ids: string[] | null | undefined): string {
     const picked = ids ?? [];
     if (picked.length === 0) return "Any food";
+    // @wc-include
     if (picked.length === 1) return foodName.get(picked[0]) ?? "1 food";
     return `${picked.length} foods`;
   }

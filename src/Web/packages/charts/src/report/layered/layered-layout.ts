@@ -7,6 +7,7 @@ import { area, curveMonotoneX, curveStepAfter, line } from "d3";
 import { scaleLinear } from "d3-scale";
 import { resolveChartColor } from "../../colors.js";
 import { isChartColor } from "../../enums.js";
+import type { ChartFormat } from "../../format.js";
 import { textureKey, type TextureKey } from "../../print/patterns.js";
 import { cohortBands, type BandColors } from "../percentile-bands.js";
 import { boundFields, rowSentence, type ReportField, type ReportLayer, type ReportPanel, type ReportRow, type ReportTrack, type ReportXKind } from "../types.js";
@@ -901,6 +902,22 @@ export function legend(panel: Pick<ReportPanel, "tracks">): LegendEntry[] {
         parts: bandParts(layer),
       };
     }),
+  );
+}
+
+/** A list as a phrase in the interface language: "a, b, and c", or with `unit`, "a, b, c" where the language adds no word. */
+function listPhrase(items: readonly string[], format: ChartFormat, type: "conjunction" | "unit" = "conjunction"): string {
+  return new Intl.ListFormat(format.language ?? format.locale, { style: "long", type }).format(items);
+}
+
+/** The words for a chart as one image: its layers, each with its unit and group, as a list in the interface language. */
+export function legendDescription(entries: readonly Pick<LegendEntry, "title" | "unit" | "group">[], format: ChartFormat): string {
+  return listPhrase(
+    entries.map((entry) => {
+      const details = [entry.unit, entry.group].filter((detail): detail is string => !!detail);
+      return details.length > 0 ? `${entry.title} (${listPhrase(details, format, "unit")})` : entry.title;
+    }),
+    format,
   );
 }
 

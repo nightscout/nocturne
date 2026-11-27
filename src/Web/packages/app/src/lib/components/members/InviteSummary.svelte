@@ -8,7 +8,7 @@
   import PermissionSummary from "#lib/components/rbac/PermissionSummary.svelte";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import { accessEndDate } from "#lib/components/members/access-end.js";
-  import { formatMediumDate } from "#lib/utils/formatting.js";
+  import { formatList, formatMediumDate } from "#lib/utils/formatting.js";
   import type { JoinInviteInfo } from "@nocturne/api-client";
 
   interface Props {
@@ -18,6 +18,7 @@
 
   let { invite, signedIn }: Props = $props();
 
+  // @wc-include
   const siteName = $derived(invite.tenantName || "this site");
   const roleNames = $derived(invite.roleNames ?? []);
   const accessEnd = $derived(
@@ -64,7 +65,7 @@
     <div class="space-y-2 rounded-md border p-3">
       {#if roleNames.length > 0}
         <p>
-          Your role: <strong>{roleNames.join(", ")}</strong>
+          Your role: <strong>{formatList(roleNames)}</strong>
         </p>
       {/if}
       <p class="text-muted-foreground">What you will have access to:</p>

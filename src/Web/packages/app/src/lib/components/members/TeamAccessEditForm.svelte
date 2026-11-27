@@ -9,7 +9,7 @@
     accessEndInstant,
     isAccessEndChoiceValid,
   } from "#lib/components/members/access-end.js";
-  import { formatMediumDate } from "#lib/utils/formatting.js";
+  import { formatList, formatMediumDate } from "#lib/utils/formatting.js";
   import { Now } from "#lib/hooks/now.svelte.js";
   import type { EditTeamAccessRequest, TenantRoleDto, TenantTeamAccess } from "@nocturne/api-client";
 
@@ -87,7 +87,7 @@
   {:else}
     {#if heldNotOffered.length > 0}
       <p class="text-sm text-muted-foreground">
-        The team has roles that you cannot give: {heldNotOffered.map((r) => r.name).join(", ")}. If you
+        The team has roles that you cannot give: {formatList(heldNotOffered.flatMap((r) => r.name ?? []))}. If you
         save, the team loses them.
       </p>
     {/if}

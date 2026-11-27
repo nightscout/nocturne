@@ -5,7 +5,7 @@
 <script lang="ts">
   import { formatList } from "#lib/utils/formatting.js";
   import { before, removeThenFocus } from "./refocus.js";
-  import { anchorGroupLabel, anchorLabel, anchorPhrase } from "./vocabulary-words.svelte.js";
+  import { anchorGroupLabel, anchorLabel, anchorPhrase, scopeWord } from "./vocabulary-words.svelte.js";
   import type { ReportResult } from "@nocturne/charts/core";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -168,18 +168,6 @@
     }));
   }
 
-  /** The access scopes a group of events can be left out for, in words. */
-  const SCOPE_WORDS: Record<string, string> = {
-    "food.read": "food",
-    "treatments.read": "treatments",
-    "glucose.read": "glucose",
-    "therapy.read": "therapy settings",
-    "devices.read": "devices",
-    "heartrate.read": "heart rate",
-    "sleep.read": "sleep",
-    "stepcount.read": "steps",
-  };
-
   /** Why the run left out group `index`'s events, once for each reason, from the run's cohorts. */
   function leftOut(index: number): string[] {
     const lines: string[] = [];
@@ -188,7 +176,7 @@
       if (!omitted) continue;
       const line =
         omitted.reason === "scope"
-          ? `Not shown: your access does not include ${SCOPE_WORDS[omitted.scope] ?? omitted.scope}.`
+          ? `Not shown: your access does not include ${scopeWord(omitted.scope)}.`
           : `Not shown: group ${LETTERS[omitted.group - 1] ?? omitted.group} is not shown.`;
       if (!lines.includes(line)) lines.push(line);
     }

@@ -239,8 +239,12 @@ describe("a new custom report", () => {
     await page.getByText("Days with a low against all other days", { exact: true }).click();
 
     const counts = page.getByTestId("day-count");
-    await expect.element(counts.nth(0)).toHaveTextContent("4 of 29 days. One day is only partly in the range and is in neither group.");
-    await expect.element(counts.nth(1)).toHaveTextContent("24 of 29 days. One day is only partly in the range and is in neither group. 2 days are before the history your access reads.");
+    const partly = "One day is only partly in the range and is in neither group.";
+    await expect.element(counts.nth(0).getByText("4 of 29 days.")).toBeVisible();
+    await expect.element(counts.nth(0).getByText(partly)).toBeVisible();
+    await expect.element(counts.nth(1).getByText("24 of 29 days.")).toBeVisible();
+    await expect.element(counts.nth(1).getByText(partly)).toBeVisible();
+    await expect.element(counts.nth(1).getByText("2 days are before the history your access reads.")).toBeVisible();
   });
 
   it("says why a group of events is not shown, from the run's cohorts", async () => {

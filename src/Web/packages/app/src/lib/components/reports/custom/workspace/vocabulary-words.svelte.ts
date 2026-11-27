@@ -972,6 +972,7 @@ export function markLabels(): Record<string, string> {
     medianBand: "Median and middle half",
     band: "Band",
     range: "Lowest to highest",
+    // @wc-include
     percentiles: "10 to 90 percent",
     median: "Median",
     markers: "Markers",
@@ -1130,32 +1131,39 @@ export function weekdayName(day: Weekday, weekdays: readonly Weekday[], width: "
   return new Intl.DateTimeFormat(formatLocale(), { weekday: width, timeZone: "UTC" }).format(Date.UTC(2026, 0, 5 + at));
 }
 
-/** The access scopes a part of a report reads, in words. */
-export function scopeWords(): Record<string, string> {
-  return {
-    // @wc-include
-    "glucose.read": "glucose",
-    // @wc-include
-    "treatments.read": "treatments",
-    // @wc-include
-    "food.read": "food",
-    // @wc-include
-    "therapy.read": "therapy settings",
-    // @wc-include
-    "devices.read": "devices",
-    // @wc-include
-    "heartrate.read": "heart rate",
-    // @wc-include
-    "sleep.read": "sleep",
-    // @wc-include
-    "stepcount.read": "steps",
-    // @wc-include
-    "alerts.read": "alerts",
-  };
-}
-
-function scopeWord(scope: string): string {
-  return wordOf(scopeWords(), scope);
+/** An access scope a part of a report reads, in words; a scope the web has no word for, as it is. */
+export function scopeWord(scope: string): string {
+  switch (scope) {
+    case "glucose.read":
+      // @wc-include
+      return "glucose";
+    case "treatments.read":
+      // @wc-include
+      return "treatments";
+    case "food.read":
+      // @wc-include
+      return "food";
+    case "therapy.read":
+      // @wc-include
+      return "therapy settings";
+    case "devices.read":
+      // @wc-include
+      return "devices";
+    case "heartrate.read":
+      // @wc-include
+      return "heart rate";
+    case "sleep.read":
+      // @wc-include
+      return "sleep";
+    case "stepcount.read":
+      // @wc-include
+      return "steps";
+    case "alerts.read":
+      // @wc-include
+      return "alerts";
+    default:
+      return scope;
+  }
 }
 
 /** Why the reader cannot use something that reads `scopes`: its access lacks one of them. */

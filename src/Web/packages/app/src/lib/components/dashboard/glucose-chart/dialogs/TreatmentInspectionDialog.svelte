@@ -103,10 +103,8 @@
   const treatmentSummary = $derived.by(() => {
     const parts: string[] = [];
     if (bolusInsulin != null) {
-      let bolusText = `${formatInsulinDisplay(bolusInsulin)}U`;
-      if (bolusType) bolusText += ` ${bolusType}`;
-      else bolusText += " bolus";
-      parts.push(bolusText);
+      const units = formatInsulinDisplay(bolusInsulin);
+      parts.push(bolusType ? `${units}U ${bolusType}` : `${units}U bolus`);
     }
     if (carbGrams != null) {
       let carbText = `${formatCarbDisplay(carbGrams)}g carbs`;

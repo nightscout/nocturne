@@ -27,8 +27,13 @@
     anyLabel,
   }: Props = $props();
 
-  let allText = $derived(allLabel ?? (size === "compact" ? "all" : "all of"));
-  let anyText = $derived(anyLabel ?? (size === "compact" ? "any" : "any of"));
+  const compact = $derived(size === "compact");
+  // @wc-include
+  // @wc-context: operator-toggle
+  let allText = $derived(allLabel ?? (compact ? "all" : "all of"));
+  // @wc-include
+  // @wc-context: operator-toggle
+  let anyText = $derived(anyLabel ?? (compact ? "any" : "any of"));
 </script>
 
 <ToggleGroup.Root
