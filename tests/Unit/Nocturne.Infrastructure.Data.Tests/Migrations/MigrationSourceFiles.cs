@@ -92,6 +92,68 @@ internal static class MigrationSourceFiles
             .Where(t => t != UnresolvedTable)
             .ToHashSet(StringComparer.Ordinal);
 
+    /// <summary>
+    /// A unique or primary key constraint added to <see cref="Table"/> at <see cref="Position"/>.
+    /// <see cref="UsesExistingIndex"/> is the raw <c>USING INDEX</c> attach of an index the migration
+    /// built earlier, which builds nothing; every other form builds its own index.
+    /// </summary>
+    public readonly record struct KeyConstraint(int Position, string Table, bool UsesExistingIndex);
+
+    /// <summary>
+    /// The fluent <c>AddUniqueConstraint</c> and <c>AddPrimaryKey</c> calls in <paramref name="up"/>, and
+    /// every clause of a raw <c>ALTER TABLE</c> that adds a unique or primary key constraint:
+    /// <c>ADD [CONSTRAINT name] UNIQUE | PRIMARY KEY</c>, or a column added with either, which builds its
+    /// index just the same. Each has the table it names, which is <see cref="UnresolvedTable"/> when
+    /// not a literal.
+    /// </summary>
+    public static IEnumerable<KeyConstraint> KeyConstraintsIn(string up)
+    {
+        foreach (Match match in FluentKeyConstraint.Matches(up))
+            yield return new(match.Index, FluentTable(match.Groups[1].Value), false);
+
+        foreach (Match statement in AlterTable.Matches(up))
+        {
+            var table = ResolveTable(statement.Groups[1].Value);
+
+            foreach (var clause in TopLevelClauses(statement.Groups[2].Value))
+            {
+                if (ConstraintClause.Match(clause) is { Success: true } constraint)
+                    yield return new(statement.Index, table, constraint.Groups[1].Success);
+                else if (ColumnClause.IsMatch(clause) && ColumnKey.IsMatch(clause))
+                    yield return new(statement.Index, table, false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="actions"/> split at the commas outside parentheses, so a column type such as
+    /// <c>numeric(10, 2)</c> stays in one clause.
+    /// </summary>
+    private static IEnumerable<string> TopLevelClauses(string actions)
+    {
+        var depth = 0;
+        var start = 0;
+
+        for (var i = 0; i < actions.Length; i++)
+        {
+            switch (actions[i])
+            {
+                case '(':
+                    depth++;
+                    break;
+                case ')':
+                    depth--;
+                    break;
+                case ',' when depth <= 0:
+                    yield return actions[start..i];
+                    start = i + 1;
+                    break;
+            }
+        }
+
+        yield return actions[start..];
+    }
+
     /// <summary>Migration name — the file name a guard reports and an allowlist keys on.</summary>
     public static string Name(string file) => Path.GetFileNameWithoutExtension(file);
 
@@ -183,8 +245,29 @@ internal static class MigrationSourceFiles
         @"^\s*""[^""]*""\s*,\s*""([^""]+)""", RegexOptions.Compiled);
 
     private static readonly Regex SqlCreateTable = new(
-        @"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\S+)",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+        @"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\S+)", Sql);
+
+    private static readonly Regex FluentKeyConstraint = new(
+        @"\.(?:AddUniqueConstraint|AddPrimaryKey)\s*\(([^;]*?)\)\s*;", RegexOptions.Compiled);
+
+    private const RegexOptions Sql = RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled;
+
+    /// <summary>The table and the rest of the statement, up to its semicolon.</summary>
+    private static readonly Regex AlterTable = new(
+        @"ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?(\S+)([^;]*)", Sql);
+
+    /// <summary>
+    /// A constraint clause. <c>ADD</c> is searched for rather than anchored, so the quotes, pluses and
+    /// names of a statement split across literals cannot hide it. The name is anything up to the key
+    /// words, so a quoted name with a space and a name built by concatenation read the same way; group 1
+    /// is a <c>USING INDEX</c> attach.
+    /// </summary>
+    private static readonly Regex ConstraintClause = new(
+        @"\bADD\s+(?:CONSTRAINT\b.*?)?\b(?:UNIQUE|PRIMARY\s+KEY)\b(\s+USING\s+INDEX\b)?", Sql);
+
+    private static readonly Regex ColumnClause = new(@"\bADD\s+(?!CONSTRAINT\b)", Sql);
+
+    private static readonly Regex ColumnKey = new(@"\b(?:UNIQUE|PRIMARY\s+KEY)\b", Sql);
 
     private static readonly Regex TimestampPrefixed = new(@"^\d{14}_", RegexOptions.Compiled);
 
