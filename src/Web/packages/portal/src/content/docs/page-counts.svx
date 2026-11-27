@@ -102,7 +102,8 @@ last 30 days. The answer is a list:
 ### Find pages nobody opened
 
 The list above holds only pages that were opened. To see the pages with no
-views, ask for every page the app counts, and subtract the pages in the counts:
+views, get the list of every page the app counts, and remove the pages that are
+in the counts:
 
 ```bash
 curl "https://example.com/api/v4/admin/telemetry/page-routes" \
