@@ -3,6 +3,7 @@
   under the row, once for all the choices it applies to.
 -->
 <script lang="ts">
+  import { formatList } from "#lib/utils/formatting.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
 
   interface Option {
@@ -59,7 +60,7 @@
     <div id="{id}-reasons" class="space-y-0.5">
       {#each reasons as r (r.reason)}
         <p class="text-xs text-muted-foreground">
-          {r.labels.join(", ")}: {r.reason}
+          {formatList(r.labels, "unit")}: {r.reason}
         </p>
       {/each}
     </div>

@@ -11,7 +11,7 @@ import type {
 } from "@nocturne/api-client";
 import { formatList } from "#lib/utils/formatting.js";
 import { bindingsOf, type Cell } from "./catalogue-vocabulary.js";
-import type { Reason } from "./workspace.svelte.js";
+import { againstText, dividedByText, minusText, type Reason } from "./workspace.svelte.js";
 
 export type Json = Record<string, unknown>;
 
@@ -191,11 +191,11 @@ function opPhrase(op: CalculatedOp, a: string, b: string, minutes: number | null
   const window = minutes === null ? null : windowWords(minutes);
   switch (op) {
     case "difference":
-      return `${a} minus ${b}`;
+      return minusText(a, b);
     case "ratio":
-      return `${a} divided by ${b}`;
+      return dividedByText(a, b);
     case "scatter":
-      return `${b} against ${a}`;
+      return againstText(b, a);
     case "lag_correlation":
       return `How ${a} and ${b} move together when one is shifted`;
     case "rolling_mean":

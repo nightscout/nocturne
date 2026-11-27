@@ -5,6 +5,7 @@
   On a narrow block the signals are one disclosure above the chart, closed once the chart has a signal.
 -->
 <script lang="ts">
+  import { formatList } from "#lib/utils/formatting.js";
   import { lensLabel, lensDescription, eventShowLabel } from "./vocabulary-words.svelte.js";
   import { tick, untrack, type Snippet } from "svelte";
   import { readReport, type ReportPanel } from "@nocturne/charts/core";
@@ -28,7 +29,6 @@
   import SignalRail from "./SignalRail.svelte";
   import SignalChartAdvanced from "./SignalChartAdvanced.svelte";
   import EventViewRail from "./EventViewRail.svelte";
-  import { captionJoin, lowerFirst } from "./workspace.svelte.js";
   import { describe } from "./describe.js";
   import type { ChartBlock, Report } from "./report.svelte.js";
   import type { CaptionKind } from "./workspace.svelte.js";
@@ -209,7 +209,7 @@
       </ToggleGroup.Root>
       {#each lensReasons as reason, i (reason)}
         <p class="text-xs text-muted-foreground" id="lens-why-{i}" data-testid="lens-reason">
-          {lenses.filter((l) => l.reason === reason).map((l) => lensLabel(l.id)).join(", ")}: {reason}
+          {formatList(lenses.filter((l) => l.reason === reason).map((l) => lensLabel(l.id)), "unit")}: {reason}
         </p>
       {/each}
       {#if ws.lens === "event"}
@@ -249,7 +249,7 @@
           {/if}
           {#each shows.filter((o, i) => o.reason && shows.findIndex((x) => x.reason === o.reason) === i) as o (o.id)}
             <p class="text-xs text-muted-foreground">
-              {shows.filter((x) => x.reason === o.reason).map((x) => eventShowLabel(x.id)).join(", ")}: {o.reason}
+              {formatList(shows.filter((x) => x.reason === o.reason).map((x) => eventShowLabel(x.id)), "unit")}: {o.reason}
             </p>
           {/each}
         </div>
@@ -258,7 +258,7 @@
 
     {#if !ws.empty}
       <!-- prettier-ignore -->
-      <p class="text-sm text-foreground" data-testid="chart-caption">{#each ws.caption() as part, i (part.kind)}{#if i > 0}{captionJoin(part, ws.eventList)}{/if}<Button variant="prose" size="inline" data-touch-hit onclick={() => focusOwner(part.kind)}>{part.text}</Button>{/each}</p>
+      <p class="text-sm text-foreground" data-testid="chart-caption">{#each ws.caption() as part (part.kind)}{part.before}<Button variant="prose" size="inline" data-touch-hit onclick={() => focusOwner(part.kind)}>{part.text}</Button>{/each}</p>
     {/if}
     <div data-testid="chart-preview" data-lens={ws.lens}>
       <!-- The legend sits under the plot it names; around an event the group rows give each group's figures. -->
@@ -297,7 +297,7 @@
       {#if ws.lens === "event" || ws.leaveOutApplies}
         {@render disclosure(`Options: ${ws.optionsSummary}`, optionsOpen, (v) => (optionsOpen = v), "chart-options-toggle", options)}
       {/if}
-      {@render disclosure(`Title and range: ${ws.title.trim() || "Untitled chart"}, ${lowerFirst(report.blockRanges(block).find((o) => o.id === report.blockRangeId(block))?.label ?? "")}`, titleOpen, (v) => (titleOpen = v), "chart-title-range", titleRange)}
+      {@render disclosure(`Title and range: ${ws.title.trim() || "Untitled chart"}, ${report.blockRangePhrase(block)}`, titleOpen, (v) => (titleOpen = v), "chart-title-range", titleRange)}
       <SignalChartAdvanced {report} {block} />
     </div>
   </aside>

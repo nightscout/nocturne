@@ -15,12 +15,27 @@ const calls = vi.hoisted(() => ({ runs: [] as { spec: Spec }[], creates: [] as {
 let refusal: unknown = null;
 /** Whether a preview run fails, as one does when the API cannot be reached. */
 let runsFail = false;
+/** The errors the engine gives for each preview run. */
+let previewErrors: { message: string }[] = [];
 /** The catalogue the page reads. */
 let known: CustomReportCatalogue = liveCatalogue;
 /** Whether each signal has data in a range, as the catalogue reads it. */
 let availability: (arg: { hours: number }) => unknown = ({ hours }) => ({ hours, signals: [] });
 /** Adds to a run's result what a test needs the engine to say, such as day counts. */
 let decorate: (result: { panels: { tracks?: { layers: Record<string, unknown>[] }[] }[] }) => void = () => {};
+
+/** What the undo toasts said. */
+const toasts = vi.hoisted(() => [] as string[]);
+
+vi.mock("svelte-sonner", () => ({
+  toast: Object.assign(
+    (message: string) => {
+      toasts.push(message);
+      return toasts.length;
+    },
+    { error: () => 0, success: () => 0, dismiss: () => {} },
+  ),
+}));
 
 vi.mock("#lib/api/report-image.remote.js", () => ({ drawReportPanelImage: () => Promise.resolve("") }));
 
@@ -40,7 +55,7 @@ vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
     if (runsFail) return Promise.reject(new Error("offline"));
     const answer = runOf(run.spec as unknown as Record<string, unknown>);
     decorate(answer.result as never);
-    return answer;
+    return { ...answer, errors: previewErrors };
   }),
   createCustomReport: remoteCommand((arg) => {
     const request = arg as { name: string; spec: Spec };
@@ -103,6 +118,8 @@ describe("a new custom report", () => {
     calls.gotos.length = 0;
     refusal = null;
     runsFail = false;
+    previewErrors = [];
+    toasts.length = 0;
     known = liveCatalogue;
     decorate = () => {};
     availability = ({ hours }) => ({ hours, signals: [] });
@@ -135,7 +152,7 @@ describe("a new custom report", () => {
     await start("Is there a dawn rise?");
     const before = calls.runs.length;
 
-    await page.getByTestId("signal-rail").getByRole("button", { name: "Remove Target range" }).click();
+    await page.getByTestId("signal-rail").getByRole("button", { name: "Remove target range", exact: true }).click();
 
     await vi.waitFor(() => expect(calls.runs.length).toBeGreaterThan(before), { timeout: 3000 });
     expect(layerIds(calls.runs.at(-1)!.spec)).toEqual(["glucoseWide", "glucose"]);
@@ -204,7 +221,7 @@ describe("a new custom report", () => {
   it("clears the spinner after a failed run and shows only the failure", async () => {
     await start("Is there a dawn rise?");
     runsFail = true;
-    await page.getByTestId("signal-rail").getByRole("button", { name: "Remove Target range" }).click();
+    await page.getByTestId("signal-rail").getByRole("button", { name: "Remove target range", exact: true }).click();
 
     await expect.element(page.getByText("The preview could not be made.")).toBeVisible();
     await vi.waitFor(() => expect(document.querySelectorAll("[data-testid='chart-preview'] [aria-busy='true']").length).toBe(0));
@@ -267,11 +284,11 @@ describe("a new custom report", () => {
     await expect.element(page.getByRole("dialog").getByRole("button", { name: "Time in range", exact: true })).toBeVisible();
     await page.getByRole("dialog").getByRole("button", { name: "Time in range", exact: true }).click();
     await expect.element(page.getByText("Timeline cannot show this signal.")).toBeVisible();
-    await page.getByRole("button", { name: "Switch to Day by day" }).click();
+    await page.getByRole("button", { name: "Switch to day by day", exact: true }).click();
 
     await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
     await expect.element(page.getByRole("radio", { name: "Day by day" })).toHaveAttribute("data-state", "on");
-    await expect.element(page.getByTestId("signal-rail").getByRole("button", { name: "Remove Time in range" })).toBeVisible();
+    await expect.element(page.getByTestId("signal-rail").getByRole("button", { name: "Remove time in range", exact: true })).toBeVisible();
   });
 
   it("adds a signal another view draws as a new chart, and keeps this chart", async () => {
@@ -283,7 +300,7 @@ describe("a new custom report", () => {
 
     await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
     await vi.waitFor(() => expect(page.getByTestId("report-blocks").getByRole("listitem").elements().filter((e) => e.matches("li[data-block-kind]"))).toHaveLength(2));
-    await expect.element(page.getByTestId("signal-rail").getByRole("button", { name: "Remove Time in range" })).toBeVisible();
+    await expect.element(page.getByTestId("signal-rail").getByRole("button", { name: "Remove time in range", exact: true })).toBeVisible();
     await vi.waitFor(() => expect(document.activeElement?.getAttribute("data-testid")).toBe("add-signal"));
   });
 
@@ -292,14 +309,14 @@ describe("a new custom report", () => {
 
     await page.getByTestId("add-signal").click();
     await page.getByRole("button", { name: "Activity and body" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Star Heart rate" }).first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Star heart rate", exact: true }).first().click();
     await userEvent.keyboard("{Escape}");
     await expect.element(page.getByTestId("add-signal")).toHaveFocus();
 
     await page.getByTestId("add-signal").click();
     const starred = page.getByRole("region", { name: "Starred" });
     await expect.element(starred.getByRole("button", { name: "Heart rate", exact: true })).toBeVisible();
-    await expect.element(starred.getByRole("button", { name: "Star Heart rate" })).toHaveAttribute("aria-pressed", "true");
+    await expect.element(starred.getByRole("button", { name: "Star heart rate", exact: true })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("says once how many signals need a shorter range, and applies the range that fits", async () => {
@@ -388,10 +405,34 @@ describe("a new custom report", () => {
     await vi.waitFor(() => expect(document.activeElement?.getAttribute("data-signal-chip")).toBe("glucose"));
   });
 
+  it("names the kind of an untitled block it removed", async () => {
+    render(NewCustomReportPage, {});
+    await page.getByText("Blank report", { exact: true }).click();
+    await page.getByRole("button", { name: "Add a table" }).click();
+    const remove = page.getByRole("button", { name: "Remove", exact: true });
+    await remove.first().click();
+    await vi.waitFor(() => expect(toasts).toEqual(["Nocturne removed the chart."]));
+
+    await remove.first().click();
+    await vi.waitFor(() => expect(toasts).toEqual(["Nocturne removed the chart.", "Nocturne removed the table."]));
+  });
+
+  it("names the kind of an untitled block whose settings the engine refused", async () => {
+    previewErrors = [{ message: "The engine cannot run it." }];
+    render(NewCustomReportPage, {});
+    await page.getByText("Blank report", { exact: true }).click();
+    await page.getByRole("button", { name: "Add a table" }).click();
+    await page.getByRole("button", { name: "Remove", exact: true }).first().click();
+
+    await expect
+      .element(page.getByTestId("save-blocked"))
+      .toHaveTextContent("Change the table first. The report engine cannot run its settings.");
+  });
+
   it("moves the focus to Narrow when a group's only narrowing is removed", async () => {
     await start("What does a later breakfast do?");
     const row = page.getByTestId("moment-row").first();
-    await row.getByRole("button", { name: /^Remove time of day/ }).click();
+    await row.getByRole("button", { name: "Remove time of day from group A", exact: true }).click();
 
     await vi.waitFor(() => expect(document.activeElement?.textContent?.trim()).toBe("Narrow"));
   });
@@ -447,6 +488,8 @@ describe("the safety net of a new report", () => {
     guards.length = 0;
     refusal = null;
     runsFail = false;
+    previewErrors = [];
+    toasts.length = 0;
     known = liveCatalogue;
     decorate = () => {};
     availability = ({ hours }) => ({ hours, signals: [] });

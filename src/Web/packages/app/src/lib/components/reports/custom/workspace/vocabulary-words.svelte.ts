@@ -95,6 +95,154 @@ export function signalLabel(id: string): string {
   return wordOf(signalLabels(), id);
 }
 
+/** Each signal inside a sentence: "glucose". */
+export function signalPhrases(): Record<string, string> {
+  return {
+    // @wc-include
+    glucose: "glucose",
+    // @wc-include
+    target: "target range",
+    // @wc-include
+    glucoseWide: "glucose, 10 to 90 percent",
+    // @wc-include
+    mean: "mean glucose",
+    // @wc-include
+    timeInRange: "time in range",
+    // @wc-include
+    timeBelow: "time below range",
+    // @wc-include
+    timeAbove: "time above range",
+    // @wc-include
+    ranges: "time in each range",
+    // @wc-include
+    readings: "readings",
+    // @wc-include
+    iob: "insulin on board",
+    // @wc-include
+    basal: "basal delivered",
+    // @wc-include
+    basalScheduled: "basal scheduled",
+    // @wc-include
+    boluses: "boluses",
+    // @wc-include
+    injections: "long-acting injections",
+    // @wc-include
+    netLoop: "insulin the loop added or removed",
+    // @wc-include
+    totalInsulin: "total insulin",
+    // @wc-include
+    totalBolus: "total bolus",
+    // @wc-include
+    totalBasal: "total basal",
+    // @wc-include
+    cob: "carbs on board",
+    // @wc-include
+    carbs: "carbs",
+    // @wc-include
+    reservoir: "reservoir",
+    // @wc-include
+    pumpBattery: "pump battery",
+    // @wc-include
+    uploaderBattery: "uploader battery",
+    // @wc-include
+    settingBasal: "basal rate in data and profile",
+    // @wc-include
+    settingIsf: "ISF in data and profile",
+    // @wc-include
+    settingCarbRatio: "carb ratio in data and profile",
+    // @wc-include
+    heartRate: "heart rate",
+    // @wc-include
+    steps: "steps",
+    // @wc-include
+    sleep: "sleep",
+    // @wc-include
+    pumpModes: "pump modes",
+    // @wc-include
+    profiles: "profiles",
+    // @wc-include
+    overrides: "overrides",
+    // @wc-include
+    activities: "activities",
+    // @wc-include
+    tempBasals: "temp basals",
+    // @wc-include
+    bgChecks: "BG checks",
+    // @wc-include
+    meterGlucose: "meter readings from the pump",
+    // @wc-include
+    trendRate: "glucose rate of change",
+    // @wc-include
+    glucoseEpisodes: "lows and highs",
+    // @wc-include
+    labHbA1c: "lab HbA1c",
+    // @wc-include
+    sensorChanges: "sensor changes",
+    // @wc-include
+    siteChanges: "site and insulin changes",
+    // @wc-include
+    pumpEvents: "pump events",
+    // @wc-include
+    pumpConnection: "pump connection",
+    // @wc-include
+    trackers: "trackers",
+    // @wc-include
+    sleepStages: "sleep stages",
+    // @wc-include
+    sleepScore: "sleep score",
+    // @wc-include
+    sleepEfficiency: "sleep efficiency",
+    // @wc-include
+    sleepLatency: "time to fall asleep",
+    // @wc-include
+    restlessPeriods: "restless periods",
+    // @wc-include
+    sleepHeartRate: "heart rate each night",
+    // @wc-include
+    sleepHrv: "HRV each night",
+    // @wc-include
+    sleepSpo2: "blood oxygen each night",
+    // @wc-include
+    sleepBreathing: "breathing rate each night",
+    // @wc-include
+    heartRateInSleep: "heart rate in sleep",
+    // @wc-include
+    hrvInSleep: "HRV in sleep",
+    // @wc-include
+    spo2InSleep: "blood oxygen in sleep",
+    // @wc-include
+    breathingInSleep: "breathing rate in sleep",
+    // @wc-include
+    motion: "motion",
+    // @wc-include
+    weight: "weight",
+    // @wc-include
+    bodyFat: "body fat",
+    // @wc-include
+    leanMass: "lean mass",
+    // @wc-include
+    temporaryTargets: "temporary targets",
+    // @wc-include
+    alertPeriods: "alert periods",
+    // @wc-include
+    alertsRaised: "alerts raised",
+    // @wc-include
+    doNotDisturb: "do not disturb",
+    // @wc-include
+    deviceAlarms: "device alarms",
+    // @wc-include
+    dataExclusions: "data left out",
+    // @wc-include
+    compressionLows: "compression lows",
+    // @wc-include
+    sensorNoise: "sensor noise",
+  };
+}
+
+export function signalPhrase(id: string): string {
+  return wordOf(signalPhrases(), id);
+}
+
 /** What each signal is, in one line, under its name in the signal catalogue. */
 export function signalDescriptions(): Record<string, string> {
   return {
@@ -481,6 +629,26 @@ export function lensLabel(id: string): string {
   return wordOf(lensLabels(), id);
 }
 
+/** Each lens inside a sentence: "Switch to timeline". */
+export function lensPhrases(): Record<string, string> {
+  return {
+    // @wc-include
+    timeline: "timeline",
+    // @wc-include
+    typical_day: "typical day",
+    // @wc-include
+    event: "around an event",
+    // @wc-include
+    daily: "day by day",
+    // @wc-include
+    against: "one against another",
+  };
+}
+
+export function lensPhrase(id: string): string {
+  return wordOf(lensPhrases(), id);
+}
+
 /** What each lens does, in one sentence. */
 export function lensDescriptions(): Record<string, string> {
   return {
@@ -558,6 +726,30 @@ export function anchorPhrase(id: string): string {
   return wordOf(anchorPhrases(), id);
 }
 
+/** Each kind of event as the first words of a sentence: "Meals 06:00 to 08:30". */
+export function anchorHeadings(): Record<string, string> {
+  return {
+    [EventAnchorKind.Meal]: "Meals",
+    [EventAnchorKind.CorrectionBolus]: "Correction boluses",
+    [EventAnchorKind.AnyBolus]: "Boluses",
+    [EventAnchorKind.UnannouncedRise]: "Rises with no carbs",
+    [EventAnchorKind.LowStart]: "Lows",
+    [EventAnchorKind.HighStart]: "Highs",
+    [EventAnchorKind.LowTreatment]: "Carbs taken in a low",
+    [EventAnchorKind.ExerciseStart]: "Exercise",
+    [EventAnchorKind.SleepStart]: "Sleep starts",
+    [EventAnchorKind.Wake]: "Wake-ups",
+    [EventAnchorKind.SensorStart]: "Sensor starts",
+    [EventAnchorKind.SiteChange]: "Site changes",
+    [EventAnchorKind.OverrideStart]: "Overrides",
+    [EventAnchorKind.TemporaryTargetStart]: "Temporary targets",
+  };
+}
+
+export function anchorHeading(id: string): string {
+  return wordOf(anchorHeadings(), id);
+}
+
 /** The headings the event menu lists the kinds of event under. */
 export function anchorGroupLabels(): Record<string, string> {
   return {
@@ -632,6 +824,26 @@ export function leaveOutLabel(id: string): string {
   return wordOf(leaveOutLabels(), id);
 }
 
+/** Each kind of time a chart can leave out, inside a sentence: "without exercise". */
+export function leaveOutPhrases(): Record<string, string> {
+  return {
+    // @wc-include
+    overrides: "overrides",
+    // @wc-include
+    temporaryTargets: "temporary targets",
+    // @wc-include
+    exercise: "exercise",
+    // @wc-include
+    illness: "illness",
+    // @wc-include
+    openLoop: "manual mode",
+  };
+}
+
+export function leaveOutPhrase(id: string): string {
+  return wordOf(leaveOutPhrases(), id);
+}
+
 /** Each figure of an event. */
 export function outcomeLabels(): Record<string, string> {
   return {
@@ -652,6 +864,36 @@ export function outcomeLabel(id: string): string {
   return wordOf(outcomeLabels(), id);
 }
 
+/** Each figure of an event inside a sentence: "how many meals had each peak rise". */
+export function outcomePhrases(): Record<string, string> {
+  return {
+    // @wc-include
+    peakRise: "peak rise",
+    // @wc-include
+    minutesToPeak: "time to peak",
+    // @wc-include
+    minutesBackToStart: "time back to the start value",
+    // @wc-include
+    nadir: "lowest reading",
+    // @wc-include
+    drop: "drop",
+    // @wc-include
+    minutesToNadir: "time to the lowest reading",
+    // @wc-include
+    glucoseAt2Hours: "glucose 2 hours after",
+    // @wc-include
+    netInsulin: "net insulin",
+    // @wc-include
+    gramsPerUnit: "carbs for each unit",
+    // @wc-include
+    startGlucose: "glucose at the event",
+  };
+}
+
+export function outcomePhrase(id: string): string {
+  return wordOf(outcomePhrases(), id);
+}
+
 /** What each event can lie along. */
 export function alongLabels(): Record<string, string> {
   return {
@@ -665,6 +907,26 @@ export function alongLabels(): Record<string, string> {
 
 export function alongLabel(id: string): string {
   return wordOf(alongLabels(), id);
+}
+
+/** What each event can lie along, inside a sentence: "peak rise against carbs". */
+export function alongPhrases(): Record<string, string> {
+  return {
+    // @wc-include
+    startGlucose: "glucose at the event",
+    // @wc-include
+    grams: "carbs",
+    // @wc-include
+    minutesSinceMeal: "time since the last carbs",
+    // @wc-include
+    iobAtEvent: "insulin on board at the event",
+    // @wc-include
+    timeOfDay: "time of day",
+  };
+}
+
+export function alongPhrase(id: string): string {
+  return wordOf(alongPhrases(), id);
 }
 
 /** Each way a chart around an event shows the events. */

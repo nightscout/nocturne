@@ -16,7 +16,7 @@
   import { memberOwner } from "#lib/stores/member-storage.js";
   import Swatch from "./Swatch.svelte";
   import { removeWithUndo } from "./undo.svelte.js";
-  import { signalLabel } from "./vocabulary-words.svelte.js";
+  import { signalLabel, signalPhrase } from "./vocabulary-words.svelte.js";
 
   interface Props {
     report: Report;
@@ -37,7 +37,7 @@
     const at = onChart.indexOf(id);
     const removed = removeWithUndo(
       ws,
-      `Nocturne removed ${signalLabel(id)} from the chart.`,
+      `Nocturne removed ${signalPhrase(id)} from the chart.`,
       () => ws.toggleSignal(id),
       () => ws.placeSignal(id)
     );
@@ -62,7 +62,7 @@
             variant="ghost"
             size="icon-touch"
             class="shrink-0"
-            aria-label={`Remove ${signalLabel(id)}`}
+            aria-label={`Remove ${signalPhrase(id)}`}
             onclick={() => remove(id)}
             data-remove-signal={id}
           >

@@ -37,6 +37,7 @@ export type BlockKind = "chart" | "figures" | "table" | "comparison";
 export interface Source {
   dataset: string;
 }
+import { plural } from "#lib/utils/plural.js";
 import { accessReason, daysText, rangeLabel, signalLabel, sourceLabel, starterWords } from "./vocabulary-words.svelte.js";
 import { parseSavedReport, withoutNulls, type SavedBlock, type SavedReport } from "./saved-state.js";
 import {
@@ -45,9 +46,13 @@ import {
   freshKey,
   reserveKey,
   vocabularyOf,
+  againstText,
+  joinAgainst,
+  lastRangeText,
+  momentHeading,
   momentText,
   rangeText,
-  upperFirst,
+  toText,
   type Built,
   type DateSpan,
   type RangeOption,
@@ -196,7 +201,7 @@ export class Report {
     this.#catalogue = catalogue;
     this.#vocab = vocabularyOf(catalogue);
     this.#clock = clock ?? ((m) => String(m));
-    this.dates = dates ?? ((span) => `${span.from} to ${span.to}`);
+    this.dates = dates ?? ((span) => toText(span.from, span.to));
     this.state = {
       title: starter ? (starterWords(this.#clock)[starter.id]?.title ?? "") : "",
       rangeHours: starter?.rangeHours ?? this.#vocab.defaultReportHours,
@@ -625,7 +630,7 @@ export class Report {
   /** The line saying a block reading `source` shows `hours` because its data covers no more. */
   #shorterText(source: string, hours: number): string {
     const days = daysText(this.#dataset(source)?.maxRangeHours ?? hours);
-    return `${upperFirst(sourceLabel(source))} covers at most ${days}, so this block shows ${rangeText(hours, this.#vocab.rangePresets).replace(/^over /, "")}.`;
+    return `${sourceLabel(source)} covers at most ${days}, so this block shows ${lastRangeText(hours, this.#vocab.rangePresets)}.`;
   }
 
   #newBlock(kind: BlockKind): Block {
@@ -758,7 +763,7 @@ export class Report {
       own !== null
         ? {
             key: block.key,
-            text: `${upperFirst(signalLabel(id))} covers at most ${daysText(limit)}, so this chart shows ${rangeText(own, this.#vocab.rangePresets).replace(/^over /, "")}.`,
+            text: `${signalLabel(id)} covers at most ${daysText(limit)}, so this chart shows ${lastRangeText(own, this.#vocab.rangePresets)}.`,
           }
         : null;
     return null;
@@ -810,7 +815,7 @@ export class Report {
     if (block.kind === "given") {
       if (block.panel.kind === "comparison") return null;
       const max = givenMaxHours(this.#catalogue, block.panel);
-      return hours > max ? `${upperFirst(this.blockTitle(block).trim() || this.caption(block))} shows at most ${daysText(max)}. Choose a shorter range first.` : null;
+      return hours > max ? `${this.blockTitle(block).trim() || this.caption(block)} shows at most ${daysText(max)}. Choose a shorter range first.` : null;
     }
     const dataset = this.#dataset(block.source);
     if (dataset && hours > dataset.maxRangeHours)
@@ -893,6 +898,15 @@ export class Report {
         reason: p.reason,
       })),
     ];
+  }
+
+  /** The range a block has chosen, as words inside a sentence. */
+  blockRangePhrase(block: Block): string {
+    const id = this.blockRangeId(block);
+    if (id === SAME_AS_REPORT)
+      // @wc-include
+      return "same as the report";
+    return id === AS_SAVED ? this.#savedRangeLabel(block) : rangeLabel(id);
   }
 
   #savedRangeLabel(block: Block): string {
@@ -1098,14 +1112,18 @@ export class Report {
         const labels = block.columns.map((c) =>
           this.#fieldLabel(block.source, c)
         );
-        return `${this.sourceLabel(block)}: ${labels.length} figures ${range}`;
+        const figures = plural(labels.length, ["# figure", "# figures"]);
+        // @wc-include
+        return `${this.sourceLabel(block)}: ${figures} ${range}`;
       }
       case "table":
         if (block.source === this.#vocab.eventDataset) {
-          const texts = block.events.moments.map((m) =>
-            momentText(m, true, this.#clock, block.events.glucoseUnits, this.#vocab)
+          const texts = block.events.moments.map((m, i) =>
+            i === 0
+              ? momentHeading(m, this.#clock, block.events.glucoseUnits, this.#vocab)
+              : momentText(m, true, this.#clock, block.events.glucoseUnits, this.#vocab)
           );
-          return `${upperFirst(texts.join(" against "))}, one row for each event ${range}`;
+          return `${joinAgainst(texts)}, one row for each event ${range}`;
         }
         return `${this.sourceLabel(block)} ${range}`;
       case "comparison": {
@@ -1115,7 +1133,7 @@ export class Report {
               ?.label ?? block.preset
           );
         if (block.a && block.b)
-          return `${this.dates(block.a)} against ${this.dates(block.b)}`;
+          return againstText(this.dates(block.a), this.dates(block.b));
         return "Choose two periods";
       }
     }

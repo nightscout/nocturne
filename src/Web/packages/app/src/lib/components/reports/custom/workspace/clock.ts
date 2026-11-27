@@ -3,6 +3,7 @@ import {
   formatMediumDateRange,
   time,
 } from "#lib/utils/formatting.js";
+import { toText } from "./workspace.svelte.js";
 
 /**
  * A minute of the day, 0 to 1440, in the member's clock format; 1440 is the end
@@ -19,7 +20,7 @@ export function minuteLabel(minute: number): string {
  * start is midnight.
  */
 export function windowLabel(from: number, to: number): string {
-  return `${minuteLabel(from)} to ${minuteLabel(to === 0 && from > 0 ? 1440 : to)}`;
+  return toText(minuteLabel(from), minuteLabel(to === 0 && from > 0 ? 1440 : to));
 }
 
 /** Two local dates, yyyy-MM-dd, in the app's medium date format. */

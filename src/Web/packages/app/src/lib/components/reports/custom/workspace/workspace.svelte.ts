@@ -1,5 +1,5 @@
 import type { CustomReportCatalogue } from "@nocturne/api-client";
-import { formatList } from "#lib/utils/formatting.js";
+import { formatList, listSeparators } from "#lib/utils/formatting.js";
 import type { StarterGroup } from "./starters.js";
 import {
   convertFromDisplayUnits,
@@ -27,7 +27,7 @@ import {
   type Weekday,
   type WhenAxis,
 } from "./catalogue-vocabulary.js";
-import { accessReason, daysText, whenAxisLabel, whenPhrase, alongLabel, anchorPhrase, leaveOutLabel, lensLabel, markLabel, outcomeLabel, rangeLabel, signalLabel, weekdayName } from "./vocabulary-words.svelte.js";
+import { accessReason, alongPhrase, anchorHeading, anchorPhrase, dayGroupPresetLabel, daysText, leaveOutPhrase, lensLabel, markLabel, outcomeLabel, outcomePhrase, rangeLabel, signalLabel, signalPhrase, weekdayName, whenAxisLabel, whenPhrase } from "./vocabulary-words.svelte.js";
 
 export interface Relate {
   /** Rolling-mean window in minutes, or null for none. */
@@ -208,6 +208,8 @@ export type CaptionKind = "signals" | "lens" | "range" | "groups" | "options";
 export interface CaptionPart {
   kind: CaptionKind;
   text: string;
+  /** What the caption puts before the part. */
+  before: string;
 }
 
 /**
@@ -628,7 +630,7 @@ export interface BuildContext {
   clock?: (minute: number) => string;
 }
 
-/** What a day had, as words: "Days with a low". */
+/** What a day had, as words that begin a sentence: "Days with a low". */
 export function dayFilterText(
   f: DayFilter,
   clock: (minute: number) => string = clockText
@@ -645,6 +647,34 @@ export function dayFilterText(
     case "carbs": {
       const b = boundsText({ min: f.minCarbs, max: f.maxCarbs }, "g");
       return b ? `Days with ${b} of carbs` : "Days by total carbs";
+    }
+    default:
+      return f.kind;
+  }
+}
+
+/** What a day had, as words inside a sentence: "days with a low". */
+export function dayFilterPhrase(
+  f: DayFilter,
+  clock: (minute: number) => string = clockText
+): string {
+  switch (f.kind) {
+    case "exercise":
+      // @wc-include
+      return "days with exercise";
+    case "illness":
+      // @wc-include
+      return "days with illness";
+    case "low":
+      // @wc-include
+      return "days with a low";
+    case "lowOvernight":
+      // @wc-include
+      return `days with a low from ${clock(0)} to ${clock(360)}`;
+    case "carbs": {
+      const b = boundsText({ min: f.minCarbs, max: f.maxCarbs }, "g");
+      // @wc-include
+      return b ? `days with ${b} of carbs` : "days by total carbs";
     }
     default:
       return f.kind;
@@ -1048,42 +1078,69 @@ function build(state: WorkspaceState, ctx: BuildContext): Built {
   return finish([panel], tracks.length, layerCount);
 }
 
-/** The marks a combination can be drawn as: the op's own. */
+export function minusText(a: string, b: string): string {
+  // @wc-include
+  return `${a} minus ${b}`;
+}
 
+export function dividedByText(a: string, b: string): string {
+  // @wc-include
+  return `${a} divided by ${b}`;
+}
+
+/** A combination of two signals, as words that begin a sentence: "Glucose minus insulin on board". */
 export function comboLabel(combo: Pick<Combo, "a" | "b" | "op">): string {
   const a = signalLabel(combo.a);
-  const b = lowerFirst(signalLabel(combo.b));
-  return combo.op === "difference"
-    ? // @wc-include
-      `${a} minus ${b}`
-    : // @wc-include
-      `${a} divided by ${b}`;
+  const b = signalPhrase(combo.b);
+  return combo.op === "difference" ? minusText(a, b) : dividedByText(a, b);
+}
+
+/** A combination of two signals, as words inside a sentence: "glucose minus insulin on board". */
+export function comboPhrase(combo: Pick<Combo, "a" | "b" | "op">): string {
+  const a = signalPhrase(combo.a);
+  const b = signalPhrase(combo.b);
+  return combo.op === "difference" ? minusText(a, b) : dividedByText(a, b);
 }
 
 function weekdayLabel(day: Weekday, weekdays: readonly Weekday[]): string {
   return weekdayName(day, weekdays);
 }
 
-function againstText(a: string, b: string): string {
+export function againstText(a: string, b: string): string {
   // @wc-include
   return `${a} against ${b}`;
 }
 
-function joinAgainst(items: string[]): string {
+export function joinAgainst(items: string[]): string {
   return items.length === 0 ? "" : items.reduce((a, b) => againstText(a, b));
 }
 
-function toText(from: string | number, to: string | number): string {
+export function toText(from: string | number, to: string | number): string {
   // @wc-include
   return `${from} to ${to}`;
 }
 
-/** Weekdays as words: runs of three or more as "Monday to Friday". */
-export function weekdaysText(days: Weekday[], weekdays: readonly Weekday[]): string {
+/** A window that ends on the next day: "22:00 to 06:00, past midnight". */
+export function pastMidnightText(from: string, to: string): string {
+  return `${from} to ${to}, past midnight`;
+}
+
+/**
+ * Weekdays as words: runs of three or more as "Monday to Friday". Every day is "every day" inside a
+ * sentence and "Every day" at the start of one; the names themselves come cased from the locale.
+ */
+export function weekdaysText(
+  days: Weekday[],
+  weekdays: readonly Weekday[],
+  position: "inSentence" | "heading" = "inSentence"
+): string {
   const order = [...weekdays];
   const sorted = order.filter((d) => days.includes(d));
-  // @wc-include
-  if (sorted.length === 7) return "every day";
+  if (sorted.length === 7)
+    return position === "heading"
+      ? dayGroupPresetLabel("everyDay")
+      : // @wc-include
+        "every day";
   const runs: Weekday[][] = [];
   for (const day of sorted) {
     const last = runs[runs.length - 1];
@@ -1130,7 +1187,7 @@ export function minutesText(minutes: number): string {
   return `${minutes} minutes`;
 }
 
-/** The event window as words: "60 minutes before to 5 hours after". */
+/** The event window as words that begin a sentence: "60 minutes before to 5 hours after". */
 export function windowText(before: number, after: number): string {
   return before === 0
     ? `From the event to ${minutesText(after)} after`
@@ -1138,20 +1195,22 @@ export function windowText(before: number, after: number): string {
       `${minutesText(before)} before to ${minutesText(after)} after`;
 }
 
-/** A moment's narrowings as words; the anchor too when `withAnchor`. */
-export function momentText(
+/** The event window as words inside a sentence: "from the event to 5 hours after". */
+export function windowPhrase(before: number, after: number): string {
+  return before === 0
+    ? // @wc-include
+      `from the event to ${minutesText(after)} after`
+    : // @wc-include
+      `${minutesText(before)} before to ${minutesText(after)} after`;
+}
+
+/** A moment's narrowings, each a phrase that follows its kind of event: "06:00 to 08:30", "on Monday to Friday". */
+function momentNarrowings(
   moment: Moment,
-  withAnchor: boolean,
   clock: (minute: number) => string,
   units: GlucoseUnits,
   vocab: Vocabulary
-): string {
-  if (moment.everythingElse)
-    return withAnchor
-      ? // @wc-include
-        `all other ${anchorPhrase(moment.what)}`
-      : // @wc-include
-        "everything else";
+): string[] {
   const parts: string[] = [];
   if (moment.timeOfDay)
     parts.push(
@@ -1175,14 +1234,16 @@ export function momentText(
     else if (g?.max !== undefined)
       // @wc-include
       parts.push(`at most ${g.max} g`);
-    if (moment.foods)
+    if (moment.foods) {
+      const foods = formatList(moment.foods.map((f) => f.name), "disjunction");
       parts.push(
         moment.foods.length === 0
           ? // @wc-include
             "with a food"
           : // @wc-include
-            `with ${formatList(moment.foods.map((f) => f.name), "disjunction")}`
+            `with ${foods}`
       );
+    }
     if (moment.foodCategory?.trim())
       // @wc-include
       parts.push(`with ${moment.foodCategory.trim()}`);
@@ -1200,6 +1261,24 @@ export function momentText(
   if (iob)
     // @wc-include
     parts.push(`insulin on board ${iob} at the event`);
+  return parts;
+}
+
+/** A moment's narrowings as words inside a sentence; the anchor too when `withAnchor`. */
+export function momentText(
+  moment: Moment,
+  withAnchor: boolean,
+  clock: (minute: number) => string,
+  units: GlucoseUnits,
+  vocab: Vocabulary
+): string {
+  if (moment.everythingElse)
+    return withAnchor
+      ? // @wc-include
+        `all other ${anchorPhrase(moment.what)}`
+      : // @wc-include
+        "everything else";
+  const parts = momentNarrowings(moment, clock, units, vocab);
   const phrase = anchorPhrase(moment.what);
   if (parts.length === 0)
     return withAnchor
@@ -1207,7 +1286,23 @@ export function momentText(
         `all ${phrase}`
       : // @wc-include
         "all";
-  return withAnchor ? `${phrase} ${parts.join(", ")}` : parts.join(", ");
+  return withAnchor ? `${phrase} ${formatList(parts, "unit")}` : formatList(parts, "unit");
+}
+
+/** A moment with its anchor, as words that begin a sentence: "Meals 06:00 to 08:30". */
+export function momentHeading(
+  moment: Moment,
+  clock: (minute: number) => string,
+  units: GlucoseUnits,
+  vocab: Vocabulary
+): string {
+  if (moment.everythingElse) return `All other ${anchorPhrase(moment.what)}`;
+  const parts = momentNarrowings(moment, clock, units, vocab);
+  const narrowings = formatList(parts, "unit");
+  return parts.length === 0
+    ? `All ${anchorPhrase(moment.what)}`
+    : // @wc-include
+      `${anchorHeading(moment.what)} ${narrowings}`;
 }
 
 /** The label of a glucose unit, as the API writes it. */
@@ -1263,7 +1358,7 @@ function beforeText(minutes: number): string {
     : minutesText(minutes);
 }
 
-/** Time since the last carbs as words: "no carbs in the 4 hours before". */
+/** Time since the last carbs as words inside a sentence: "no carbs in the 4 hours before". */
 export function sinceMealText(b: Bounds | undefined): string | null {
   if (!b) return null;
   if (b.min !== undefined && b.max === undefined)
@@ -1278,10 +1373,35 @@ export function sinceMealText(b: Bounds | undefined): string | null {
   return null;
 }
 
-function sentenceCase(labels: string[]): string {
-  return formatList(labels.map((l, i) => (i === 0 ? l : lowerFirst(l))));
+/** Names in a caption: the first in its form for the start of a sentence, the rest in their form inside one. */
+function captionList(names: { label: string; phrase: string }[]): string {
+  return formatList(names.map((n, i) => (i === 0 ? n.label : n.phrase)));
 }
 
+/** Time since the last carbs as words that begin a sentence: "No carbs in the 4 hours before". */
+export function sinceMealHeading(b: Bounds | undefined): string | null {
+  if (!b) return null;
+  if (b.min !== undefined && b.max === undefined) return `No carbs in the ${beforeText(b.min)} before`;
+  if (b.max !== undefined && b.min === undefined) return `Carbs in the ${beforeText(b.max)} before`;
+  if (b.min !== undefined && b.max !== undefined)
+    return `The last carbs ${minutesText(b.min)} to ${minutesText(b.max)} before`;
+  return null;
+}
+
+/** A period as words that follow a verb: "the last 7 days". */
+export function lastRangeText(hours: number, presets: readonly { id: string; hours: number }[]): string {
+  const preset = presets.find((p) => p.hours === hours);
+  if (preset)
+    // @wc-include
+    return `the last ${rangeLabel(preset.id)}`;
+  return hours % 24 === 0
+    ? // @wc-include
+      `the last ${hours / 24} days`
+    : // @wc-include
+      `the last ${hours} hours`;
+}
+
+/** A period as words that follow a noun: "over the last 7 days". */
 export function rangeText(hours: number, presets: readonly { id: string; hours: number }[]): string {
   const preset = presets.find((p) => p.hours === hours);
   if (preset)
@@ -1570,9 +1690,9 @@ export class Workspace {
   get optionsSummary(): string {
     const s = this.state;
     const parts: string[] = [];
-    if (s.lens === "event") parts.push(lowerFirst(windowText(s.event.before, s.event.after)));
+    if (s.lens === "event") parts.push(windowPhrase(s.event.before, s.event.after));
     if (this.leaveOutApplies) {
-      const left = this.#vocab.leaveOuts.filter((l) => s.leaveOut[l.id]).map((l) => lowerFirst(leaveOutLabel(l.id)));
+      const left = this.#vocab.leaveOuts.filter((l) => s.leaveOut[l.id]).map((l) => leaveOutPhrase(l.id));
       parts.push(
         left.length > 0
           ? // @wc-include
@@ -1581,7 +1701,7 @@ export class Workspace {
             "all time"
       );
     }
-    return parts.join(", ");
+    return formatList(parts, "unit");
   }
 
   /** Whether the lens groups days: Typical day and Day by day. */
@@ -1694,7 +1814,7 @@ export class Workspace {
   groupHeading(index: number): string {
     const m = this.state.moments[index];
     if (!m) return "";
-    return `${GROUP_LETTERS[index]}: ${upperFirst(momentText(m, true, this.clock, this.glucoseUnits, this.#vocab))}`;
+    return `${GROUP_LETTERS[index]}: ${momentHeading(m, this.clock, this.glucoseUnits, this.#vocab)}`;
   }
 
   /** The unit the tenant's reports show glucose in: the catalogue's glucose fields carry it. */
@@ -2450,17 +2570,36 @@ export class Workspace {
     this.state = state;
   }
 
-  /** The chart as one sentence, in parts the UI can style. */
+  /**
+   * The chart as one sentence, in parts the UI can style. The signals, lens and range read as one
+   * clause, a space apart; the groups and options follow it as the items of a list.
+   */
   caption(): CaptionPart[] {
+    const parts = this.#captionParts();
+    const inClause = (p: { kind: CaptionKind }) =>
+      !this.eventList && (p.kind === "signals" || p.kind === "lens" || p.kind === "range");
+    const clause = parts.filter(inClause);
+    const listed = parts.filter((p) => !inClause(p));
+    const items = [...(clause.length > 0 ? [clause.map((p) => p.text).join(" ")] : []), ...listed.map((p) => p.text)];
+    const separators = listSeparators(items);
+    const first = clause.length > 0 ? 1 : 0;
+    return parts.map((p) => {
+      if (inClause(p)) return { ...p, before: p === clause[0] ? "" : " " };
+      const at = first + listed.indexOf(p);
+      return { ...p, before: at === 0 ? "" : separators[at - 1] };
+    });
+  }
+
+  #captionParts(): Omit<CaptionPart, "before">[] {
     const s = this.state;
-    const parts: CaptionPart[] = [];
+    const parts: Omit<CaptionPart, "before">[] = [];
     if (this.eventList) return this.#eventListCaption();
     if (s.lens === "against") {
       const pair = shownSignals(s, this.#vocab);
       if (pair.length === 2)
         parts.push({
           kind: "signals",
-          text: againstText(signalLabel(pair[1]), lowerFirst(signalLabel(pair[0]))),
+          text: againstText(signalLabel(pair[1]), signalPhrase(pair[0])),
         });
       else if (pair.length === 1)
         parts.push({ kind: "signals", text: signalLabel(pair[0]) });
@@ -2474,11 +2613,11 @@ export class Workspace {
       });
     } else {
       const names = [
-        ...this.shown.map((id) => signalLabel(id)),
-        ...this.combos.map((c) => comboLabel(c)),
+        ...this.shown.map((id) => ({ label: signalLabel(id), phrase: signalPhrase(id) })),
+        ...this.combos.map((c) => ({ label: comboLabel(c), phrase: comboPhrase(c) })),
       ];
       if (names.length > 0)
-        parts.push({ kind: "signals", text: sentenceCase(names) });
+        parts.push({ kind: "signals", text: captionList(names) });
       parts.push({ kind: "lens", text: this.#lensText() });
     }
     parts.push({ kind: "range", text: rangeText(this.rangeHours, this.#vocab.rangePresets) });
@@ -2492,24 +2631,24 @@ export class Workspace {
   /** The caption as one string. */
   captionText(): string {
     return this.caption()
-      .map((p, i) => (i === 0 ? p.text : `${captionJoin(p, this.eventList)}${p.text}`))
+      .map((p) => p.before + p.text)
       .join("");
   }
 
   /** The caption of a chart of the events one by one. */
-  #eventListCaption(): CaptionPart[] {
+  #eventListCaption(): Omit<CaptionPart, "before">[] {
     const s = this.state;
     const anchors = distinct(s.moments.map((m) => m.what));
     const phrase = formatList(anchors.map((a) => anchorPhrase(a)));
     let head: string;
     if (s.event.show === "each")
-      head = againstText(outcomeLabel(this.up), lowerFirst(alongLabel(this.along)));
+      head = againstText(outcomeLabel(this.up), alongPhrase(this.along));
     else if (s.event.show === "spread")
-      head = `How many ${phrase} had each ${lowerFirst(outcomeLabel(this.figure))}`;
+      head = `How many ${phrase} had each ${outcomePhrase(this.figure)}`;
     else {
       head = `${whenPhrase(anchors, phrase)}, ${whenAxisLabel(s.event.when)}`;
     }
-    const parts: CaptionPart[] = [{ kind: "signals", text: head }];
+    const parts: Omit<CaptionPart, "before">[] = [{ kind: "signals", text: head }];
     // The groups are worth naming when one narrows its events, or two share an anchor.
     const narrowed =
       s.moments.some((m) => isNarrowed(m, this.#vocab) || m.everythingElse) ||
@@ -2550,7 +2689,7 @@ export class Workspace {
         const isDefault = s.event.before === windows.defaultBefore && s.event.after === windows.defaultAfter;
         return isDefault
           ? around
-          : `${around}, ${lowerFirst(windowText(s.event.before, s.event.after))}`;
+          : `${around}, ${windowPhrase(s.event.before, s.event.after)}`;
       }
       default:
         return "";
@@ -2561,10 +2700,10 @@ export class Workspace {
     const s = this.state;
     if (this.groupsDays && s.dayFilter)
       // @wc-include
-      return `${lowerFirst(dayFilterText(s.dayFilter, this.clock))} against all other days`;
+      return `${dayFilterPhrase(s.dayFilter, this.clock)} against all other days`;
     if (s.lens === "typical_day") {
       if (s.dayGroups.length === 1 && s.dayGroups[0].length === 7) return null;
-      return joinAgainst(s.dayGroups.map((g) => upperFirst(weekdaysText(g, this.#vocab.weekdays))));
+      return joinAgainst(s.dayGroups.map((g) => weekdaysText(g, this.#vocab.weekdays)));
     }
     if (s.lens === "event") {
       const sameAnchor = distinct(s.moments.map((m) => m.what)).length === 1;
@@ -2596,7 +2735,7 @@ export class Workspace {
     }
     if (this.leaveOutApplies) {
       const left = this.#vocab.leaveOuts.filter((l) => s.leaveOut[l.id]).map((l) =>
-        lowerFirst(leaveOutLabel(l.id))
+        leaveOutPhrase(l.id)
       );
       if (left.length > 0)
         // @wc-include
@@ -2605,7 +2744,7 @@ export class Workspace {
         // @wc-include
         parts.push(`only while ${s.profileName} was active`);
     }
-    return parts.length > 0 ? parts.join(", ") : null;
+    return parts.length > 0 ? formatList(parts, "unit") : null;
   }
 }
 
@@ -2689,17 +2828,4 @@ function distinct<T>(items: T[]): T[] {
   return items.filter((item, i) => items.indexOf(item) === i);
 }
 
-/** What goes before a caption part: a comma before groups and options, else a space; a comma before each part of an event list's caption. */
-export function captionJoin(part: CaptionPart, eventList: boolean): string {
-  if (eventList) return ", ";
-  return part.kind === "groups" || part.kind === "options" ? ", " : " ";
-}
-
-export function lowerFirst(text: string): string {
-  return text.charAt(0).toLowerCase() + text.slice(1);
-}
-
-export function upperFirst(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
 
