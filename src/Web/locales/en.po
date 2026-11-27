@@ -51418,19 +51418,19 @@ msgstr "Could not change the rule. Try again."
 msgid "Could not delete the rule. Try again."
 msgstr "Could not delete the rule. Try again."
 
-#: src/lib/components/people/FlagRulesEditor.svelte
+#: src/routes/(authenticated)/people/rules/+page.svelte
 msgid "Your flag rules - Nocturne"
 msgstr "Your flag rules - Nocturne"
 
-#: src/lib/components/people/FlagRulesEditor.svelte
+#: src/routes/(authenticated)/people/rules/+page.svelte
 msgid "Your flag rules"
 msgstr "Your flag rules"
 
-#: src/lib/components/people/FlagRulesEditor.svelte
+#: src/routes/(authenticated)/people/rules/+page.svelte
 msgid "A person who meets one of your rules shows in Flagged on the People page. Only you see your rules."
 msgstr "A person who meets one of your rules shows in Flagged on the People page. Only you see your rules."
 
-#: src/lib/components/people/FlagRulesEditor.svelte
+#: src/routes/(authenticated)/people/rules/+page.svelte
 msgid "<0/> People"
 msgstr "<0/> People"
 
@@ -52189,3 +52189,74 @@ msgstr[1] "A date range with no start date gets the last # months of data."
 #: src/lib/components/connectors/HistoryReach.svelte
 msgid "A date range with no start date gets all of the history."
 msgstr "A date range with no start date gets all of the history."
+
+#. 0: team.name
+#. 0: team.name
+#: src/lib/components/people/AttentionReasons.svelte
+#: src/lib/components/people/AttentionReasons.svelte
+msgid "Team: {0}"
+msgstr "Team: {0}"
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "This team has the maximum number of flag rules. Delete a rule to add a new rule."
+msgstr "This team has the maximum number of flag rules. Delete a rule to add a new rule."
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "The flag rules of this team did not load."
+msgstr "The flag rules of this team did not load."
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "This team has no flag rules."
+msgstr "This team has no flag rules."
+
+#. 0: summary.cannotCheckCount
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "Cannot be checked for {0} of the people this team follows that you can see"
+msgstr "Cannot be checked for {0} of the people this team follows that you can see"
+
+#. 0: limit
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "This team has {0} rules, the maximum. Delete a rule to add a new rule."
+msgstr "This team has {0} rules, the maximum. Delete a rule to add a new rule."
+
+#. 0: ruleTeams[0].name
+#: src/lib/components/people/PeopleWall.svelte
+msgid "Flagged by Nocturne's fixed rules and {0}'s rules."
+msgstr "Flagged by Nocturne's fixed rules and {0}'s rules."
+
+#. 0: ruleTeams.length; 1: formatList( ruleTeams.map((team) => team.name ?? "") )
+#: src/lib/components/people/PeopleWall.svelte
+msgid "Flagged by Nocturne's fixed rules and the rules of {0} teams: {1}."
+msgstr "Flagged by Nocturne's fixed rules and the rules of {0} teams: {1}."
+
+#. 0: label; 1: value; 2: threshold
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0}: {1} (team rule: below {2})"
+msgstr "{0}: {1} (team rule: below {2})"
+
+#. 0: label; 1: value; 2: threshold
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0}: {1} (team rule: above {2})"
+msgstr "{0}: {1} (team rule: above {2})"
+
+#. 0: label; 1: value; 2: period; 3: threshold
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0}: {1} in the last {2} (team rule: below {3})"
+msgstr "{0}: {1} in the last {2} (team rule: below {3})"
+
+#. 0: label; 1: value; 2: period; 3: threshold
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0}: {1} in the last {2} (team rule: above {3})"
+msgstr "{0}: {1} in the last {2} (team rule: above {3})"
+
+#: src/lib/components/teams/TeamFlagRulesSection.svelte
+msgid "The staff of this team see a person who meets one of these rules in Flagged, on the People page and on the wall."
+msgstr "The staff of this team see a person who meets one of these rules in Flagged, on the People page and on the wall."
+
+#: src/lib/components/teams/TeamFlagRulesSection.svelte
+msgid "You see a person who meets one of these rules in Flagged, on the People page and on the wall. Only a manager can change the rules."
+msgstr "You see a person who meets one of these rules in Flagged, on the People page and on the wall. Only a manager can change the rules."
+
+#: src/lib/components/teams/TeamFlagRulesSection.svelte
+msgid "Flag rules"
+msgstr "Flag rules"
