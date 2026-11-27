@@ -1,11 +1,15 @@
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Realtime;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data.Extensions;
 using Xunit;
 using static Nocturne.API.Tests.TestDoubles.StorageBroadcastCapture;
 
@@ -106,6 +110,48 @@ public class LegacyStorageRecordChangeSubscriberTests
             WriteOrigin.Live, created: [reserved], updated: [reserved], deleted: [reserved]));
 
         VerifyNothingSent();
+    }
+
+    [Fact]
+    public void ItIsRegisteredAsASubscriberOfTheSeam()
+    {
+        var services = new ServiceCollection();
+
+        services.AddRealTimeAndNotifications(new ConfigurationBuilder().Build());
+
+        services.Should().Contain(d =>
+            d.ServiceType == typeof(IRecordChangeSubscriber)
+            && d.ImplementationType == typeof(LegacyStorageRecordChangeSubscriber));
+    }
+
+    [Fact]
+    public async Task ADeleteUpToTheCap_IsSentOnePerDocument()
+    {
+        var foods = Enumerable.Range(0, AuditedBulkDeleteExtensions.BroadcastMaterializationCap)
+            .Select(i => new Food { Id = $"{i}", Name = "apple" })
+            .ToList();
+
+        await PublishAsync(RecordsChanged.Of<Food>(WriteOrigin.Live, deleted: foods));
+
+        _broadcast.Verify(b => b.BroadcastStorageDeleteAsync("food", It.IsAny<StorageDeleteEvent>()),
+            Times.Exactly(foods.Count));
+        _broadcast.Verify(b => b.BroadcastStorageDeleteAsync("food", It.IsAny<StorageBulkDeleteEvent>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ADeleteOverTheCap_IsSentAsOneBulkDeleteWithItsCount()
+    {
+        var statuses = Enumerable.Range(0, AuditedBulkDeleteExtensions.BroadcastMaterializationCap + 1)
+            .Select(i => new DeviceStatus { Id = $"{i}" })
+            .ToList();
+        var capture = new StorageBroadcastCapture();
+
+        await new LegacyStorageRecordChangeSubscriber(capture.Broadcast)
+            .OnChangedAsync(RecordsChanged.Of<DeviceStatus>(WriteOrigin.Live, deleted: statuses), CancellationToken.None);
+
+        capture.Delete.GetProperty("colName").GetString().Should().Be("devicestatus");
+        capture.Delete.GetProperty("deletedCount").GetInt64().Should().Be(statuses.Count);
+        capture.Delete.TryGetProperty("identifier", out _).Should().BeFalse();
     }
 
     [Fact]

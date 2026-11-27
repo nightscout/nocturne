@@ -137,7 +137,7 @@ public class FoodRepositoryReportingTests : IDisposable
     }
 
     [Fact]
-    public async Task ABulkDeleteOverTheCap_PublishesOnlyThatFoodsWereWritten()
+    public async Task ABulkDeleteOverTheBroadcastCap_StillPublishesEveryDeletedFood()
     {
         var over = AuditedBulkDeleteExtensions.BroadcastMaterializationCap + 1;
         _context.Foods.AddRange(Enumerable.Range(0, over).Select(_ =>
@@ -146,9 +146,8 @@ public class FoodRepositoryReportingTests : IDisposable
 
         (await _foods.BulkDeleteFoodAsync("find[name]=apple")).Should().Be(over);
 
-        var change = _changes.Changes.Should().ContainSingle().Subject;
-        change.RecordType.Should().Be(typeof(Food));
-        change.HasRecords.Should().BeFalse();
+        _changes.Deleted.Should().HaveCount(over, "the subscriber, not the store, decides how a large delete is announced");
+        _changes.Batches.Should().ContainSingle();
     }
 
     private sealed class FailingSaveInterceptor : SaveChangesInterceptor

@@ -6,7 +6,6 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.DeviceStatuses;
 
@@ -196,20 +195,13 @@ internal sealed class DeviceStatusService(
             await events.OnDeletedAsync(stored, CancellationToken.None);
     }
 
-    /// <summary>
-    /// Publishes the statuses a committed write created, updated or deleted, as reads serve them, or
-    /// only that statuses were written when more than
-    /// <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/> were deleted.
-    /// </summary>
+    /// <summary>Publishes the statuses a committed write created, updated or deleted, as reads serve them.</summary>
     /// <remarks>Uncancellable: the write has committed, so its subscribers must still hear of it.</remarks>
     private Task PublishAsync(
         IReadOnlyList<DeviceStatus>? created = null,
         IReadOnlyList<DeviceStatus>? updated = null,
         IReadOnlyList<DeviceStatus>? deleted = null)
     {
-        if (deleted?.Count > AuditedBulkDeleteExtensions.BroadcastMaterializationCap)
-            return changes.PublishAsync(RecordsChanged.Written([typeof(DeviceStatus)]), CancellationToken.None);
-
         if ((created?.Count ?? 0) + (updated?.Count ?? 0) + (deleted?.Count ?? 0) == 0)
             return Task.CompletedTask;
 

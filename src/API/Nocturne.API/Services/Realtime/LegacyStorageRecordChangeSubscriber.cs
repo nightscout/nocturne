@@ -2,6 +2,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Realtime;
 
@@ -13,7 +14,9 @@ namespace Nocturne.API.Services.Realtime;
 /// </summary>
 /// <remarks>
 /// A settings document under a reserved key (<see cref="SettingsKeys.IsReserved"/>) is Nocturne's own
-/// configuration and outside the v3 collection, so it is never sent.
+/// configuration and outside the v3 collection, so it is never sent. A change that deletes more than
+/// <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/> documents is sent as one
+/// <see cref="StorageBulkDeleteEvent"/> rather than one event per document.
 /// </remarks>
 internal sealed class LegacyStorageRecordChangeSubscriber(ISignalRBroadcastService broadcast) : IRecordChangeSubscriber
 {
@@ -40,7 +43,14 @@ internal sealed class LegacyStorageRecordChangeSubscriber(ISignalRBroadcastServi
             foreach (var document in change.Updated.Where(InCollection))
                 await broadcast.BroadcastStorageUpdateAsync(collection, new StorageDocumentEvent(collection, document));
 
-            foreach (var document in change.Deleted.Where(InCollection))
+            var deleted = change.Deleted.Where(InCollection).ToList();
+            if (deleted.Count > AuditedBulkDeleteExtensions.BroadcastMaterializationCap)
+            {
+                await broadcast.BroadcastStorageDeleteAsync(collection, new StorageBulkDeleteEvent(collection, deleted.Count));
+                continue;
+            }
+
+            foreach (var document in deleted)
                 await broadcast.BroadcastStorageDeleteAsync(
                     collection, new StorageDeleteEvent(collection, (document as IProcessableDocument)?.Id, document));
         }

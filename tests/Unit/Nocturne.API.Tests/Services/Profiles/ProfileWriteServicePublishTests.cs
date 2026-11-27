@@ -8,7 +8,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data.Extensions;
+using Npgsql;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
@@ -144,22 +144,57 @@ public class ProfileWriteServicePublishTests
     }
 
     [Fact]
-    public async Task APruneOverTheCap_PublishesOnlyThatProfilesWereWritten()
+    public async Task ACreateThatAlsoInvalidates_PublishesItsCreatesAndDeletesTogether()
     {
-        var ids = Enumerable.Range(0, AuditedBulkDeleteExtensions.BroadcastMaterializationCap + 2)
-            .Select(i => $"5f8d0c1e8a7b4c3d9e{i:D6}")
-            .ToList();
-        foreach (var id in ids)
-            Store(id);
+        const string invalidId = "5f8d0c1e8a7b4c3d9e5f0002";
+        var served = Store();
+        var stored = Store(invalidId);
+        var invalid = Document(invalidId);
+        invalid.IsValid = false;
+        var decomposition = new InvalidatingDecomposition<Profile>();
+        decomposition.AddInvalidated(invalid);
+        _decomposer
+            .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Profile>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(decomposition);
+
+        await Service().CreateProfilesAsync([Document(), invalid]);
+
+        _changes.Created.Should().ContainSingle().Which.Should().BeSameAs(served);
+        _changes.Deleted.Should().ContainSingle().Which.Should().BeSameAs(stored);
+    }
+
+    [Fact]
+    public async Task AReadBackTheStoreFails_DoesNotFailTheCommittedWrite()
+    {
+        var events = new Mock<IDataEventSink<Profile>>();
+        _projection
+            .Setup(p => p.GetProfileByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NpgsqlException("connection refused"));
+        var service = new ProfileWriteService(
+            _decomposer.Object, _projection.Object, _therapySettings.Object, _changes, events.Object,
+            NullLogger<ProfileWriteService>.Instance);
+
+        var written = await service.CreateProfilesAsync([Document()]);
+
+        written.Should().ContainSingle();
+        _changes.Batches.Should().BeEmpty();
+        events.Verify(e => e.OnCreatedAsync(It.IsAny<IReadOnlyList<Profile>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task APruneWhoseReadFails_StillDeletesEveryChosenDocument()
+    {
+        string[] ids = ["5f8d0c1e8a7b4c3d9e5f0001", "5f8d0c1e8a7b4c3d9e5f0002", "5f8d0c1e8a7b4c3d9e5f0003"];
         _therapySettings.Setup(t => t.GetDocumentIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync(ids);
+        _projection
+            .Setup(p => p.GetProfileByIdAsync(ids[1], It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NpgsqlException("connection refused"));
         _decomposer
             .Setup(d => d.DeleteDocumentAsync(It.IsAny<string>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        await Service().PruneProfilesAsync(keep: 1);
+        (await Service().PruneProfilesAsync(keep: 1)).Should().Be(2);
 
-        var change = _changes.Changes.Should().ContainSingle().Subject;
-        change.RecordType.Should().Be(typeof(Profile));
-        change.HasRecords.Should().BeFalse();
+        _decomposer.Verify(d => d.DeleteDocumentAsync(ids[2], WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

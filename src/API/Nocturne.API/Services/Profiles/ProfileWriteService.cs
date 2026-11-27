@@ -3,7 +3,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Profiles;
 
@@ -140,7 +140,7 @@ public class ProfileWriteService : IProfileWriteService
         var count = 0;
         foreach (var id in documentIds.Skip(keep))
         {
-            var stored = await _projection.GetProfileByIdAsync(id, CancellationToken.None);
+            var stored = await ReadStoredAsync(id);
             if (await _decomposer.DeleteDocumentAsync(id, WriteOrigin.Live, CancellationToken.None) > 0)
             {
                 count++;
@@ -181,7 +181,7 @@ public class ProfileWriteService : IProfileWriteService
         var served = new List<Profile>(profiles.Count);
         foreach (var profile in profiles)
         {
-            if (await _projection.GetProfileByIdAsync(profile.Id!, CancellationToken.None) is { } stored)
+            if (await ReadStoredAsync(profile.Id!) is { } stored)
                 served.Add(stored);
             else
                 _logger.LogWarning("Profile {Id} was written but cannot be read back to announce it", profile.Id);
@@ -191,19 +191,29 @@ public class ProfileWriteService : IProfileWriteService
     }
 
     /// <summary>
-    /// Publishes the documents a committed write created, updated or deleted, or only that profiles
-    /// were written when more than <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/>
-    /// were deleted.
+    /// The stored document, read around a write that commits whatever the read does, or
+    /// <see langword="null"/> when the store fails: the write is not to fail for an announcement.
     /// </summary>
+    private async Task<Profile?> ReadStoredAsync(string id)
+    {
+        try
+        {
+            return await _projection.GetProfileByIdAsync(id, CancellationToken.None);
+        }
+        catch (Exception ex) when (StoreFailure.Is(ex))
+        {
+            _logger.LogWarning(ex, "Profile {Id} could not be read to announce its write", id);
+            return null;
+        }
+    }
+
+    /// <summary>Publishes the documents a committed write created, updated or deleted.</summary>
     /// <remarks>Uncancellable: the write has committed, so its subscribers must still hear of it.</remarks>
     private Task PublishAsync(
         IReadOnlyList<Profile>? created = null,
         IReadOnlyList<Profile>? updated = null,
         IReadOnlyList<Profile>? deleted = null)
     {
-        if (deleted?.Count > AuditedBulkDeleteExtensions.BroadcastMaterializationCap)
-            return _changes.PublishAsync(RecordsChanged.Written([typeof(Profile)]), CancellationToken.None);
-
         if ((created?.Count ?? 0) + (updated?.Count ?? 0) + (deleted?.Count ?? 0) == 0)
             return Task.CompletedTask;
 

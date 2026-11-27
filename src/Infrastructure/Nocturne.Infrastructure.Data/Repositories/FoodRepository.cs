@@ -52,14 +52,9 @@ public class FoodRepository : IFoodRepository
         _changes?.PublishAsync(RecordsChanged.Of(origin, created, updated, deleted), CancellationToken.None)
         ?? Task.CompletedTask;
 
-    /// <summary>
-    /// Publishes the foods a committed delete removed, or only that foods were written when there are
-    /// more than <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/> of them.
-    /// </summary>
+    /// <summary>Publishes the foods a committed delete removed.</summary>
     private Task PublishDeletedAsync(WriteOrigin origin, IReadOnlyList<FoodEntity> deleted) =>
-        deleted.Count > AuditedBulkDeleteExtensions.BroadcastMaterializationCap
-            ? ReportWrittenAsync()
-            : PublishAsync(origin, deleted: [.. deleted.Select(FoodMapper.ToDomainModel)]);
+        PublishAsync(origin, deleted: [.. deleted.Select(FoodMapper.ToDomainModel)]);
 
     /// <summary>
     /// Get all food entries
