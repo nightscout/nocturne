@@ -237,7 +237,11 @@ internal static class RustEnvelopeMapper
                     .ToList(),
             SleepSessionActive = ctx.SleepSessionActive,
             SensorState = ctx.SensorState is { } sensor
-                ? new WireSensorState(WireEnum(sensor.State), Utc(sensor.Since), Utc(sensor.Until))
+                ? new WireSensorState(
+                    WireEnum(sensor.State), Utc(sensor.Since), Utc(sensor.Until),
+                    sensor.OnceLapsed is { } lapsed
+                        ? new WireLapsedSensorState(WireEnum(lapsed.State), Utc(lapsed.Since))
+                        : null)
                 : null,
         };
 
@@ -406,7 +410,12 @@ internal static class RustEnvelopeMapper
     private sealed record WireSensorState(
         [property: JsonPropertyName("state")] string State,
         [property: JsonPropertyName("since")] DateTime? Since,
-        [property: JsonPropertyName("until")] DateTime? Until);
+        [property: JsonPropertyName("until")] DateTime? Until,
+        [property: JsonPropertyName("once_lapsed")] WireLapsedSensorState? OnceLapsed);
+
+    private sealed record WireLapsedSensorState(
+        [property: JsonPropertyName("state")] string State,
+        [property: JsonPropertyName("since")] DateTime? Since);
 
     private sealed record WireApsDetermination(
         [property: JsonPropertyName("at")] DateTime At,

@@ -66,14 +66,13 @@ public class SensorStateReportRepository
 
     /// <inheritdoc />
     public async Task<ArrivedSensorStateReport?> GetNewestAsync(
-        string device, string dataSource, DateTime since, DateTime asOf, DateTime latestTimestamp,
-        CancellationToken ct = default)
+        string device, string dataSource, DateTime since, DateTime asOf, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var newest = await ctx.SensorStateReports
             .AsNoTracking()
             .Where(e => e.DataSource == dataSource && e.Device == device
-                        && e.Timestamp >= since && e.Timestamp <= latestTimestamp
+                        && e.Timestamp >= since
                         && e.SysCreatedAt >= since && e.SysCreatedAt <= asOf)
             .Select(e => new { Entity = e, ArrivedAt = e.Timestamp < e.SysCreatedAt ? e.Timestamp : e.SysCreatedAt })
             .OrderByDescending(r => r.ArrivedAt)

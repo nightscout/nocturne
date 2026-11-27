@@ -798,6 +798,28 @@ public class AlertSweepJobWallClockTests
     }
 
     /// <summary>
+    /// A sensor state report's record-changed event, as the host maps it to facts, evaluates the low
+    /// rule, and a state that is not ok holds that rule instead of firing it on the reading it has.
+    /// </summary>
+    [NativeFact]
+    public async Task A_sensor_state_report_write_evaluates_the_low_and_a_state_that_is_not_ok_holds_it()
+    {
+        var fixture = new Fixture(AlertConditionType.Threshold, """{"direction": "below", "value": 70}""")
+        {
+            LatestMgdl = 55,
+            ReportedSensorState = new SensorStateSnapshot(SensorState.Error, null, T0.AddMinutes(11)),
+        };
+        fixture.Readings.Add(new SensorGlucose { Timestamp = T0, CreatedAt = T0, Mgdl = 55 });
+        var reportWrite = ContextFactWrites.MovedIn(RecordsChanged.Written([typeof(SensorStateReport)])).Facts;
+
+        await fixture.WriteAt(T0, [.. reportWrite]);
+
+        fixture.Evaluations.Should().Be(1, "the report write moves the sensor state, which the low reads");
+        fixture.InstancesCreated.Should().Be(0, "the sensor reported an error, so the low is held");
+        fixture.Dispatches.Should().Be(0);
+    }
+
+    /// <summary>
     /// A wall-clock glucose rule held by a reported state waits for the instant the report lapses,
     /// which the engine gives as its next change, and is evaluated there with no reading.
     /// </summary>

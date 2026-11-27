@@ -72,6 +72,7 @@ impl World {
                 }),
                 since: None,
                 until: None,
+                once_lapsed: None,
             }),
             ..SensorContext::default()
         }

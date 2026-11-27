@@ -80,8 +80,7 @@ public class SensorContextEnricherTests
     private void NewestIs(ReadingSource source, ArrivedSensorStateReport newest) =>
         _sensorStates
             .Setup(r => r.GetNewestAsync(
-                source.Device!, source.DataSource!, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<CancellationToken>()))
+                source.Device!, source.DataSource!, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(newest);
 
     /// <summary>
@@ -120,8 +119,7 @@ public class SensorContextEnricherTests
         enriched.SensorState.Should().BeNull();
         _sensorStates.Verify(
             r => r.GetNewestAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -151,13 +149,12 @@ public class SensorContextEnricherTests
 
         _sensorStates.Verify(
             r => r.GetNewestAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
     [Fact]
-    public async Task The_read_asks_for_the_reports_of_the_readings_device_and_source_within_the_bound()
+    public async Task The_read_asks_for_the_reports_of_the_readings_device_and_source_that_arrived_within_the_age_limit()
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
@@ -165,8 +162,7 @@ public class SensorContextEnricherTests
 
         _sensorStates.Verify(
             r => r.GetNewestAsync(
-                "CareLink MiniMed 780G", "carelink-connector", now - SensorStateReports.MaxAge, now, AlertReadings.Bound(now),
-                It.IsAny<CancellationToken>()),
+                "CareLink MiniMed 780G", "carelink-connector", now - SensorStateReports.MaxAge, now, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -211,8 +207,7 @@ public class SensorContextEnricherTests
         replay.SensorState.Should().NotBeNull().And.Be(live.SensorState);
         _sensorStates.Verify(
             r => r.GetNewestAsync(
-                CareLink.Device!, CareLink.DataSource!, at - SensorStateReports.MaxAge, at, AlertReadings.Bound(at),
-                It.IsAny<CancellationToken>()),
+                CareLink.Device!, CareLink.DataSource!, at - SensorStateReports.MaxAge, at, It.IsAny<CancellationToken>()),
             Times.Exactly(2));
     }
 
@@ -232,6 +227,35 @@ public class SensorContextEnricherTests
         var enriched = await BuildEnricher().EnrichAsync(noValue, [rule], CancellationToken.None);
 
         enriched.SensorState!.State.Should().Be(expected);
+    }
+
+    [NativeFact]
+    public async Task A_reported_state_that_lapses_over_a_reading_with_no_value_reads_no_value_from_its_original_start()
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        NewestIs(CareLink, Newest(4, SensorState.Error));
+        var noValue = ReadingOf(CareLink) with
+        {
+            LatestValue = null,
+            TrendRate = null,
+            SensorState = new SensorStateSnapshot(SensorState.NoValue, now.AddMinutes(-10)),
+        };
+        var noValueFor15 = MakeRule(AlertConditionType.SensorState, """{"states":["no_value"],"for_minutes":15}""");
+        var error = MakeRule(AlertConditionType.SensorState, """{"states":["error"]}""");
+        var enriched = await BuildEnricher().EnrichAsync(noValue, [noValueFor15, error], CancellationToken.None);
+
+        enriched.SensorState.Should().Be(new SensorStateSnapshot(
+            SensorState.Error, Since: null, now.AddMinutes(7), OnceLapsed: new LapsedSensorState(SensorState.NoValue, now.AddMinutes(-10))));
+        var whileReported = await EvaluatedAsync(error, enriched);
+        _timeProvider.Advance(TimeSpan.FromMinutes(8));
+        var noValueRead = await EvaluatedAsync(noValueFor15, enriched);
+        var errorRead = await EvaluatedAsync(error, enriched);
+
+        whileReported.ConditionMet.Should().BeTrue("the report counts for 7 more minutes");
+        noValueRead.ConditionUnknown.Should().BeFalse("the lapsed report falls back to the reading's no_value");
+        noValueRead.ConditionMet.Should().BeTrue("no_value began 10 minutes before the report was read, so it has lasted 18");
+        errorRead.ConditionUnknown.Should().BeFalse();
+        errorRead.ConditionMet.Should().BeFalse("the lapsed error is no longer the sensor's state");
     }
 
     [Fact]

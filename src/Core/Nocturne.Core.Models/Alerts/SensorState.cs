@@ -23,6 +23,17 @@ public enum SensorState
 /// <param name="Since">When it began, where the source says; null when it does not.</param>
 /// <param name="Until">
 /// When the host stops counting the report; null for <see cref="SensorState.NoValue"/>, which lasts as
-/// long as its reading. The engine reads a state whose <paramref name="Until"/> has passed as no state.
+/// long as its reading. The engine reads a state whose <paramref name="Until"/> has passed as the
+/// <paramref name="OnceLapsed"/> state, or as no state when there is none.
 /// </param>
-public sealed record SensorStateSnapshot(SensorState State, DateTime? Since, DateTime? Until = null);
+/// <param name="OnceLapsed">
+/// The state that holds once <paramref name="Until"/> has passed: the <see cref="SensorState.NoValue"/> of a
+/// newest reading with no value, which a reported state replaces while it counts.
+/// </param>
+public sealed record SensorStateSnapshot(
+    SensorState State, DateTime? Since, DateTime? Until = null, LapsedSensorState? OnceLapsed = null);
+
+/// <summary>The sensor's state once a reported one has lapsed. It does not lapse.</summary>
+/// <param name="State">The state that holds once the reported one has lapsed.</param>
+/// <param name="Since">When it began; null when that is not known.</param>
+public sealed record LapsedSensorState(SensorState State, DateTime? Since);

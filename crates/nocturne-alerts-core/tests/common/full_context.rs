@@ -220,18 +220,29 @@ fn state_spans() -> BoxedStrategy<Value> {
 
 /// The sensor's state, a name the crate has no member for one time in four,
 /// with its start half the time, and half the time an `until` within ten
-/// minutes either side of now, exactly now now and then.
+/// minutes either side of now, exactly now now and then. Half the time a state
+/// carries the state it falls back to, named and started as the state is; the
+/// engine reads it only once an `until` has passed.
 pub(crate) fn sensor_state() -> BoxedStrategy<Value> {
+    let lapsed = (
+        named::<SensorState>(UNRECOGNISED_SENSOR_STATE),
+        option::weighted(0.5, age_in(60)),
+    )
+        .prop_map(|(state, since)| {
+            object(vec![("state", Some(state)), ("since", since.map(instant))])
+        });
     (
         named::<SensorState>(UNRECOGNISED_SENSOR_STATE),
         option::weighted(0.5, age_in(60)),
         option::weighted(0.5, (-20..=20i64).prop_map(|n| n * 30)),
+        option::weighted(0.5, lapsed),
     )
-        .prop_map(|(state, since, until)| {
+        .prop_map(|(state, since, until, once_lapsed)| {
             object(vec![
                 ("state", Some(state)),
                 ("since", since.map(instant)),
                 ("until", until.map(instant)),
+                ("once_lapsed", once_lapsed),
             ])
         })
         .boxed()

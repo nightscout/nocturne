@@ -109,6 +109,7 @@ fn sensor_state_of(mgdl: i64) -> Option<SensorStateSnapshot> {
         state: Some(state),
         since: None,
         until: None,
+        once_lapsed: None,
     })
 }
 

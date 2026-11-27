@@ -128,7 +128,11 @@ public static class ScenarioConversions
                 ?? new Dictionary<Guid, ActiveTrackerReference>(),
             SleepSessionActive = ctx.SleepSessionActive,
             SensorState = ctx.SensorState is { } sensor
-                ? new SensorStateSnapshot(ParseWireEnum<SensorState>(sensor.State)!.Value, Utc(sensor.Since), Utc(sensor.Until))
+                ? new SensorStateSnapshot(
+                    ParseWireEnum<SensorState>(sensor.State)!.Value, Utc(sensor.Since), Utc(sensor.Until),
+                    sensor.OnceLapsed is { } lapsed
+                        ? new LapsedSensorState(ParseWireEnum<SensorState>(lapsed.State)!.Value, Utc(lapsed.Since))
+                        : null)
                 : null,
         };
     }

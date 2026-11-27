@@ -99,7 +99,7 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
     }
 
     [Fact]
-    public async Task GetNewestAsync_ReadsTheNewestInTheWindowStoredByOfTheDeviceAndSourceOnly()
+    public async Task GetNewestAsync_ReadsTheNewestSinceStoredByOfTheDeviceAndSourceOnly()
     {
         await using var store = await OpenAsync();
         var reports = Reports(store);
@@ -108,26 +108,25 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
             Report(At(0)),
             Report(At(5)),
             Report(At(9), SensorState.Ok),
-            Report(At(12)),
-            Report(At(6), dataSource: "nightscout"),
-            Report(At(6), device: "CareLink Guardian"),
+            Report(At(13), dataSource: "nightscout"),
+            Report(At(14), device: "CareLink Guardian"),
         ], WriteOrigin.Live);
-        var deleted = Report(At(7));
+        var deleted = Report(At(15));
         await reports.BulkCreateAsync([deleted], WriteOrigin.Live);
         await reports.DeleteByCorrelationIdAsync(deleted.CorrelationId!.Value, WriteOrigin.Live);
         store.Recorder.Clear();
 
-        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(5), Later, At(10));
-        var beforeTheOk = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(5), Later, At(8));
-        var notStoredYet = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(5), At(10), At(10));
+        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(5), Later);
+        var tooOld = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(10), Later);
+        var notStoredYet = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(5), At(10));
 
         store.Recorder.Count("SELECT").Should().Be(3);
-        newest!.Report.Timestamp.Should().Be(At(9), "a report past the newest timestamp asked for is not read");
-        newest.ArrivedAt.Should().Be(At(9), "a report dated before it was stored arrived at its timestamp");
-        beforeTheOk!.Report.Should().Match<SensorStateReport>(r =>
-            r.Timestamp == At(5) && r.State == SensorState.WarmingUp
-            && r.ReportedField == SensorStateReport.CareLinkField && r.ReportedValue == "WARM_UP" && r.CreatedAt != default,
+        newest!.Report.Should().Match<SensorStateReport>(r =>
+            r.Timestamp == At(9) && r.State == SensorState.Ok
+            && r.ReportedField == SensorStateReport.CareLinkField && r.ReportedValue == "NO_ERROR_MESSAGE" && r.CreatedAt != default,
             "a deleted row and another device's or source's are not read");
+        newest.ArrivedAt.Should().Be(At(9), "a report dated before it was stored arrived at its timestamp");
+        tooOld.Should().BeNull("a report dated before the instant asked from is not read");
         notStoredYet.Should().BeNull("a row stored after the instant read was not there then");
     }
 
@@ -140,7 +139,7 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
         var reports = Reports(store);
         await reports.BulkCreateAsync([Report(At(5), older), Report(At(6), state: null)], WriteOrigin.Live);
 
-        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(0), Later, At(10));
+        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(0), Later);
 
         newest!.Report.Timestamp.Should().Be(At(6));
         newest.Report.State.Should().BeNull("the older state does not stand in for a value outside the allowlist");
@@ -155,10 +154,30 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
         await reports.BulkCreateAsync([Report(now.AddMinutes(2), SensorState.Error)], WriteOrigin.Live);
         await reports.BulkCreateAsync([Report(now.AddMinutes(1), SensorState.Ok)], WriteOrigin.Live);
 
-        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, now.AddMinutes(-5), Later, now.AddMinutes(3));
+        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, now.AddMinutes(-5), Later);
 
         newest!.Report.State.Should().Be(SensorState.Ok, "the error is dated ahead, but the ok was stored after it");
         newest.ArrivedAt.Should().Be(newest.Report.CreatedAt, "a report dated ahead arrived when it was stored");
+    }
+
+    [Theory]
+    [InlineData(8, true)]
+    [InlineData(3, true)]
+    [InlineData(-3, false)]
+    public async Task GetNewestAsync_ReadsAReportAtTheWriteThatStoresItAndCountsItFromItsArrival(
+        double minutesFromStore, bool arrivedWhenStored)
+    {
+        await using var store = await OpenAsync();
+        var reports = Reports(store);
+        var stored = DateTime.UtcNow;
+        var dated = stored.AddMinutes(minutesFromStore);
+        await reports.BulkCreateAsync([Report(dated, SensorState.Error)], WriteOrigin.Live);
+
+        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, stored.AddMinutes(-11), Later);
+
+        newest.Should().NotBeNull("a report dated beyond the clock tolerance is visible once it is stored");
+        newest!.ArrivedAt.Should().BeCloseTo(
+            arrivedWhenStored ? newest.Report.CreatedAt : dated, TimeSpan.FromMilliseconds(1));
     }
 
     [Theory]
@@ -172,7 +191,7 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
         await reports.BulkCreateAsync(
             [Report(At(5), SensorState.Ok, id: lower), Report(At(5), notOk, id: higher)], WriteOrigin.Live);
 
-        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(0), Later, At(10));
+        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(0), Later);
 
         newest!.Report.Id.Should().Be(higher, "ok ranks last of reports that arrived together");
     }
@@ -186,7 +205,7 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
         await reports.BulkCreateAsync(
             [Report(At(5), state: null, id: lower), Report(At(5), SensorState.Error, id: higher)], WriteOrigin.Live);
 
-        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(0), Later, At(10));
+        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(0), Later);
 
         newest!.Report.State.Should().Be(SensorState.Error, "a report that flagged the sensor is not outvoted by one that arrived with it");
     }
@@ -200,7 +219,7 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
         await reports.BulkCreateAsync(
             [Report(At(5), SensorState.Error, id: higher), Report(At(5), SensorState.Expired, id: lower)], WriteOrigin.Live);
 
-        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(0), Later, At(10));
+        var newest = await reports.GetNewestAsync(CareLinkDevice, CareLinkSource, At(0), Later);
 
         newest!.Report.Id.Should().Be(lower);
     }
@@ -215,7 +234,7 @@ public class DeviceStatusBatchReadsTests(RlsCompletenessFixture fx)
             Extras(At(5), new() { ["cgm"] = new Dictionary<string, object?> { ["sensorState"] = "NO_ERROR_MESSAGE" } }),
             Extras(At(6), new() { ["xdripjs"] = new Dictionary<string, object?> { ["state"] = 6 } }),
         ], WriteOrigin.Live);
-        var read = await Reports(store).GetNewestAsync(CareLinkDevice, CareLinkSource, At(0), Later, At(10));
+        var read = await Reports(store).GetNewestAsync(CareLinkDevice, CareLinkSource, At(0), Later);
 
         read.Should().BeNull("an extras row states nothing to alerts, so the state is absent and never ok");
     }

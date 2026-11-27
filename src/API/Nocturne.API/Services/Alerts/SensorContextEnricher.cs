@@ -528,8 +528,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// The sensor state the newest recent <see cref="Nocturne.Core.Models.V4.SensorStateReport"/> of the newest reading's source states
     /// (<see cref="SensorStateReports"/>), with the instant the engine stops counting it. A state other
     /// than ok replaces the <see cref="SensorState.NoValue"/> the base context may carry for a newest
-    /// reading with no value, since it says why; an ok one does not. A context whose reading source
-    /// lacks a device or a data source reads no report.
+    /// reading with no value, since it says why, and that <see cref="SensorState.NoValue"/> holds again
+    /// once the report lapses (<see cref="SensorStateSnapshot.OnceLapsed"/>); an ok one does not replace it.
+    /// A context whose reading source lacks a device or a data source reads no report.
     /// </summary>
     private async Task<SensorContext> WithReportedSensorStateAsync(
         SensorContext context, DateTime now, CancellationToken ct)
@@ -537,10 +538,17 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         if (context.LatestSource is not { Device: { Length: > 0 } device, DataSource: { Length: > 0 } dataSource })
             return context;
         var newest = await _deps.SensorStates.GetNewestAsync(
-            device, dataSource, now - SensorStateReports.MaxAge, now, AlertReadings.Bound(now), ct);
+            device, dataSource, now - SensorStateReports.MaxAge, now, ct);
         return SensorStateReports.StateOf(newest) is var (reported, until)
                && (reported != SensorState.Ok || context.SensorState is null)
-            ? context with { SensorState = new SensorStateSnapshot(reported, Since: null, until) }
+            ? context with
+            {
+                SensorState = new SensorStateSnapshot(
+                    reported, Since: null, until,
+                    OnceLapsed: context.SensorState is { State: SensorState.NoValue } noValue
+                        ? new LapsedSensorState(noValue.State, noValue.Since)
+                        : null),
+            }
             : context;
     }
 

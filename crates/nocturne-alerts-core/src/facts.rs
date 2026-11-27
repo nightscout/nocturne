@@ -672,6 +672,7 @@ mod tests {
                 state: Some(SensorState::Ok),
                 since: Some(ago(30)),
                 until: None,
+                once_lapsed: None,
             }),
         }
     }
@@ -914,6 +915,7 @@ mod tests {
                     state,
                     since: None,
                     until: None,
+                    once_lapsed: None,
                 });
                 let mut timers = TimerStore::default();
                 let mut env = Env::new(now(), Uuid::nil(), &ctx, &mut timers);

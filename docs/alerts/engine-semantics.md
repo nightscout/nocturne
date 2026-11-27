@@ -693,22 +693,28 @@ in §3 plus:
   arrive with no value do not hold off a signal-loss alert, as they never have. The engine tells
   this case from no readings arriving by the newest reading's own times, and the judged glucose
   leaves by `SensorState` (§3, sensor state).
-- `SensorState` is `{state, since, until}` or absent: what the sensor's own reports say of its
-  readings, `state` one of `warming_up`, `ok`, `calibration_needed`, `error`, `expired`,
+- `SensorState` is `{state, since, until, once_lapsed}` or absent: what the sensor's own reports
+  say of its readings, `state` one of `warming_up`, `ok`, `calibration_needed`, `error`, `expired`,
   `no_value`, `since` the instant it began where the source says, and `until` the instant the host
   stops counting the report. Absent means nothing is known of the sensor, and every glucose leaf
   reads as it would without the member. **The engine owns the lapse:** a state whose `until` is at
   or before `now` is no state, so a host that evaluates late cannot keep a report its own bound has
   ended, and `until` is a next change of every leaf that reads the fact (§5.3). `no_value` has no
-  `until`: it lasts as long as its reading is the newest.
+  `until`: it lasts as long as its reading is the newest. `once_lapsed` is `{state, since}` or
+  absent: the state that holds from `until`. The host sends it when a reported state replaces the
+  `no_value` of a newest reading with no value, with that `no_value`'s own `since`. From `until`
+  the engine reads `once_lapsed` as the state, with no `until` of its own, so a `no_value` leaf
+  never reads unknown over a reading that still has no value; with `once_lapsed` absent, the lapsed
+  state is no state.
 - A host fills `SensorState` only from a source that states the state outright, never from elapsed
   time (a warm-up guessed from a sensor start and a device's warm-up length), and only from a
   report of **the newest reading's own source**: the report's device and data source are both
   present, the newest reading's are both present, and each equals the other. A report of another
   device, or one that lacks either member on either side, is no state, so a pump's sensor error
-  never holds a low read from a different CGM. A report counts while its timestamp is within the
-  clock tolerance of `now` (§5.4) and it arrived at most 11 minutes (the default glucose freshness
-  bound) before `now`, its arrival being the earlier of its timestamp and when the host stored it;
+  never holds a low read from a different CGM. A report counts while it arrived at most 11
+  minutes (the default glucose freshness bound) before `now`, its arrival being the earlier of its
+  timestamp and when the host stored it, so a report dated ahead of the instant it is stored counts
+  from that instant, however far ahead it is dated;
   reports are ordered by that arrival, and `until` is that arrival plus 11 minutes. So a report
   dated ahead lasts 11 minutes from when it came, and an old report backfilled now never counts.
   Of reports that arrived at the same instant, a state that is not ok is the newest, then a report
