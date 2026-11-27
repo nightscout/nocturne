@@ -296,6 +296,11 @@ Know what it actually checks before trusting it:
   (`ConcurrentIndexBuildGuardTests` forbids writing `CREATE UNIQUE INDEX CONCURRENTLY` in a
   migration). The guard reads its table off the `ON <table>` in the definition, and
   `TheGuardSeesAConcurrentUniqueBuild` keeps that pattern from silently stopping to match.
+- **An index on a table the migration did not create goes through `ConcurrentIndexBuilder.Build`**,
+  replacing the `CreateIndex` that `dotnet ef migrations add` generates, which blocks writes for the
+  whole build. `ConcurrentIndexBuildGuardTests` fails a plain `CreateIndex` or a named raw
+  `CREATE INDEX` on one; a migration that shipped before the guard is named in its allowlist. It
+  does not see an unnamed `CREATE INDEX ON …`, or SQL that `Up` takes from outside its own body.
 
 An index whose table it cannot read off the call — an interpolated `{table}` hole,
 or a loop variable — is reported rather than skipped, so the multi-table loop the

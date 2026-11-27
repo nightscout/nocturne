@@ -50,7 +50,7 @@ public class UniqueIndexDeduplicationGuardTests
             + "the duplicate losers earlier in the same Up, as "
             + "20260818102940_AddTenantScopedLegacyIdIndexesToSnapshots does (squashed into the "
             + "baseline; read it at the v0.3.0 tag). A table reported as "
-            + $"'{UnresolvedTable}' is one the guard could not read off the call; unroll the loop "
+            + $"'{MigrationSourceFiles.UnresolvedTable}' is one the guard could not read off the call; unroll the loop "
             + "so both the CREATE TABLE and the index name it literally — naming only the index "
             + "still reports, because the exemption cannot match a create it also cannot read");
     }
@@ -145,7 +145,7 @@ public class UniqueIndexDeduplicationGuardTests
     private static IReadOnlyList<string> UndeduplicatedTablesIn(string up)
     {
         var live = MigrationSourceFiles.WithCommentsBlanked(up);
-        var created = TablesCreatedIn(live);
+        var created = MigrationSourceFiles.TablesCreatedIn(live);
 
         var indexed = UniqueIndexCreations(up)
             .Where(x => !created.Contains(x.Table))
@@ -167,9 +167,10 @@ public class UniqueIndexDeduplicationGuardTests
 
     /// <summary>
     /// Every unique index the migration's <c>Up</c> creates, paired with its target table. A
-    /// target that is not a bare literal — a <c>{table}</c> hole in interpolated SQL, a loop
-    /// variable, a schema qualifier — resolves to <see cref="UnresolvedTable"/>, which no
-    /// <c>CreateTable</c> can match, so it can only ever be exempted by an actual cleanup.
+    /// target that is not a bare literal, such as a <c>{table}</c> hole in interpolated SQL or a
+    /// loop variable, resolves to <see cref="MigrationSourceFiles.UnresolvedTable"/>, which no
+    /// <c>CreateTable</c> can match, so it can only ever be exempted by an actual cleanup. A schema
+    /// qualifier is stripped, so <c>public.x</c> resolves to <c>x</c>.
     /// Dropping it instead would blind the guard to the multi-table loop the rule's own worked
     /// example is written in.
     /// </summary>
@@ -177,47 +178,14 @@ public class UniqueIndexDeduplicationGuardTests
     {
         foreach (var regex in new[] { FluentUniqueIndex, FluentUniqueConstraint })
             foreach (Match match in regex.Matches(up))
-                yield return (match.Index, FluentTable(match.Groups[1].Value));
+                yield return (match.Index, MigrationSourceFiles.FluentTable(match.Groups[1].Value));
 
         foreach (var regex in new[] { SqlUniqueIndex, SqlUniqueConstraint, BuilderUniqueIndex })
             foreach (Match match in regex.Matches(up))
-                yield return (match.Index, ResolveTable(match.Groups[1].Value));
+                yield return (match.Index, MigrationSourceFiles.ResolveTable(match.Groups[1].Value));
     }
-
-    /// <summary>
-    /// The table a builder call targets: the named <c>table:</c> argument, or for a positional
-    /// call the second string literal — <c>CreateIndex</c>, <c>AddUniqueConstraint</c> and
-    /// <c>AddPrimaryKey</c> all take (name, table, …).
-    /// </summary>
-    private static string FluentTable(string arguments) =>
-        TableArgument.Match(arguments) is { Success: true } named
-            ? ResolveTable(named.Groups[1].Value)
-            : PositionalTableArgument.Match(arguments) is { Success: true } positional
-                ? ResolveTable(positional.Groups[1].Value)
-                : UnresolvedTable;
-
-    /// <summary>
-    /// The table a captured reference names, or <see cref="UnresolvedTable"/> when it is not a
-    /// plain name — an interpolated <c>{table}</c> hole, or a loop variable.
-    /// </summary>
-    private static string ResolveTable(string captured)
-    {
-        var bare = MigrationSourceFiles.BareTableName(captured);
-
-        return PlainTableName.IsMatch(bare) ? bare : UnresolvedTable;
-    }
-
-    private static IReadOnlySet<string> TablesCreatedIn(string up) =>
-        new[] { FluentCreateTable, SqlCreateTable }
-            .SelectMany(r => r.Matches(up).Select(m => ResolveTable(m.Groups[1].Value)))
-            .Where(t => t != UnresolvedTable)
-            .ToHashSet(StringComparer.Ordinal);
-
-    private const string UnresolvedTable = "<table not resolvable to a literal name>";
 
     private const RegexOptions Sql = RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled;
-
-    private static readonly Regex PlainTableName = new(@"^\w+$", RegexOptions.Compiled);
 
     private static readonly Regex FluentUniqueIndex = new(
         @"\.CreateIndex\s*\(([^;]*?\bunique\s*:\s*true[^;]*?)\)\s*;", RegexOptions.Compiled);
@@ -225,21 +193,13 @@ public class UniqueIndexDeduplicationGuardTests
     private static readonly Regex FluentUniqueConstraint = new(
         @"\.(?:AddUniqueConstraint|AddPrimaryKey)\s*\(([^;]*?)\)\s*;", RegexOptions.Compiled);
 
-    private static readonly Regex FluentCreateTable = new(
-        @"\.CreateTable\s*\(\s*name\s*:\s*""([^""]+)""", RegexOptions.Compiled);
-
-    private static readonly Regex TableArgument = new(@"table\s*:\s*""([^""]+)""", RegexOptions.Compiled);
-
-    private static readonly Regex PositionalTableArgument = new(
-        @"^\s*""[^""]*""\s*,\s*""([^""]+)""", RegexOptions.Compiled);
-
     private static readonly Regex SqlUniqueIndex = new(
         @"CREATE\s+UNIQUE\s+INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+\S+\s+ON\s+(?:ONLY\s+)?(\S+)",
         Sql);
 
     /// <summary>
     /// <c>ConcurrentIndexBuilder.BuildUnique</c>, whose table is the one its definition names after
-    /// <c>ON</c>; a <c>{table}</c> hole there resolves to <see cref="UnresolvedTable"/>.
+    /// <c>ON</c>; a <c>{table}</c> hole there resolves to <see cref="MigrationSourceFiles.UnresolvedTable"/>.
     /// </summary>
     private static readonly Regex BuilderUniqueIndex = new(
         @"ConcurrentIndexBuilder\.BuildUnique\s*\([^;]*?""ON\s+(?:ONLY\s+)?([^\s""]+)", Sql);
@@ -249,9 +209,6 @@ public class UniqueIndexDeduplicationGuardTests
 
     private static readonly Regex SqlUniqueConstraint = new(
         @"ALTER\s+TABLE\s+(?:ONLY\s+)?(\S+)[^;]*?\bADD\s+CONSTRAINT\b[^;]*?\bUNIQUE\b", Sql);
-
-    private static readonly Regex SqlCreateTable = new(
-        @"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\S+)", Sql);
 
     private static readonly Regex RankedDuplicates = new(
         @"row_number\s*\(\s*\)\s*over\s*\(\s*partition\s+by\b", Sql);
