@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 
@@ -30,7 +31,6 @@ public class MemberHistoryPlanTests(RlsCompletenessFixture fx)
         "ix_auth_audit_log_tenant_created",
         "ix_auth_audit_log_event_type",
         "ix_auth_audit_log_target_subject_created",
-        "ix_auth_audit_log_target_subject_id",
     ];
 
     [Fact]
@@ -77,6 +77,17 @@ public class MemberHistoryPlanTests(RlsCompletenessFixture fx)
                     indexes.Should().NotIntersectWith(WalksOfTheWholeLog, because);
                 }
             }
+
+            var joins = capture.Commands.Skip(2).Single(c => c.CommandText.Contains("auth_audit_log"));
+            foreach (var generic in new[] { false, true })
+            {
+                var plan = generic
+                    ? await QueryPlans.ExplainGenericAsync(conn, joins)
+                    : await QueryPlans.ExplainAsync(conn, joins);
+                var because = $"{read}, the recorded joins, {(generic ? "generic" : "custom")} plan: {plan}";
+                plan.Descendants("Node Type").Should().NotContain("Seq Scan", because);
+                plan.Descendants("Index Name").Should().NotBeEmpty(because);
+            }
         }
     }
 
@@ -97,7 +108,7 @@ public class MemberHistoryPlanTests(RlsCompletenessFixture fx)
             SELECT gen_random_uuid(), (@changeTypes)[1 + g % cardinality(@changeTypes)], @tid,
                    CASE WHEN g % 5 = 0 THEN @member ELSE gen_random_uuid() END,
                    now() - make_interval(mins => g * 150), true,
-                   jsonb_build_object('{{AuthAuditKind.Key}}', '{{AuthAuditKind.Tenant}}')
+                   jsonb_build_object('{{AuthAuditKind.Key}}', '{{AuthAuditKind.Tenant}}', '{{MemberAccessAudit.InviteKey}}', gen_random_uuid())
             FROM generate_series(1, {{MemberChanges}}) g;
 
             INSERT INTO auth_audit_log (id, event_type, tenant_id, target_subject_id, created_at, success, details)

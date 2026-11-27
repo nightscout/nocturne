@@ -86,6 +86,32 @@ public static class QueryPlans
         }
     }
 
+    /// <summary>
+    /// Every non-query command sent, in order, for a write that <see cref="ExplainAsync"/> can plan
+    /// without running, such as the <c>UPDATE</c> an <c>ExecuteUpdateAsync</c> sends.
+    /// </summary>
+    /// <summary>A copy of <paramref name="command"/> that outlives it, for a capture to explain later.</summary>
+    private static NpgsqlCommand Detached(DbCommand command)
+    {
+        var copy = new NpgsqlCommand(command.CommandText);
+        foreach (NpgsqlParameter p in command.Parameters)
+            copy.Parameters.Add(p.Clone());
+        return copy;
+    }
+
+    public sealed class NonQueryCapture : DbCommandInterceptor
+    {
+        public List<NpgsqlCommand> Commands { get; } = [];
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            Commands.Add(Detached(command));
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
+
     public sealed class LastReaderCapture : DbCommandInterceptor
     {
         public NpgsqlCommand? Command => Commands.Count == 0 ? null : Commands[^1];
@@ -97,10 +123,7 @@ public static class QueryPlans
             DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
             CancellationToken cancellationToken = default)
         {
-            var copy = new NpgsqlCommand(command.CommandText);
-            foreach (NpgsqlParameter p in command.Parameters)
-                copy.Parameters.Add(p.Clone());
-            Commands.Add(copy);
+            Commands.Add(Detached(command));
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
     }

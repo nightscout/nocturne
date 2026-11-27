@@ -914,9 +914,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("RefreshTokenId");
 
-                    b.HasIndex("TargetSubjectId")
-                        .HasDatabaseName("ix_auth_audit_log_target_subject_id");
-
                     b.HasIndex("ActorCredential", "CreatedAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_auth_audit_log_actor_credential_created");
