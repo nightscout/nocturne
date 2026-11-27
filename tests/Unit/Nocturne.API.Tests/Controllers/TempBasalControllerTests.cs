@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Tests.Controllers.V4.Base;
 using Nocturne.API.Validators.V4;
 using Nocturne.Core.Contracts.Devices;
@@ -190,6 +191,49 @@ public class TempBasalControllerTests
         var objectResult = (ObjectResult)result.Result!;
         objectResult.StatusCode.Should().Be(StatusCodes.Status201Created);
         objectResult.Value.Should().BeOfType<TempBasal[]>().Which.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateBulk_RecordsTheRowsItMovesAndTheSpansItWritesOrTruncates()
+    {
+        var footprint = TenantCacheWriteFootprint.Open(_controller.HttpContext);
+        var storedBefore = T0.UtcDateTime.AddDays(-30);
+        var truncatedStart = T0.UtcDateTime.AddMinutes(-10);
+        _repo.Setup(r => r.GetUpsertTargetTimestampsAsync(It.IsAny<IReadOnlyCollection<TempBasal>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([storedBefore]);
+        _repo.Setup(r => r.GetActiveAtAsync(T0.UtcDateTime.AddMinutes(5), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TempBasal { Id = Guid.NewGuid(), StartTimestamp = truncatedStart, Rate = 1.0 });
+
+        await _controller.CreateBulk(
+            [Request(isCancel: true, timestamp: T0.AddMinutes(5)), Request(timestamp: T0)], CancellationToken.None);
+
+        footprint.Timestamps.Should().Equal(storedBefore, T0.UtcDateTime, truncatedStart);
+    }
+
+    [Fact]
+    public async Task CreateBulk_RunsTheBeforeAndAfterHooksTheBaseGivesEveryBulk()
+    {
+        var controller = new HookedTempBasalController(_repo.Object, _stamper.Object)
+        {
+            ControllerContext = _controller.ControllerContext,
+        };
+        _repo.Setup(r => r.GetActiveAtAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TempBasal { Id = Guid.NewGuid(), StartTimestamp = T0.UtcDateTime.AddMinutes(-10) });
+        CreateTempBasalRequest[] payload = [Request(timestamp: T0), Request(isCancel: true, timestamp: T0.AddMinutes(5))];
+
+        await controller.CreateBulk(payload, CancellationToken.None);
+
+        controller.BeforeBulkItems.Should().Be(2, "a cancel is mapped with the rest");
+        controller.AfterCreateCalls.Should().Be(2, "the span and the truncated span are both written records");
+
+        controller.RejectBeforeBulk = true;
+        _repo.Invocations.Clear();
+
+        var result = await controller.CreateBulk(payload, CancellationToken.None);
+
+        ((ObjectResult)result.Result!).StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _repo.Verify(r => r.CreateAsync(It.IsAny<TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repo.Verify(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -586,4 +630,28 @@ public class TempBasalControllerTests
 
     private void VerifyFetched(int limit, int offset) =>
         ListOf(_repo).Verify(r => r.GetAsync(null, null, null, null, limit, offset, true, It.IsAny<CancellationToken>()), Times.Once);
+
+    private sealed class HookedTempBasalController(ITempBasalRepository repo, IPatientDeviceStamper stamper)
+        : TempBasalController(repo, stamper)
+    {
+        public bool RejectBeforeBulk { get; set; }
+
+        public int BeforeBulkItems { get; private set; }
+
+        public int AfterCreateCalls { get; private set; }
+
+        protected override Task<ObjectResult?> OnBeforeBulkCreateAsync(
+            IReadOnlyList<TempBasal> models, IReadOnlyList<CreateTempBasalRequest> requests, CancellationToken ct)
+        {
+            BeforeBulkItems = models.Count;
+            return Task.FromResult<ObjectResult?>(
+                RejectBeforeBulk ? Problem(detail: "rejected", statusCode: 400, title: "Bad Request") : null);
+        }
+
+        protected override Task<TempBasal> OnAfterCreateAsync(TempBasal created, CancellationToken ct)
+        {
+            AfterCreateCalls++;
+            return Task.FromResult(created);
+        }
+    }
 }

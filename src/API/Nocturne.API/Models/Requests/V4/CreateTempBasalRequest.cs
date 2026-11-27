@@ -11,7 +11,8 @@ namespace Nocturne.API.Models.Requests.V4;
 ///
 /// A cancel (<see cref="IsCancel"/> = <see langword="true"/>) does not create a record: it
 /// truncates the temp basal active at <see cref="Timestamp"/> by setting its end to that instant.
-/// <see cref="Rate"/> and <see cref="DurationMinutes"/> are ignored for cancels.
+/// <see cref="Rate"/> and <see cref="DurationMinutes"/> are ignored for cancels. A batch is written
+/// in timestamp order, so a cancel may end a span that starts earlier in the same batch.
 /// </remarks>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.TempBasalController"/>
 /// <seealso cref="TempBasal"/>

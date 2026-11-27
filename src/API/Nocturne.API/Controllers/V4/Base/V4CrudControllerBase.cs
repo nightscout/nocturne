@@ -152,7 +152,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
 
         var footprint = TenantCacheWriteFootprint.Of(HttpContext);
         await RecordUpsertTargetsAsync(footprint, models, ct);
-        var written = (await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct)).ToArray();
+        var written = await WriteBulkAsync(requests, models, ct);
         footprint?.AddRange(written.Select(w => w.Timestamp));
         var returned = await OnAfterBulkCreateAsync(written, ct);
         await EnrichCommittedAsync(returned, ct);
@@ -401,6 +401,27 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     protected virtual Task<ObjectResult?> OnBeforeBulkCreateAsync(
         IReadOnlyList<TModel> models, IReadOnlyList<TCreateRequest> requests, CancellationToken ct)
         => Task.FromResult<ObjectResult?>(null);
+
+    /// <summary>
+    /// Persists a validated, mapped bulk payload. The default writes every model in one
+    /// <see cref="IBulkCreateRepository{TRecord}.BulkCreateAsync"/>. Override where the items must be
+    /// written in an order of their own, or where an item is not a create.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="CreateBulk"/> has already validated the payload and run <see cref="OnBeforeBulkCreateAsync"/>,
+    /// and goes on to record the write footprint, run <see cref="OnAfterBulkCreateAsync"/> and enrich the
+    /// result, so an override owns only the write.
+    /// </remarks>
+    /// <param name="requests">The inbound requests, positionally aligned with <paramref name="models"/>.</param>
+    /// <param name="models">The mapped records, one per request, whatever the request asks for.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// Every record the write persisted or changed. Each one, created or changed, then runs
+    /// <see cref="OnAfterCreateAsync"/> through <see cref="OnAfterBulkCreateAsync"/>.
+    /// </returns>
+    protected virtual async Task<TModel[]> WriteBulkAsync(
+        IReadOnlyList<TCreateRequest> requests, IReadOnlyList<TModel> models, CancellationToken ct)
+        => (await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct)).ToArray();
 
     /// <summary>
     /// Hook called after a bulk create. Runs <see cref="OnAfterCreateAsync"/> once per written record,
