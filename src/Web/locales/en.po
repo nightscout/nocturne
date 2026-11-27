@@ -51245,3 +51245,41 @@ msgstr "We looked at what is connected and think these are in use. Is that right
 #: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
 msgid "Yes, this one"
 msgstr "Yes, this one"
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "You are not in that group. The list shows everyone you follow."
+msgstr "You are not in that group. The list shows everyone you follow."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Your groups did not load. The list shows everyone you follow."
+msgstr "Your groups did not load. The list shows everyone you follow."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "You cannot see # person in this group."
+msgid_plural "You cannot see # people in this group."
+msgstr[0] "You cannot see # person in this group."
+msgstr[1] "You cannot see # people in this group."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "You cannot see anyone in this group"
+msgstr "You cannot see anyone in this group"
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Each person's site decides who on the team can see them."
+msgstr "Each person's site decides who on the team can see them."
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "You can see no people in this group"
+msgstr "You can see no people in this group"
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "A manager of the team chooses the people in each group."
+msgstr "A manager of the team chooses the people in each group."
+
+#: src/lib/components/people/PeopleTabs.svelte
+msgid "Lists of people"
+msgstr "Lists of people"
+
+#: src/lib/components/people/PeopleTabs.svelte
+msgid "Everyone"
+msgstr "Everyone"

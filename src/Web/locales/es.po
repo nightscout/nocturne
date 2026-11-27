@@ -52184,3 +52184,41 @@ msgstr ""
 #: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
 msgid "Yes, this one"
 msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "You are not in that group. The list shows everyone you follow."
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Your groups did not load. The list shows everyone you follow."
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "You cannot see # person in this group."
+msgid_plural "You cannot see # people in this group."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "You cannot see anyone in this group"
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "Each person's site decides who on the team can see them."
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "You can see no people in this group"
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "A manager of the team chooses the people in each group."
+msgstr ""
+
+#: src/lib/components/people/PeopleTabs.svelte
+msgid "Lists of people"
+msgstr ""
+
+#: src/lib/components/people/PeopleTabs.svelte
+msgid "Everyone"
+msgstr ""
