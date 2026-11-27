@@ -21,7 +21,7 @@ export interface DocsResult {
   error?: string;
 }
 
-const frontmatterEnd = (lines: string[]): number => {
+export const frontmatterEnd = (lines: string[]): number => {
   if (lines[0]?.trimEnd() !== "---") return 0;
   const close = lines.findIndex((l, i) => i > 0 && l.trimEnd() === "---");
   return close + 1;

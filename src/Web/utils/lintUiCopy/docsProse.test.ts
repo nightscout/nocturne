@@ -3,29 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
 import { lintDocsProse } from "./docsProse.ts";
-
-const repoRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../../..",
-);
-
-const withPage = <T>(source: string, run: (dir: string) => T): T => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "docs-prose-"));
-  try {
-    fs.writeFileSync(path.join(dir, "page.svx"), source);
-    return run(dir);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-};
-
-const lineOf = (source: string, text: string): number => {
-  const index = source.split("\n").findIndex((l) => l.includes(text));
-  assert.notEqual(index, -1, `fixture has no line with ${text}`);
-  return index + 1;
-};
+import { lineOf, repoRoot, withPage } from "./fixtures.ts";
 
 const page = [
   "---",

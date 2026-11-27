@@ -1,0 +1,5 @@
+The color of the line is gray.
+
+Canceled readings stay in the list.
+
+Open the dialog to see the catalog.

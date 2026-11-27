@@ -1,0 +1,7 @@
+Wait two hours, if the sensor is new.
+
+Restart the app, unless it is open.
+
+Stop the pump, when the alarm sounds.
+
+WAIT TWO HOURS, IF THE SENSOR IS NEW.

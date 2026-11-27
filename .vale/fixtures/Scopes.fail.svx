@@ -1,0 +1,11 @@
+---
+title: Frontmatter is not a paragraph of this file
+---
+
+Do not use don't in prose.
+
+The word there's is a contraction in prose.
+
+Select click in prose.
+
+Leverage the API in prose.

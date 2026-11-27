@@ -1,0 +1,25 @@
+<!-- vale off -->
+
+Quoted text.
+
+<!-- vale on -->
+
+<!-- vale Nocturne.Click = NO -->
+
+Quoted text.
+
+<!-- vale Nocturne.Click = YES -->
+
+<!-- Quotes the Dexcom menu label. -->
+
+A paragraph between the comment and the control.
+
+<!-- vale Nocturne.Terms = NO -->
+<!-- Short. -->
+
+Quoted text.
+
+<!-- vale Nocturne.Terms = YES -->
+
+<!-- vale Nocturne.Banned = no -->
+<!-- vale Nocturne.Banned = YES -->

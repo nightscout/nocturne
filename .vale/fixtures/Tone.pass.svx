@@ -1,0 +1,5 @@
+Nocturne could not save the profile. Try again.
+
+The sync failed. Check the network.
+
+Reset all settings.

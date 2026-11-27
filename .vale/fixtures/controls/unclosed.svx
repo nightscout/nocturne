@@ -1,0 +1,41 @@
+<!-- vale off -->
+<!-- Quotes a command from the guide. -->
+
+Quoted text.
+
+<!-- vale Nocturne.Click = NO -->
+<!-- Quotes a Dexcom menu label. -->
+
+Quoted text.
+
+<!-- vale Nocturne.Click = YES -->
+
+<!-- vale Nocturne.Terms = NO -->
+<!-- Quotes a Dexcom menu label. -->
+
+Quoted text.
+
+<!-- vale Nocturne.Banned = YES -->
+
+<!-- vale Nocturne.Filler = NO -->
+<!-- Quotes a Dexcom menu label. -->
+
+Quoted text.
+
+<!-- vale nocturne.filler = YES -->
+
+<!-- vale Nocturne.Slop = NO -->
+<!-- Quotes a Dexcom menu label. -->
+
+Quoted text.
+
+<!-- vale Nocturne.Slop = Yes -->
+
+<!-- vale Nocturne.Tone = NO -->
+<!-- Quotes a Dexcom menu label. -->
+
+Quoted text.
+
+<!-- vale Nocturne.Tone=YES -->
+
+<!--   vale   on   -->

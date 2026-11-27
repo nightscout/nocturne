@@ -1,0 +1,1 @@
+The sensor sends a reading to the phone every five minutes and the phone sends the reading to the server where the server stores it today.

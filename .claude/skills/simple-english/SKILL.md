@@ -47,8 +47,7 @@ Rules live in `.vale/styles/Nocturne/`. Errors fail CI. Warnings and
 suggestions are advisory.
 
 **When a rule is wrong, fix the rule, not the sentence.** If one string must
-break a rule on purpose, add a `rule<TAB>msgid` line to
-`src/Web/utils/lintUiCopy/exceptions.txt` with a comment that gives the reason.
+break a rule on purpose, see "Exceptions to the copy rules" below.
 
 Everything below is what Vale cannot decide.
 
@@ -59,6 +58,58 @@ Lint covers the app (`packages/app`), the CMS, and the portal docs
 features, blog, roadmap) are out of scope: STE deletes persuasion by design.
 The docs pages (`.svx`) are linted as Markdown prose after the strings. CI
 passes `--gate-docs`, so their errors fail the run like the app strings.
+
+## Exceptions to the copy rules
+
+Some text must break a rule. A docs page can quote the label of another
+product, a command, or a code identifier. Do not change the quoted text.
+
+**In a docs page (`.svx`)**, put a Vale control around the quoted text. Put a
+comment that gives the reason on the line before or on the line after the
+control. The reason is an HTML comment of at least three words. It names the
+product, command, or identifier that the page quotes. Start linting again when
+the quoted text ends.
+
+```
+<!-- vale Nocturne.Click = NO -->
+<!-- The Dexcom Clarity menu names this item "Click to export". -->
+
+Select **Click to export** in the Dexcom Clarity menu.
+
+<!-- vale Nocturne.Click = YES -->
+```
+
+- Put each control on one line, alone. A control inside a paragraph, or split
+  over lines, fails the check.
+- Start linting again in the exact form: `<!-- vale on -->` for `vale off`, and
+  `<!-- vale Nocturne.Click = YES -->` for `vale Nocturne.Click = NO`. Spell the
+  rule as the first control does, put one space on each side of `=`, and write
+  `YES` in capitals. Vale ignores other spellings, and it then skips the rest
+  of the page.
+- Switch off one rule, not all rules. Use `vale off` only when many rules apply
+  to the quoted text.
+- `pnpm run lint:copy --gate-docs` fails when a control that stops linting has
+  no reason comment beside it. It also fails when no later control in the page
+  starts linting again for the same target: `vale on` for `vale off`, and
+  `= YES` for a `= NO`. It does not need a reason on the control that starts
+  linting.
+- Do not add a docs page to `exceptions.txt`. That file is for app strings.
+- Bold marks emphasis and the label of a Nocturne control in the docs, so it
+  does not mark quoted text. Use the Vale control.
+
+Vale never checks inline code, fenced code, link URLs, or component tags.
+`lint:copy` never reports frontmatter. Vale does check it, and `lintDocsProse`
+drops its findings. Put a command or an identifier in backticks and it needs no
+exception.
+
+**In an app string**, add a `rule<TAB>msgid` line to
+`src/Web/utils/lintUiCopy/exceptions.txt`. Put a comment line above it that
+gives the reason.
+
+**When you change a rule**, change its fixtures in `.vale/fixtures/`. Each rule
+has a `<Rule>.fail.svx` file (every paragraph must raise the rule) and a
+`<Rule>.pass.svx` file (no paragraph can raise a rule). `pnpm run
+test:copy-guard` runs them, and fails when a rule has no pair.
 
 ## Spelling and terms
 

@@ -1,0 +1,9 @@
+Organise the sensors by site.
+
+Customise the dashboard.
+
+Initialising the sync takes a minute.
+
+ORGANISE THE SENSORS.
+
+Summarise the day.
