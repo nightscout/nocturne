@@ -237,6 +237,7 @@ public class TenantResolutionMiddleware
         new TenantlessPath("/api/v4/admin/tenant-invites", Prefix: true),
         new TenantlessPath("/api/v4/admin/tenants", Prefix: true),
         new TenantlessPath("/api/v4/admin/telemetry/page-counts", HttpMethods.Get),
+        new TenantlessPath("/api/v4/admin/telemetry/page-routes", HttpMethods.Get),
         new TenantlessPath("/api/v4/dev-only/", Prefix: true),
         new TenantlessPath("/api/v4/platform/", Prefix: true),
         new TenantlessPath("/api/v4/setup/", Prefix: true),

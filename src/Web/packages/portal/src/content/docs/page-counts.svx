@@ -99,6 +99,29 @@ last 30 days. The answer is a list:
 ]
 ```
 
+### Find pages nobody opened
+
+The list above holds only pages that were opened. To see the pages with no
+views, get the list of every page the app counts, and remove the pages that are
+in the counts:
+
+```bash
+curl "https://example.com/api/v4/admin/telemetry/page-routes" \
+  -H "X-Instance-Key: $(printf '%s' "$INSTANCE_KEY" | sha256sum | cut -d' ' -f1)" \
+  -H "X-Instance-Service: page-counts"
+```
+
+The answer is a list of page names in alphabetical order. It does not change
+between days, and it is the same while page counts are off:
+
+```json
+[
+  "/(authenticated)",
+  "/(authenticated)/alerts",
+  "/(authenticated)/reports/agp"
+]
+```
+
 ## How long counts are kept
 
 The API deletes counts older than 400 days, once a day. It does this while page

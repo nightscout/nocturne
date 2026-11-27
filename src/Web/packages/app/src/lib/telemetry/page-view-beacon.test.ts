@@ -10,9 +10,9 @@ vi.mock("$app/env/public", () => ({
 }));
 vi.mock("#lib/api/generated/pageViews.generated.remote.js", () => ({ recordPageView }));
 
-import { sendPageView } from "./page-view-beacon";
+import { createPageViewBeacon } from "./page-view-beacon";
 
-const page = (id: string | null) => ({ route: { id } }) as never;
+const routeId = "/(authenticated)/reports/agp";
 
 describe("page-view beacon", () => {
   beforeEach(() => {
@@ -21,7 +21,7 @@ describe("page-view beacon", () => {
   });
 
   it("sends no beacon while page counts are off", () => {
-    sendPageView({ from: null, to: page("/(authenticated)/reports/agp") });
+    createPageViewBeacon().arrived(routeId);
 
     expect(recordPageView).not.toHaveBeenCalled();
   });
@@ -29,34 +29,66 @@ describe("page-view beacon", () => {
   it("sends the route id alone when page counts are on", () => {
     env.enabled = true;
 
-    sendPageView({ from: page("/(authenticated)"), to: page("/(authenticated)/reports/agp") });
+    createPageViewBeacon().arrived(routeId);
 
-    expect(recordPageView).toHaveBeenCalledExactlyOnceWith({ routeId: "/(authenticated)/reports/agp" });
+    expect(recordPageView).toHaveBeenCalledExactlyOnceWith({ routeId });
   });
 
-  it("counts the first page of a visit", () => {
-    sendPageView({ from: null, to: page("/(authenticated)") }, true);
+  it("counts the first page of a visit once when both the layout mount and the enter navigation report it", () => {
+    const beacon = createPageViewBeacon(true);
+
+    beacon.arrived("/(authenticated)");
+    beacon.arrived("/(authenticated)");
 
     expect(recordPageView).toHaveBeenCalledExactlyOnceWith({ routeId: "/(authenticated)" });
   });
 
-  it("does not count a navigation that stays on the same page", () => {
-    sendPageView({ from: page("/(authenticated)/alerts/[id]"), to: page("/(authenticated)/alerts/[id]") }, true);
+  it("counts the first page of a visit when only the layout mount reports it", () => {
+    createPageViewBeacon(true).arrived("/(authenticated)");
 
-    expect(recordPageView).not.toHaveBeenCalled();
+    expect(recordPageView).toHaveBeenCalledExactlyOnceWith({ routeId: "/(authenticated)" });
   });
 
-  it("does not count a page with no route, such as a 404", () => {
-    sendPageView({ from: page("/(authenticated)"), to: page(null) }, true);
-    sendPageView({ from: page("/(authenticated)"), to: null }, true);
+  it("counts each page a visitor moves to", () => {
+    const beacon = createPageViewBeacon(true);
 
+    beacon.arrived("/(authenticated)");
+    beacon.arrived(routeId);
+    beacon.arrived("/(authenticated)");
+
+    expect(recordPageView.mock.calls).toEqual([
+      [{ routeId: "/(authenticated)" }],
+      [{ routeId }],
+      [{ routeId: "/(authenticated)" }],
+    ]);
+  });
+
+  it("does not count a navigation that stays on the same page", () => {
+    const beacon = createPageViewBeacon(true);
+
+    beacon.arrived("/(authenticated)/alerts/[id]");
+    beacon.arrived("/(authenticated)/alerts/[id]");
+
+    expect(recordPageView).toHaveBeenCalledOnce();
+  });
+
+  it("does not count a page with no route, such as a 404, and counts the next page", () => {
+    const beacon = createPageViewBeacon(true);
+
+    beacon.arrived(null);
+    beacon.arrived(undefined);
     expect(recordPageView).not.toHaveBeenCalled();
+
+    beacon.arrived("/(authenticated)");
+    beacon.arrived(null);
+    beacon.arrived("/(authenticated)");
+    expect(recordPageView).toHaveBeenCalledTimes(2);
   });
 
   it("drops a failed send", async () => {
     recordPageView.mockReturnValueOnce(Promise.reject(new Error("offline")));
 
-    expect(() => sendPageView({ from: null, to: page("/(authenticated)") }, true)).not.toThrow();
+    expect(() => createPageViewBeacon(true).arrived("/(authenticated)")).not.toThrow();
     await Promise.resolve();
   });
 });
