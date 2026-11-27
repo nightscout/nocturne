@@ -215,7 +215,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     private async Task<(BaseConnectorConfiguration Baseline, JsonDocument? Stored, bool HoldsStoredSecret)?> GuardStateAsync(
         string connectorName, CancellationToken ct)
     {
-        var configType = FindConfigurationType(connectorName, _logger);
+        var configType = ConnectorMetadataService.GetConfigurationTypeByConnectorId(connectorName);
         if (configType is null || Activator.CreateInstance(configType) is not BaseConnectorConfiguration baseline)
             return null;
 
@@ -394,7 +394,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         // Find the configuration class type
-        var configType = FindConfigurationType(connectorName, _logger);
+        var configType = ConnectorMetadataService.GetConfigurationTypeByConnectorId(connectorName);
         if (configType == null)
         {
             _logger.LogWarning("Could not find configuration type for connector {ConnectorName}", connectorName);
@@ -408,7 +408,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// <inheritdoc />
     public Task<IReadOnlyDictionary<string, Type>?> GetBoundKeysAsync(string connectorName, CancellationToken ct = default)
     {
-        var configType = FindConfigurationType(connectorName, _logger);
+        var configType = ConnectorMetadataService.GetConfigurationTypeByConnectorId(connectorName);
         return Task.FromResult<IReadOnlyDictionary<string, Type>?>(configType is null ? null : ConnectorConfigurationBinder.BoundKeyTypes(configType));
     }
 
@@ -509,7 +509,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string connectorName,
         CancellationToken ct = default)
     {
-        var configType = FindConfigurationType(connectorName, _logger);
+        var configType = ConnectorMetadataService.GetConfigurationTypeByConnectorId(connectorName);
         if (configType == null)
         {
             _logger.LogWarning("Unknown connector {ConnectorName} for effective config", connectorName);
@@ -531,30 +531,6 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         );
 
         return GetEffectiveConfiguration(config);
-    }
-
-    /// <summary>
-    /// Finds the configuration class Type for a given connector name.
-    /// </summary>
-    private static Type? FindConfigurationType(string connectorName, ILogger logger)
-    {
-        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => a.FullName?.Contains("Nocturne.Connectors") == true)
-            .ToList();
-
-        foreach (var assembly in assemblies)
-        {
-            foreach (var type in assembly.LoadableTypes(logger))
-            {
-                var attr = type.GetCustomAttribute<ConnectorRegistrationAttribute>();
-                if (attr != null && ConnectorNames.Canonical(attr.ConnectorName) == ConnectorNames.Canonical(connectorName))
-                {
-                    return type;
-                }
-            }
-        }
-
-        return null;
     }
 
     /// <summary>

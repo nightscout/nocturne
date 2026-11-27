@@ -1,5 +1,6 @@
 using FluentValidation;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Validators.V4;
 
@@ -24,11 +25,11 @@ public class UpsertNoteRequestValidator : AbstractValidator<UpsertNoteRequest>
     public UpsertNoteRequestValidator()
     {
         RuleFor(x => x.Timestamp).TimestampRequired();
-        RuleFor(x => x.Device).WithinUploaderLabel();
-        RuleFor(x => x.App).WithinUploaderLabel();
+        RuleFor(x => x.Device).WithinProvenance();
+        RuleFor(x => x.App).WithinProvenance();
         RuleFor(x => x.DataSource).WithinProvenance();
         RuleFor(x => x.Text).MaximumLength(10000).When(x => x.Text is not null);
-        RuleFor(x => x.EventType).MaximumLength(200).When(x => x.EventType is not null);
+        RuleFor(x => x.EventType).MaximumLength(ColumnLengths.Note.EventType).When(x => x.EventType is not null);
         RuleFor(x => x.SyncIdentifier).WithinSyncIdentifier();
         RuleFor(x => x.DataSource).DataSourceRequiredWithSyncIdentifier(x => x.SyncIdentifier);
     }

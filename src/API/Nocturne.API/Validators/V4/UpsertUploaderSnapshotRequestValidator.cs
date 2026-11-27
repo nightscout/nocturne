@@ -1,5 +1,6 @@
 using FluentValidation;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Validators.V4;
 
@@ -13,12 +14,12 @@ public class UpsertUploaderSnapshotRequestValidator : AbstractValidator<UpsertUp
     public UpsertUploaderSnapshotRequestValidator()
     {
         RuleFor(x => x.Timestamp).TimestampRequired();
-        RuleFor(x => x.Device).WithinUploaderLabel();
-        RuleFor(x => x.App).WithinUploaderLabel();
+        RuleFor(x => x.Device).WithinProvenance();
+        RuleFor(x => x.App).WithinProvenance();
         RuleFor(x => x.DataSource).WithinProvenance();
         RuleFor(x => x.SyncIdentifier).WithinSyncIdentifier();
         RuleFor(x => x.DataSource).DataSourceRequiredWithSyncIdentifier(x => x.SyncIdentifier);
-        RuleFor(x => x.Name).MaximumLength(256);
-        RuleFor(x => x.Type).MaximumLength(128);
+        RuleFor(x => x.Name).MaximumLength(ColumnLengths.UploaderSnapshot.Name);
+        RuleFor(x => x.Type).MaximumLength(ColumnLengths.UploaderSnapshot.Type);
     }
 }

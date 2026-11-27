@@ -24,8 +24,8 @@ public class UpsertBGCheckRequestValidator : AbstractValidator<UpsertBGCheckRequ
     public UpsertBGCheckRequestValidator()
     {
         RuleFor(x => x.Timestamp).TimestampRequired();
-        RuleFor(x => x.Device).WithinUploaderLabel();
-        RuleFor(x => x.App).WithinUploaderLabel();
+        RuleFor(x => x.Device).WithinProvenance();
+        RuleFor(x => x.App).WithinProvenance();
         RuleFor(x => x.DataSource).WithinProvenance();
         RuleFor(x => x.Glucose).InclusiveBetween(0, 10000).WithMessage("Glucose must be between 0 and 10000");
         RuleFor(x => x.SyncIdentifier).WithinSyncIdentifier();

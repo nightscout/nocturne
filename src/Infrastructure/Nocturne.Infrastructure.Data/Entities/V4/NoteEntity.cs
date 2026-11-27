@@ -43,7 +43,7 @@ public class NoteEntity : V4TimeSeriesEntityBase, ISyncDedupable, IUpstreamFinge
     /// Original event type (user-specified freeform)
     /// </summary>
     [Column("event_type")]
-    [MaxLength(256)]
+    [MaxLength(ColumnLengths.Note.EventType)]
     [FitToColumn]
     public string? EventType { get; set; }
 

@@ -76,6 +76,59 @@ internal static class StateSpanSuccession
         || !metadata.IsSameOverrideAs(MapperHelpers.DeserializeJson<Dictionary<string, object>>(other.MetadataJson));
 
     /// <summary>
+    /// Whether a settle may rewrite the end of <paramref name="span"/>: it is open, or its end is the one
+    /// supersession gave it (<paramref name="superseders"/> names the spans as stored).
+    /// </summary>
+    internal static bool IsMovable(StateSpanEntity span, IReadOnlyDictionary<Guid, StateSpanEntity> superseders) =>
+        span.EndTimestamp == null || Extensions.StateSpanSupersessionExtensions.SupersededEnd(span, superseders) is not null;
+
+    /// <summary>
+    /// Whether releasing the span <paramref name="span"/> names as its superseder, which started at
+    /// <paramref name="supersederStart"/>, reopens it. A span ended elsewhere only loses its pointer.
+    /// </summary>
+    internal static bool EndsAtSuperseder(StateSpanEntity span, DateTime supersederStart) =>
+        span.EndTimestamp == supersederStart;
+
+    /// <summary>The end and pointer a span takes when <paramref name="successor"/> is its first live successor, or open when it has none.</summary>
+    internal static (DateTime? End, Guid? SupersededById) EndAt(StateSpanEntity? successor) =>
+        successor is null ? (null, null) : (successor.StartTimestamp, successor.Id);
+
+    /// <summary>
+    /// The first of <paramref name="candidates"/>, in order, that is <paramref name="eligible"/> and
+    /// <see cref="Follows"/> <paramref name="open"/>.
+    /// </summary>
+    internal static StateSpanEntity? FirstFollowing(
+        StateSpanEntity open,
+        IDictionary<string, object>? metadata,
+        IEnumerable<StateSpanEntity> candidates,
+        Func<StateSpanEntity, bool> eligible) =>
+        candidates.Where(eligible).FirstOrDefault(s => Follows(open, metadata, s));
+
+    /// <summary>
+    /// Whether a span starts before one of <paramref name="arrived"/> on its line (<see cref="Key"/>) and is
+    /// open or ends after that one's start: the spans an arrived span may now end.
+    /// </summary>
+    internal static Func<StateSpanEntity, bool> Reaches(IEnumerable<StateSpanEntity> arrived)
+    {
+        var startsByLine = arrived
+            .GroupBy(s => (s.Category, Line: Key(s.Category, s.State, default).State ?? string.Empty))
+            .ToDictionary(
+                line => line.Key,
+                line => line.Select(s => s.StartTimestamp).Distinct().Order().ToArray());
+        return span => startsByLine.TryGetValue(
+                   (span.Category, Key(span.Category, span.State, default).State ?? string.Empty), out var starts)
+               && StartsWithin(starts, span.StartTimestamp, span.EndTimestamp);
+    }
+
+    /// <summary>Whether a start in the sorted <paramref name="starts"/> lies after <paramref name="after"/> and before <paramref name="before"/>, if any.</summary>
+    private static bool StartsWithin(DateTime[] starts, DateTime after, DateTime? before)
+    {
+        var index = Array.BinarySearch(starts, after);
+        var next = index >= 0 ? index + 1 : ~index;
+        return next < starts.Length && (before is null || starts[next] < before);
+    }
+
+    /// <summary>
     /// Per key, the first <see cref="Candidates"/> stored live spans a span of that key can follow,
     /// oldest first, by start then id: one statement per <see cref="LookupsPerStatement"/> keys.
     /// </summary>
@@ -119,7 +172,7 @@ internal static class StateSpanSuccession
         Func<StateSpanEntity, bool> eligible,
         CancellationToken cancellationToken)
     {
-        var found = candidates.Where(eligible).FirstOrDefault(s => Follows(open, metadata, s));
+        var found = FirstFollowing(open, metadata, candidates, eligible);
         if (found is not null || candidates.Count < Candidates)
             return found;
 

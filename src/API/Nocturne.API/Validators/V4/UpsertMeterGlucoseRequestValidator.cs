@@ -24,8 +24,8 @@ public class UpsertMeterGlucoseRequestValidator : AbstractValidator<UpsertMeterG
     public UpsertMeterGlucoseRequestValidator()
     {
         RuleFor(x => x.Timestamp).TimestampRequired();
-        RuleFor(x => x.Device).WithinUploaderLabel();
-        RuleFor(x => x.App).WithinUploaderLabel();
+        RuleFor(x => x.Device).WithinProvenance();
+        RuleFor(x => x.App).WithinProvenance();
         RuleFor(x => x.DataSource).WithinProvenance();
         RuleFor(x => x.Mgdl).InclusiveBetween(0, 10000).WithMessage("Mgdl must be between 0 and 10000");
     }

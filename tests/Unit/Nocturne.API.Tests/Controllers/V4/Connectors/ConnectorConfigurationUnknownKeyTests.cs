@@ -159,9 +159,9 @@ public class ConnectorConfigurationUnknownKeyTests : IDisposable
     public void EveryBoundPropertyTypeOfEveryConnectorConfigurationConverts()
     {
         var unconvertible = new List<string>();
-        foreach (var path in Directory.GetFiles(AppContext.BaseDirectory, "Nocturne.Connectors.*.dll"))
+        foreach (var assembly in ConnectorAssemblies.Load())
         {
-            var configTypes = Assembly.LoadFrom(path).GetExportedTypes()
+            var configTypes = assembly.GetExportedTypes()
                 .Where(t => t.GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false) is not null);
             foreach (var configType in configTypes)
                 foreach (var (key, type) in ConnectorConfigurationBinder.BoundKeyTypes(configType))
@@ -174,7 +174,7 @@ public class ConnectorConfigurationUnknownKeyTests : IDisposable
     }
 
     private static IEnumerable<string> Samples(Type type) =>
-        ["\"a\"", "1", "1.5", "true", ..type.IsEnum ? Enum.GetNames(type).Select(name => $"\"{name}\"") : []];
+        ["\"a\"", "1", "1.5", "true", .. type.IsEnum ? Enum.GetNames(type).Select(name => $"\"{name}\"") : []];
 
     [Fact]
     public async Task Save_AcceptsTheEnabledFlagInAnyCasing()
