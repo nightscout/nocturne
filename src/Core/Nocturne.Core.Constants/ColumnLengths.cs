@@ -17,6 +17,12 @@ public static class ColumnLengths
     }
 
     /// <summary>The string columns of a system event.</summary>
+    /// <summary>The string column of a page view count.</summary>
+    public static class PageViewCount
+    {
+        public const int RouteId = 200;
+    }
+
     public static class SystemEvent
     {
         public const int Code = 100;

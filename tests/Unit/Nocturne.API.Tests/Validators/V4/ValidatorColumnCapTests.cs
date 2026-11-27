@@ -38,6 +38,7 @@ public class ValidatorColumnCapTests
     private static readonly Dictionary<string, string[]> EntityStemsByRequestStem = new()
     {
         ["Meal"] = ["Bolus", "CarbIntake"],
+        ["PageView"] = ["PageViewCount"],
         ["ReservoirReport"] = ["PumpSnapshot", "DeviceEvent"],
         ["Activity"] = ["StateSpan"],
         ["CarbIntakeFood"] = ["TreatmentFood"],

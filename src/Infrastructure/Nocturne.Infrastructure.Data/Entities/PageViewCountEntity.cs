@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Telemetry;
 
 namespace Nocturne.Infrastructure.Data.Entities;
@@ -12,7 +13,7 @@ public class PageViewCountEntity
     public DateOnly Date { get; set; }
 
     [Column("route_id")]
-    [MaxLength(200)]
+    [MaxLength(ColumnLengths.PageViewCount.RouteId)]
     public string RouteId { get; set; } = string.Empty;
 
     [Column("count")]
