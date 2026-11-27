@@ -113,7 +113,7 @@ public partial class TeamAccessEndPostgresTests
         (await Teams().GetPeopleOfStaffGroupAsync(group, staff, Now, Ct)).Should().BeEquivalentTo(
             new[] { flagged, calm, pending, declined, blocked, narrowed }.Select(s => s.Tenant), "a stopped site keeps its place unlisted");
 
-        var listed = await overview.GetGroupOverviewAsync(staff, group, SessionScopes, AuthType.SessionCookie, false, Ct);
+        var listed = await overview.GetGroupOverviewAsync(staff, group, SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct);
         listed!.Tenants.Select(t => t.TenantId).Should().Equal(flagged.Tenant, calm.Tenant);
         listed.Tenants[0].Attention.Should().NotBeEmpty();
         listed.Tenants[1].Attention.Should().BeEmpty();
@@ -127,15 +127,15 @@ public partial class TeamAccessEndPostgresTests
             json.Should().NotContain(site.Tenant.ToString("N"));
         }
 
-        var everyone = await overview.GetOverviewAsync(staff, SessionScopes, AuthType.SessionCookie, false, Ct);
+        var everyone = await overview.GetOverviewAsync(staff, SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct);
         everyone.Tenants.Select(t => t.TenantId).Should().BeEquivalentTo(
             [flagged.Tenant, calm.Tenant, outside.Tenant, readElsewhere.Tenant],
             "the staff member reads the site that stopped the team through the clinic");
         everyone.HiddenCount.Should().BeNull();
 
-        (await overview.GetGroupOverviewAsync(team.Manager, group, SessionScopes, AuthType.SessionCookie, false, Ct))
+        (await overview.GetGroupOverviewAsync(team.Manager, group, SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct))
             .Should().BeNull("a manager is not in the group");
-        (await overview.GetGroupOverviewAsync(staff, await GroupAsync(team, "Oak cabin"), SessionScopes, AuthType.SessionCookie, false, Ct))
+        (await overview.GetGroupOverviewAsync(staff, await GroupAsync(team, "Oak cabin"), SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct))
             .Should().BeNull("the staff member is not in that group");
         errors.Messages.Should().BeEmpty("every person was read, none stood in for by a failed read");
     }
@@ -176,7 +176,7 @@ public partial class TeamAccessEndPostgresTests
         (await Teams().GetGroupsOfStaffAsync(staff, Now, Ct)).Select(g => g.Id).Should().Equal(birch, elm, oak);
 
         var overview = Overview(new TenantOverviewTestKit.ErrorLog(), withReading: Guid.Empty);
-        var everyone = await overview.GetOverviewAsync(staff, SessionScopes, AuthType.SessionCookie, false, Ct);
+        var everyone = await overview.GetOverviewAsync(staff, SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct);
         everyone.Tenants.ToDictionary(t => t.TenantId, t => t.FirstGroupId).Should().BeEquivalentTo(new Dictionary<Guid, Guid?>
         {
             [inBoth.Tenant] = birch,
@@ -189,7 +189,7 @@ public partial class TeamAccessEndPostgresTests
         json.Should().NotContain(aspen.ToString(), "the staff member is not in Aspen");
         json.Should().NotContain(oak.ToString(), "nobody is under Oak, so nothing says who is in it");
 
-        var birchOverview = await overview.GetGroupOverviewAsync(staff, birch, SessionScopes, AuthType.SessionCookie, false, Ct);
+        var birchOverview = await overview.GetGroupOverviewAsync(staff, birch, SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct);
         birchOverview!.Tenants.Select(t => t.TenantId).Should().BeEquivalentTo([inBoth.Tenant, everywhere.Tenant]);
         birchOverview.Tenants.Should().OnlyContain(t => t.FirstGroupId == null, "only the overview of everyone puts people under headings");
     }
@@ -214,8 +214,8 @@ public partial class TeamAccessEndPostgresTests
             await PutSiteAsync(team, group, site);
 
         var overview = Overview(new TenantOverviewTestKit.ErrorLog(), withReading: Guid.Empty);
-        var one = await overview.GetGroupOverviewAsync(first, group, SessionScopes, AuthType.SessionCookie, false, Ct);
-        var two = await overview.GetGroupOverviewAsync(second, group, SessionScopes, AuthType.SessionCookie, false, Ct);
+        var one = await overview.GetGroupOverviewAsync(first, group, SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct);
+        var two = await overview.GetGroupOverviewAsync(second, group, SessionScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, Ct);
 
         one!.Tenants.Select(t => t.TenantId).Should().Equal(amy.Tenant, bo.Tenant);
         one.HiddenCount.Should().Be(1);
@@ -300,6 +300,7 @@ public partial class TeamAccessEndPostgresTests
             Teams(),
             services.BuildServiceProvider().CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
+            Mock.Of<IPersonalFlagRules>(),
             new FakeTimeProvider(new DateTimeOffset(Now)),
             errors);
     }

@@ -15,17 +15,18 @@ public class FlagFactCatalogueTests
         catalogue.FlagFacts.Should().ContainSingle(f => f.Dataset == dataset && f.Field.Name == field, $"{dataset}.{field}").Subject;
 
     [Fact]
-    public void The_catalogue_lists_each_flag_fact_with_its_label_unit_kind_own_range_flag_and_scope()
+    public void The_catalogue_lists_each_flag_fact_with_its_label_unit_kind_range_family_and_scope()
     {
         var catalogue = ReportCatalogueTests.Catalogue(true, Scope.GlucoseRead);
 
         var below = Fact(catalogue, "glucose_statistics", "timeBelow");
-        (below.Field.Label, below.Field.Unit, below.Kind, below.OwnRange, below.MaxDays)
-            .Should().Be(("Time below consensus range", "%", "period", false, 90));
+        (below.Field.Label, below.Field.Unit, below.Kind, below.Range, below.MaxDays)
+            .Should().Be(("Time below consensus range", "%", "period", "consensus", 90));
         below.Scopes.Should().Equal([Scope.GlucoseRead, Scope.ReportsRead], "a period fact needs reports.read, as the Review lens does");
 
         var ownBelow = Fact(catalogue, "glucose_statistics", "timeBelowOwnRange");
-        (ownBelow.Field.Label, ownBelow.Kind, ownBelow.OwnRange).Should().Be(("Time below own range", "period", true));
+        (ownBelow.Field.Label, ownBelow.Kind, ownBelow.Range).Should().Be(("Time below own range", "period", "own"));
+        Fact(catalogue, "glucose_statistics", "mean").Range.Should().BeNull("a figure not against a target range has no family");
         ownBelow.Field.Label.Should().NotBe(below.Field.Label, "a reader tells the consensus and own range facts apart");
         ownBelow.Scopes.Should().Equal([Scope.GlucoseRead, Scope.TherapyRead, Scope.ReportsRead], "the target range needs therapy.read");
         (ownBelow.Field.Scope, ownBelow.Field.Permitted).Should().Be((Scope.TherapyRead, false));

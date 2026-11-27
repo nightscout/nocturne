@@ -34,21 +34,23 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
     /// <summary>The field that says how much of the range the sensor covered, which a glucose figure's judgement states.</summary>
     internal const string CoverageField = "sensorWornPercent";
 
-    private static readonly ReportFlagFact GlucoseFact = new(ReportFlagFactKind.Period, false, CoverageField);
+    private static readonly ReportFlagFact GlucoseFact = new(ReportFlagFactKind.Period, ReportRangeFamily.None, CoverageField);
 
-    private static readonly ReportFlagFact OwnRangeFact = new(ReportFlagFactKind.Period, true, CoverageField);
+    private static readonly ReportFlagFact ConsensusRangeFact = new(ReportFlagFactKind.Period, ReportRangeFamily.Consensus, CoverageField);
+
+    private static readonly ReportFlagFact OwnRangeFact = new(ReportFlagFactKind.Period, ReportRangeFamily.Own, CoverageField);
 
     public IReadOnlyList<ReportField> Fields { get; } =
     [
         new("timeInRangePercent", "Time in consensus range", ReportFieldKind.Percent, "%",
             "Percent of the covered time with glucose in the consensus target range.", Color: ChartColor.GlucoseInRange)
-            { FlagFact = GlucoseFact },
+            { FlagFact = ConsensusRangeFact },
         new("timeBelow", "Time below consensus range", ReportFieldKind.Percent, "%",
             "Percent of the covered time with glucose below the consensus target range (low and very low).", Color: ChartColor.GlucoseLow)
-            { FlagFact = GlucoseFact },
+            { FlagFact = ConsensusRangeFact },
         new("timeAbove", "Time above consensus range", ReportFieldKind.Percent, "%",
             "Percent of the covered time with glucose above the consensus target range (high and very high).", Color: ChartColor.GlucoseHigh)
-            { FlagFact = GlucoseFact },
+            { FlagFact = ConsensusRangeFact },
         new("mean", "Mean glucose", ReportFieldKind.Number, ReportField.GlucoseUnit, "The mean glucose, in the display unit.")
             { FlagFact = GlucoseFact },
         new("gmi", "GMI", ReportFieldKind.Number, "%", "Glucose management indicator: the A1c the mean glucose predicts.")

@@ -311,6 +311,10 @@ public class V4WriteScopeGatingTests
             ["SupportController.CreateIssue"] = NotDataCategory.OutboundOnly,
 
             ["RecoveryEmailController.SetRecoveryEmail"] = NotDataCategory.OwnIdentity,
+            // A rule is found only on a context pinned to the caller's subject, under a strict subject_pin.
+            ["FlagRulesController.CreateFlagRule"] = NotDataCategory.OwnIdentity,
+            ["FlagRulesController.UpdateFlagRule"] = NotDataCategory.OwnIdentity,
+            ["FlagRulesController.DeleteFlagRule"] = NotDataCategory.OwnIdentity,
             ["RecoveryEmailController.DeleteRecoveryEmail"] = NotDataCategory.OwnIdentity,
             ["AvatarController.Upload"] = NotDataCategory.OwnIdentity,
             ["AvatarController.Delete"] = NotDataCategory.OwnIdentity,

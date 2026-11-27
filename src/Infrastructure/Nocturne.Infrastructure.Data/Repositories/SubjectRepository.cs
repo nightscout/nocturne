@@ -1117,9 +1117,11 @@ public class SubjectRepository : ISubjectRepository
     /// Every table with a foreign key to <c>subjects</c> is named here or in
     /// <see cref="TenantRowsNaming"/>, and a caller reads both in one transaction, except
     /// <c>tenants.setup_owner_subject_id</c>, which the delete sets to null: a subject that record
-    /// names is one the owner step made, and deleting it ends the record.
-    /// <c>SubjectForeignKeyCoverageTests</c> fails on a foreign key that neither names nor that
-    /// exception covers. The team tables other than <c>team_tenant_access</c> carry no tenant, so they
+    /// names is one the owner step made, and deleting it ends the record; and <c>flag_rules.subject_id</c>,
+    /// whose rows only their owner's own sign-in makes and whose strict subject pin hides them from this
+    /// unpinned context.
+    /// <c>SubjectForeignKeyCoverageTests</c> fails on a foreign key that neither names nor those
+    /// exceptions cover. The team tables other than <c>team_tenant_access</c> carry no tenant, so they
     /// are read here.
     /// </summary>
     internal static IQueryable<SubjectEntity> Unclaimed(NocturneDbContext db, Guid? identityId, Guid? ownerOf)

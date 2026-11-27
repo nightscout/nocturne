@@ -168,16 +168,35 @@ internal enum ReportFlagFactKind
     Live,
 }
 
+/// <summary>The target range a glucose time figure is measured against.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReportRangeFamily>))]
+internal enum ReportRangeFamily
+{
+    /// <summary>Not a figure against a target range.</summary>
+    [JsonStringEnumMemberName("none")]
+    None,
+
+    /// <summary>The consensus target range, one range for everyone.</summary>
+    [JsonStringEnumMemberName("consensus")]
+    Consensus,
+
+    /// <summary>The person's own target range, whose bound the judgement states.</summary>
+    [JsonStringEnumMemberName("own")]
+    Own,
+}
+
 /// <summary>What makes a field a flag fact.</summary>
 /// <param name="Kind">Whether it is judged over a range of days (period) or as it is now (live).</param>
-/// <param name="OwnRange">The figure is measured against the person's own target range, whose bound the judgement states.</param>
+/// <param name="Range">The target range the figure is measured against, if any.</param>
 /// <param name="CoverageField">
 /// The field of the same row that says how much of the range the data covers, as a percent; a judgement below
 /// <see cref="Core.Models.DataSufficiencyAssessment.MinimumCompleteness"/> of it says there was too little data.
 /// Null for a fact with no coverage.
 /// </param>
-internal sealed record ReportFlagFact(ReportFlagFactKind Kind, bool OwnRange, string? CoverageField)
+internal sealed record ReportFlagFact(ReportFlagFactKind Kind, ReportRangeFamily Range, string? CoverageField)
 {
+    public bool OwnRange => Range == ReportRangeFamily.Own;
+
     /// <summary>The row field an own-range fact's dataset writes the range's low edge to, in the display unit.</summary>
     public const string OwnRangeLowField = "ownRangeLow";
 
@@ -187,9 +206,9 @@ internal sealed record ReportFlagFact(ReportFlagFactKind Kind, bool OwnRange, st
     /// <summary>The row field that is <c>yes</c> when the own range changes over the day.</summary>
     public const string OwnRangeVariesField = "ownRangeVaries";
 
-    public static readonly ReportFlagFact Live = new(ReportFlagFactKind.Live, false, null);
+    public static readonly ReportFlagFact Live = new(ReportFlagFactKind.Live, ReportRangeFamily.None, null);
 
-    public static readonly ReportFlagFact Period = new(ReportFlagFactKind.Period, false, null);
+    public static readonly ReportFlagFact Period = new(ReportFlagFactKind.Period, ReportRangeFamily.None, null);
 }
 
 /// <summary>

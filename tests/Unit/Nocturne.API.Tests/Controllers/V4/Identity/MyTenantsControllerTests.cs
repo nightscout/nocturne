@@ -50,7 +50,7 @@ public class MyTenantsControllerTests
     {
         var controller = CreateController(Subjectless(authType));
 
-        var result = await controller.GetOverview(null, CancellationToken.None);
+        var result = await controller.GetOverview(null, null, CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<TenantOverviewResponse>()
@@ -58,7 +58,7 @@ public class MyTenantsControllerTests
         _overviewService.Verify(
             s => s.GetOverviewAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<OverviewFlagRules>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -123,26 +123,60 @@ public class MyTenantsControllerTests
     public async Task A_group_asked_for_is_read_as_that_group_and_everyone_is_not_read()
     {
         var group = Guid.CreateVersion7();
-        var overview = new TenantOverviewResponse([], 2);
+        var overview = new TenantOverviewResponse([], 2, 0);
         _overviewService
             .Setup(s => s.GetGroupOverviewAsync(
-                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, false, It.IsAny<CancellationToken>()))
+                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, OverviewFlagRules.Judge, false,
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(overview);
 
-        var result = await CreateController(Member()).GetOverview(group, CancellationToken.None);
+        var result = await CreateController(Member()).GetOverview(group, OverviewRuleSet.All, CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(overview);
         _overviewService.Verify(
             s => s.GetOverviewAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<OverviewFlagRules>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    public static TheoryData<bool, OverviewRuleSet?, OverviewFlagRules> RuleSets => new()
+    {
+        { false, null, OverviewFlagRules.LeaveOut },
+        { false, OverviewRuleSet.Fixed, OverviewFlagRules.LeaveOut },
+        { false, OverviewRuleSet.All, OverviewFlagRules.Judge },
+        { true, null, OverviewFlagRules.LeaveOut },
+        { true, OverviewRuleSet.Fixed, OverviewFlagRules.LeaveOut },
+        { true, OverviewRuleSet.All, OverviewFlagRules.Judge },
+    };
+
+    [Theory]
+    [MemberData(nameof(RuleSets))]
+    public async Task An_overview_of_everyone_or_a_group_judges_the_callers_own_rules_only_when_asked_for_them(
+        bool ofAGroup, OverviewRuleSet? rules, OverviewFlagRules expected)
+    {
+        var group = Guid.CreateVersion7();
+        var overview = new TenantOverviewResponse([], ofAGroup ? 0 : null, 4);
+        _overviewService
+            .Setup(s => s.GetOverviewAsync(
+                _subjectId, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, expected, false,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(overview);
+        _overviewService
+            .Setup(s => s.GetGroupOverviewAsync(
+                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, expected, false,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(overview);
+
+        var result = await CreateController(Member()).GetOverview(ofAGroup ? group : null, rules, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(overview);
     }
 
     [Fact]
     public async Task A_group_the_caller_is_not_in_is_not_found()
     {
-        var result = await CreateController(Member()).GetOverview(Guid.CreateVersion7(), CancellationToken.None);
+        var result = await CreateController(Member()).GetOverview(Guid.CreateVersion7(), null, CancellationToken.None);
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
@@ -156,7 +190,7 @@ public class MyTenantsControllerTests
 
         (await controller.GetGroups(CancellationToken.None)).Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeAssignableTo<IEnumerable<StaffGroup>>().Which.Should().BeEmpty();
-        (await controller.GetOverview(Guid.CreateVersion7(), CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
+        (await controller.GetOverview(Guid.CreateVersion7(), null, CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
         (await controller.GetReview(Guid.CreateVersion7(), 14, CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
@@ -206,10 +240,34 @@ public class MyTenantsControllerTests
         _overviewService
             .Setup(s => s.GetPersonAsync(
                 _subjectId, tenantId, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie,
-                false, It.IsAny<CancellationToken>()))
+                OverviewFlagRules.LeaveOut, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(detail);
 
-        var result = await CreateController(Member()).GetPerson(tenantId, CancellationToken.None);
+        var result = await CreateController(Member()).GetPerson(tenantId, null, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(detail);
+    }
+
+    [Theory]
+    [InlineData(null, OverviewFlagRules.LeaveOut)]
+    [InlineData(OverviewRuleSet.Fixed, OverviewFlagRules.LeaveOut)]
+    [InlineData(OverviewRuleSet.All, OverviewFlagRules.Judge)]
+    public async Task A_person_read_judges_the_callers_own_rules_only_when_asked_for_them(
+        OverviewRuleSet? rules, OverviewFlagRules expected)
+    {
+        var tenantId = Guid.NewGuid();
+        var detail = new TenantPersonDetail(
+            new TenantOverviewItem(
+                tenantId, "family", "Family", null, null, GlucoseStatus.Unknown,
+                new TenantOverviewThresholds(55, 80, 180, 260), null, null, [], null, null, null, [], null),
+            [], null, default, default);
+        _overviewService
+            .Setup(s => s.GetPersonAsync(
+                _subjectId, tenantId, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie,
+                expected, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(detail);
+
+        var result = await CreateController(Member()).GetPerson(tenantId, rules, CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(detail);
     }
@@ -218,7 +276,7 @@ public class MyTenantsControllerTests
     public async Task A_person_is_refused_to_an_unauthenticated_caller_and_nothing_is_read()
     {
         var result = await CreateController(AuthContext.Unauthenticated())
-            .GetPerson(Guid.NewGuid(), CancellationToken.None);
+            .GetPerson(Guid.NewGuid(), null, CancellationToken.None);
 
         result.Result.Should().BeOfType<UnauthorizedResult>();
         VerifyNoPersonRead();
@@ -227,7 +285,7 @@ public class MyTenantsControllerTests
     [Fact]
     public async Task A_person_with_no_tenant_id_is_a_bad_request_and_nothing_is_read()
     {
-        var result = await CreateController(Member()).GetPerson(Guid.Empty, CancellationToken.None);
+        var result = await CreateController(Member()).GetPerson(Guid.Empty, null, CancellationToken.None);
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -237,7 +295,7 @@ public class MyTenantsControllerTests
     [Fact]
     public async Task A_person_the_service_does_not_return_is_not_found()
     {
-        var result = await CreateController(Member()).GetPerson(Guid.NewGuid(), CancellationToken.None);
+        var result = await CreateController(Member()).GetPerson(Guid.NewGuid(), null, CancellationToken.None);
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
@@ -250,14 +308,14 @@ public class MyTenantsControllerTests
     {
         var tenantId = Guid.NewGuid();
 
-        var result = await CreateController(Subjectless(authType)).GetPerson(tenantId, CancellationToken.None);
+        var result = await CreateController(Subjectless(authType)).GetPerson(tenantId, null, CancellationToken.None);
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
         _overviewService.Verify(
             s => s.GetPersonAsync(
                 null, tenantId, It.IsAny<IReadOnlySet<string>>(), authType,
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<OverviewFlagRules>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -265,7 +323,7 @@ public class MyTenantsControllerTests
         _overviewService.Verify(
             s => s.GetPersonAsync(
                 It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<OverviewFlagRules>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
     [Theory]

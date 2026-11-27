@@ -117,6 +117,13 @@ public static class ColumnLengths
         public const int Name = 255;
     }
 
+    /// <summary>The string columns of a flag rule.</summary>
+    public static class FlagRule
+    {
+        public const int Dataset = 64;
+        public const int Field = 64;
+    }
+
     /// <summary>The string columns of a do-not-disturb window.</summary>
     public static class DndWindow
     {

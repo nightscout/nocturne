@@ -1,4 +1,5 @@
 using Nocturne.API.Reports.Datasets;
+using Nocturne.API.Services.Identity;
 
 namespace Nocturne.API.Reports;
 
@@ -53,6 +54,9 @@ internal static class ReportServiceExtensions
         services.AddScoped<IReportSpecStore, ReportSpecStore>();
         services.AddScoped<ICustomReportRunner, CustomReportRunner>();
         services.AddScoped<FlagFactEvaluator>();
+        services.AddSingleton<FlagFactReads>();
+        services.AddScoped<IPersonalFlagRules, PersonalFlagRules>();
+        services.AddScoped<IFlagRuleCatalogue, FlagRuleCatalogue>();
         return services;
     }
 }

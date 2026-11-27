@@ -41,9 +41,6 @@ public sealed class TenantCache(
             ? await flights.GetOrSetAsync(distributed, full, factory, ct)
             : (await factory()).Value;
 
-    public Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken ct) where T : class =>
-        KeyFor(key) is { } full ? distributed.SetAsync(full, value, ttl, ct) : Task.CompletedTask;
-
     public Task RemoveFamilyAsync(string family, CancellationToken ct = default) =>
         tenantAccessor.Context is { } tenant
             ? distributed.RemoveByPatternAsync($"{tenant.TenantId:D}:*:*:{family}:*", ct)
@@ -67,18 +64,22 @@ public sealed class TenantCache(
             local.Set(full, value, ttl);
     }
 
+    public Task<T> GetOrCreateLocalAsync<T>(
+        string key, Func<Task<T>> factory, TimeSpan ttl, CancellationToken ct = default) =>
+        GetOrCreateLocalAsync(key, factory, ttl, _ => true, ct);
+
     public async Task<T> GetOrCreateLocalAsync<T>(
-        string key, Func<Task<T>> factory, TimeSpan ttl, CancellationToken ct = default)
+        string key, Func<Task<T>> factory, TimeSpan ttl, Func<T, bool> isFresh, CancellationToken ct)
     {
         if (KeyFor(key) is not { } full)
             return await factory();
 
-        if (local.TryGetValue(full, out T? cached))
+        if (local.TryGetValue(full, out T? cached) && isFresh(cached!))
             return cached!;
 
         return await flights.RunAsync($"local:{full}", async () =>
         {
-            if (local.TryGetValue(full, out T? again))
+            if (local.TryGetValue(full, out T? again) && isFresh(again!))
                 return again!;
 
             var value = await factory();

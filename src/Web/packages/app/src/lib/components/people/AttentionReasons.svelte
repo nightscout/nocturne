@@ -12,6 +12,7 @@
   import Info from "@lucide/svelte/icons/info";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import { attentionPhrase } from "./attention-phrases.svelte.js";
+  import { ruleReasonDetails } from "./flag-rule-text.svelte.js";
 
   interface Props {
     person: TenantOverviewItem;
@@ -30,7 +31,11 @@
 
   const reasons = $derived(
     (person.attention ?? [])
-      .map((reason) => ({ reason, phrase: attentionPhrase(reason, person) }))
+      .map((reason) => ({
+        reason,
+        phrase: attentionPhrase(reason, person),
+        details: !compact && reason.rule ? ruleReasonDetails(reason.rule) : [],
+      }))
       .filter((entry) => entry.phrase !== "")
       .slice(0, compact ? 1 : undefined)
   );
@@ -41,7 +46,7 @@
     class="flex gap-x-3 gap-y-0.5 {compact ? 'min-w-0' : 'flex-wrap'}"
     data-testid="attention-reasons"
   >
-    {#each reasons as { reason, phrase }, index (index)}
+    {#each reasons as { reason, phrase, details }, index (index)}
       {@const level = alertLevel(reason.level ?? null)}
       {@const prefix = alertLevelPrefix(level)}
       {@const noReading =
@@ -62,6 +67,9 @@
           <span class="sr-only">{prefix}</span>
         {/if}
         <span class={compact ? "truncate" : ""}>{phrase}</span>
+        {#each details as detail (detail)}
+          <span class="font-normal text-muted-foreground">{detail}</span>
+        {/each}
       </li>
     {/each}
   </ul>

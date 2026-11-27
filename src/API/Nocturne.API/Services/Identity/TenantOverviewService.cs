@@ -44,6 +44,7 @@ public class TenantOverviewService : ITenantOverviewService
     private readonly ITeamRepository _teams;
     private readonly IServiceProvider _scope;
     private readonly IGlucoseStatusClassifier _classifier;
+    private readonly IPersonalFlagRules _flagRules;
     private readonly TimeProvider _time;
     private readonly ILogger<TenantOverviewService> _logger;
 
@@ -52,6 +53,7 @@ public class TenantOverviewService : ITenantOverviewService
         ITeamRepository teams,
         IServiceProvider scope,
         IGlucoseStatusClassifier classifier,
+        IPersonalFlagRules flagRules,
         TimeProvider timeProvider,
         ILogger<TenantOverviewService> logger)
     {
@@ -59,22 +61,25 @@ public class TenantOverviewService : ITenantOverviewService
         _teams = teams;
         _scope = scope;
         _classifier = classifier;
+        _flagRules = flagRules;
         _time = timeProvider;
         _logger = logger;
     }
 
     public async Task<TenantOverviewResponse> GetOverviewAsync(
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
+        OverviewFlagRules flagRules,
         bool credentialLimitTo24Hours = false,
         CancellationToken ct = default)
     {
-        var items = await BuildItemsAsync(
-            await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct), credentialLimitTo24Hours, ct);
+        var (items, hiddenCount, rulesPending) = await BuildOverviewAsync(
+            subjectId, await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct), null, flagRules,
+            credentialLimitTo24Hours, ct);
         var firstGroups = await _teams.GetFirstGroupOfPeopleAsync(subjectId, _time.GetUtcNow().UtcDateTime, ct);
         var headed = items
             .Select(item => firstGroups.TryGetValue(item.TenantId, out var group) ? item with { FirstGroupId = group } : item)
             .ToList();
-        return new(headed, null);
+        return new(headed, hiddenCount, rulesPending);
     }
 
     public Task<IReadOnlyList<StaffGroup>> GetGroupsAsync(Guid subjectId, CancellationToken ct) =>
@@ -82,12 +87,13 @@ public class TenantOverviewService : ITenantOverviewService
 
     public async Task<TenantOverviewResponse?> GetGroupOverviewAsync(
         Guid subjectId, Guid groupId, IReadOnlySet<string> tokenScopes, AuthType authType,
-        bool credentialLimitTo24Hours, CancellationToken ct)
+        OverviewFlagRules flagRules, bool credentialLimitTo24Hours, CancellationToken ct)
     {
         if (await ReadableInGroupAsync(subjectId, groupId, tokenScopes, authType, ct) is not { } group)
             return null;
 
-        return new(await BuildItemsAsync(group.Readable, credentialLimitTo24Hours, ct), group.HiddenCount);
+        return await BuildOverviewAsync(
+            subjectId, group.Readable, group.HiddenCount, flagRules, credentialLimitTo24Hours, ct);
     }
 
     public async Task<TenantReviewResponse?> GetGroupReviewAsync(
@@ -114,8 +120,31 @@ public class TenantOverviewService : ITenantOverviewService
         return (readable, people.Count - readable.Count);
     }
 
+    /// <summary>
+    /// The items of <paramref name="glucoseReadTenants"/>, with the subject's own flag rules judged for each unless
+    /// <paramref name="flagRules"/> leaves them out.
+    /// </summary>
+    private async Task<TenantOverviewResponse> BuildOverviewAsync(
+        Guid subjectId,
+        IReadOnlyList<GlucoseReadTenant> glucoseReadTenants,
+        int? hiddenCount,
+        OverviewFlagRules flagRules,
+        bool credentialLimitTo24Hours,
+        CancellationToken ct)
+    {
+        var rules = flagRules == OverviewFlagRules.Judge && glucoseReadTenants.Count > 0
+            ? await _flagRules.BeginAsync(subjectId, credentialLimitTo24Hours, ct)
+            : null;
+        var items = await BuildItemsAsync(glucoseReadTenants, rules, credentialLimitTo24Hours, ct);
+        rules?.Finish();
+        return new(items, hiddenCount, rules?.PeopleWithRulesPending ?? 0);
+    }
+
     private async Task<List<TenantOverviewItem>> BuildItemsAsync(
-        IReadOnlyList<GlucoseReadTenant> glucoseReadTenants, bool credentialLimitTo24Hours, CancellationToken ct)
+        IReadOnlyList<GlucoseReadTenant> glucoseReadTenants,
+        IPersonalFlagRuleRun? rules,
+        bool credentialLimitTo24Hours,
+        CancellationToken ct)
     {
         var items = new List<TenantOverviewItem>();
         foreach (var readable in glucoseReadTenants)
@@ -129,7 +158,7 @@ public class TenantOverviewService : ITenantOverviewService
                 async () =>
                 {
                     await using var scope = OpenTenantScope(tenant, historyClamped);
-                    return await BuildItemAsync(scope.ServiceProvider, tenant, access, ct);
+                    return await BuildItemAsync(scope.ServiceProvider, readable, access, rules, ct);
                 },
                 () =>
                 {
@@ -309,6 +338,7 @@ public class TenantOverviewService : ITenantOverviewService
 
     public async Task<TenantPersonDetail?> GetPersonAsync(
         Guid? subjectId, Guid tenantId, IReadOnlySet<string> tokenScopes, AuthType authType,
+        OverviewFlagRules flagRules,
         bool credentialLimitTo24Hours = false,
         CancellationToken ct = default)
     {
@@ -325,10 +355,14 @@ public class TenantOverviewService : ITenantOverviewService
         var to = _time.GetUtcNow().UtcDateTime;
         var from = to - PersonWindow;
 
+        var rules = flagRules == OverviewFlagRules.Judge
+            ? await _flagRules.BeginAsync(subject, credentialLimitTo24Hours, ct)
+            : null;
         await using var scope = OpenTenantScope(tenant, access.HistoryClamped);
         var services = scope.ServiceProvider;
 
-        var person = await BuildItemAsync(services, tenant, access, ct);
+        var person = await BuildItemAsync(services, readable, access, rules, ct);
+        rules?.Finish();
         var readings = await services.GetRequiredService<ICanonicalGlucoseService>().GetWindowAsync(from, to, ct);
         var entries = access.Therapy ? await ReadEntriesAsync(services, from, to, ct) : null;
 
@@ -363,8 +397,9 @@ public class TenantOverviewService : ITenantOverviewService
     }
 
     private async Task<TenantOverviewItem> BuildItemAsync(
-        IServiceProvider services, TenantRecord tenant, ItemAccess access, CancellationToken ct)
+        IServiceProvider services, GlucoseReadTenant readable, ItemAccess access, IPersonalFlagRuleRun? rules, CancellationToken ct)
     {
+        var tenant = readable.Tenant;
         var historyClamped = access.HistoryClamped;
         var nowUtc = _time.GetUtcNow().UtcDateTime;
         var canonical = services.GetRequiredService<ICanonicalGlucoseService>();
@@ -378,6 +413,7 @@ public class TenantOverviewService : ITenantOverviewService
         int? activeAlertCount = null;
         AlertRuleSeverity? highestSeverity = null;
         List<V4TrackerStatus>? trackers = null;
+        IReadOnlyList<TrackerInstance>? activeTrackers = null;
         if (access.Alerts)
         {
             var activeExcursions = await db.AlertExcursions.AsNoTracking()
@@ -393,9 +429,8 @@ public class TenantOverviewService : ITenantOverviewService
                 .Select(e => (AlertRuleSeverity?)AlertRuleMapper.Readable(e.AlertRule!.Severity))
                 .Min();
 
-            trackers = TrackerStatusCondenser.Condense(
-                await services.GetRequiredService<ITrackerRepository>().GetActiveInstancesAsync(ct),
-                nowUtc);
+            activeTrackers = await services.GetRequiredService<ITrackerRepository>().GetActiveInstancesAsync(ct);
+            trackers = TrackerStatusCondenser.Condense(activeTrackers, nowUtc);
         }
 
         TenantOverviewTherapy? therapy = null;
@@ -411,9 +446,10 @@ public class TenantOverviewService : ITenantOverviewService
         }
 
         TenantOverviewDevices? devices = null;
+        PumpSnapshot? pump = null;
         if (access.Devices)
         {
-            var pump = await services.GetRequiredService<IPumpSnapshotRepository>()
+            pump = await services.GetRequiredService<IPumpSnapshotRepository>()
                 .GetLatestAsync(asOf: null, ct);
             devices = new TenantOverviewDevices(pump?.Reservoir, pump?.BatteryPercent, pump?.Timestamp);
         }
@@ -432,6 +468,15 @@ public class TenantOverviewService : ITenantOverviewService
         var status = _classifier.Classify(
             latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, nowUtc);
 
+        var attention = BuildAttention(status, reading, lastReadingAt, activeAlertCount, highestSeverity, trackers, nowUtc);
+        if (rules is not null)
+        {
+            attention = attention
+                .Concat(await rules.ReasonsAsync(readable, services, latest, activeTrackers, pump, ct))
+                .OrderByDescending(r => r.Level)
+                .ToList();
+        }
+
         return new TenantOverviewItem(
             tenant.Id, tenant.Slug, tenant.DisplayName,
             latest?.Timestamp ?? lastReadingAt,
@@ -439,7 +484,7 @@ public class TenantOverviewService : ITenantOverviewService
             activeAlertCount, highestSeverity,
             ThinToBuckets(recent),
             therapy, devices, trackers,
-            BuildAttention(status, reading, lastReadingAt, activeAlertCount, highestSeverity, trackers, nowUtc),
+            attention,
             FirstGroupId: null);
     }
 

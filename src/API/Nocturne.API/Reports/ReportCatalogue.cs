@@ -43,14 +43,17 @@ public sealed record CustomReportCatalogue(
 /// <param name="Dataset">The name a condition gives the dataset.</param>
 /// <param name="Field">The field. A glucose field is in mg/dL, the unit a rule's value is always in.</param>
 /// <param name="Kind">period: over the last N days, kept for up to 15 minutes; live: as it is now, read every time, with no range.</param>
-/// <param name="OwnRange">Measured against each person's own target range, whose bound the judgement states.</param>
+/// <param name="Range">
+/// For a glucose time figure, the target range it is measured against: consensus (one range for everyone) or own (each
+/// person's own target range, whose bound the judgement states). Null for any other fact.
+/// </param>
 /// <param name="Scopes">Every scope a caller needs to judge it for a person: the dataset's, the field's own, and reports.read for a period fact.</param>
 /// <param name="MaxDays">The longest range a condition on it takes, in days; null for a live fact.</param>
 public sealed record CustomReportFlagFact(
     [property: Required] string Dataset,
     [property: Required] CustomReportField Field,
     [property: Required] string Kind,
-    [property: Required] bool OwnRange,
+    string? Range,
     [property: Required] IReadOnlyList<string> Scopes,
     int? MaxDays);
 
@@ -267,13 +270,20 @@ internal sealed class ReportCatalogue(
         [.. ReportDerivedOps.All.Select(Op)],
         [.. registry.All.Select(dataset => Describe(dataset, grantedScopes, useMmol))],
         ReportWorkspace.Build(registry, grantedScopes),
+        FlagFactEntries(registry, grantedScopes));
+
+    /// <summary>
+    /// Every flag fact of <paramref name="registry"/>, in dataset order, each field's <c>Permitted</c> by
+    /// <paramref name="grantedScopes"/>.
+    /// </summary>
+    internal static IReadOnlyList<CustomReportFlagFact> FlagFactEntries(IReportDatasetRegistry registry, IReadOnlySet<string> grantedScopes) =>
         [.. registry.All.SelectMany(dataset => FlagFacts.Of(dataset).Select(field => new CustomReportFlagFact(
             dataset.Name,
             Field(field.ResolveUnit(useMmol: false), dataset, grantedScopes),
             ReportWire.Name(field.FlagFact!.Kind),
-            field.FlagFact.OwnRange,
+            field.FlagFact.Range == ReportRangeFamily.None ? null : ReportWire.Name(field.FlagFact.Range),
             FlagFacts.Scopes(dataset, field),
-            field.FlagFact.Kind == ReportFlagFactKind.Period ? FlagFacts.MaxDays : null)))]);
+            field.FlagFact.Kind == ReportFlagFactKind.Period ? FlagFacts.MaxDays : null)))];
 
     internal static string PanelKindLabel(ReportPanelKind kind) => kind switch
     {

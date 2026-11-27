@@ -201,6 +201,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ITenantCreationInviteRepository, TenantCreationInviteRepository>();
         services.AddTransient<IPlatformPolicyRepository, PlatformPolicyRepository>();
         services.AddTransient<ITeamRepository, TeamRepository>();
+        services.AddTransient<IFlagRuleRepository, FlagRuleRepository>();
         services.AddTransient<ISubjectRepository, SubjectRepository>();
         services.AddTransient<ITenantRepository, TenantRepository>();
         services.AddTransient<ITenantMembershipRepository, TenantMembershipRepository>();

@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Nocturne.API.Tests.Infrastructure;
 
 /// <summary>
-/// <c>GetGrantedScopes</c>, <c>IsCallerHistoryClamped</c>, <c>CallerAccessEndsAt</c> and
+/// <c>GetGrantedScopes</c>, <c>GetTenantlessTokenScopes</c>, <c>IsCallerHistoryClamped</c>, <c>CallerAccessEndsAt</c> and
 /// <c>ICategoryReadContext.IsHistoryClamped</c> read the sum of a member's reasons, a team's included.
 /// What a member gives anyone else is bounded by their direct reason alone
 /// (<c>HttpContextExtensions.CallerGrantCeiling</c>), so every file that reads the sum is pinned here
@@ -15,7 +15,8 @@ namespace Nocturne.API.Tests.Infrastructure;
 [Trait("Category", "Unit")]
 public class GrantCeilingSumReaderGuardTests
 {
-    private static readonly string[] SumReaders = ["GetGrantedScopes", "IsCallerHistoryClamped", "CallerAccessEndsAt"];
+    private static readonly string[] SumReaders =
+        ["GetGrantedScopes", "GetTenantlessTokenScopes", "IsCallerHistoryClamped", "CallerAccessEndsAt"];
 
     /// <summary>Properties that read the sum; a method of the same name (<c>MemberScopeResolver.IsHistoryClamped</c>) only computes.</summary>
     private static readonly string[] SumProperties = ["IsHistoryClamped"];
@@ -77,6 +78,8 @@ public class GrantCeilingSumReaderGuardTests
         ["src/API/Nocturne.API/Controllers/V4/Connectors/CareLinkConnectController.cs"] = (Reads.AccessCheck, "gates the sign-in on tenant.settings"),
         ["src/API/Nocturne.API/Controllers/V4/Health/ActivityController.cs"] = (Reads.AccessCheck, "redacts activity the caller may not read"),
         ["src/API/Nocturne.API/Controllers/V4/Health/Oura/OuraController.cs"] = (Reads.AccessCheck, "refuses an import the clamped caller could not read back"),
+        ["src/API/Nocturne.API/Controllers/V4/Identity/FlagRulesController.cs"] =
+            (Reads.AccessCheck, "counts the people a rule cannot be checked for from the caller's own access"),
         ["src/API/Nocturne.API/Controllers/V4/Identity/MyPermissionsController.cs"] = (Reads.AccessCheck, "reports the caller's own scopes and 24-hour limit"),
         ["src/API/Nocturne.API/Controllers/V4/Identity/MyTenantsController.cs"] = (Reads.AccessCheck, "resolves the caller's own access per tenant"),
         ["src/API/Nocturne.API/Controllers/V4/Identity/OverviewAdmissionController.cs"] = (Reads.AccessCheck, "lists the tenants the caller may read"),

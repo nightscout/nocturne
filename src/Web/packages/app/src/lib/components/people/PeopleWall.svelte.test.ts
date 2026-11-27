@@ -6,6 +6,7 @@ import { page as pageState } from "$app/state";
 import {
   GlucoseStatus,
   NotificationUrgency,
+  OverviewRuleSet,
   TenantOverviewAttentionKind,
   type StaffGroup,
   type TenantOverviewItem,
@@ -55,7 +56,7 @@ vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
     loading: false,
     refresh: async () => {},
   }),
-  getOverview: (args?: { group?: string }) => {
+  getOverview: (args?: { group?: string; rules?: OverviewRuleSet }) => {
     refreshes.reads.push(args);
     const group = args?.group;
     return {
@@ -158,6 +159,15 @@ afterEach(() => {
 });
 
 describe("People wall display", () => {
+  it("reads the overview without the viewer's own flag rules, since the room sees it", async () => {
+    overview.data = { tenants: [named(1)] };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 001")).toBeVisible();
+
+    expect(refreshes.reads.length).toBeGreaterThan(0);
+    expect(refreshes.reads).toEqual(refreshes.reads.map(() => ({ rules: OverviewRuleSet.Fixed })));
+  });
+
   describe("leaving", () => {
     it("goes back to the People page on Escape", async () => {
       overview.data = { tenants: [named(1)] };
@@ -820,8 +830,12 @@ describe("a group's wall", () => {
     render(PeopleWall);
     await expect.element(page.getByText("Person 003")).toBeVisible();
 
-    expect(refreshes.reads).toContainEqual({ group: birch.id });
-    expect(refreshes.reads.filter((read) => JSON.stringify(read) !== JSON.stringify({ group: birch.id }))).toEqual([]);
+    expect(refreshes.reads).toContainEqual({ group: birch.id, rules: OverviewRuleSet.Fixed });
+    expect(
+      refreshes.reads.filter(
+        (read) => JSON.stringify(read) !== JSON.stringify({ group: birch.id, rules: OverviewRuleSet.Fixed })
+      )
+    ).toEqual([]);
     expect(namesIn("wall-band")).toEqual(["Person 001"]);
     expect(columnRows()).toEqual([["Person 002"], ["Person 003"]]);
     expect(page.getByText("Person 009").elements()).toHaveLength(0);
@@ -833,6 +847,17 @@ describe("a group's wall", () => {
     expect(navigation.address.searchParams.get("group")).toBe(birch.id);
   });
 
+  it("reads a group without the viewer's own flag rules, as the everyone wall does", async () => {
+    openAt(`?group=${birch.id}`);
+    overview.groups = [birch];
+    overview.groupReads[birch.id!] = { tenants: [named(2)], hiddenCount: 0 };
+    render(PeopleWall);
+    await expect.element(page.getByText("Person 002")).toBeVisible();
+
+    expect(refreshes.reads.length).toBeGreaterThan(0);
+    expect(refreshes.reads).toEqual(refreshes.reads.map(() => ({ group: birch.id, rules: OverviewRuleSet.Fixed })));
+  });
+
   it("lists the same people whatever else the address holds", async () => {
     openAt(`?group=${birch.id}&lens=review&days=30&person=p003`);
     overview.groups = [birch];
@@ -840,8 +865,12 @@ describe("a group's wall", () => {
     render(PeopleWall);
     await expect.element(page.getByText("Person 003")).toBeVisible();
 
-    expect(refreshes.reads).toContainEqual({ group: birch.id });
-    expect(refreshes.reads.filter((read) => JSON.stringify(read) !== JSON.stringify({ group: birch.id }))).toEqual([]);
+    expect(refreshes.reads).toContainEqual({ group: birch.id, rules: OverviewRuleSet.Fixed });
+    expect(
+      refreshes.reads.filter(
+        (read) => JSON.stringify(read) !== JSON.stringify({ group: birch.id, rules: OverviewRuleSet.Fixed })
+      )
+    ).toEqual([]);
     expect(columnRows().flat()).toEqual(["Person 002", "Person 003"]);
     expect(page.getByTestId("wall-hidden-in-group").elements()).toHaveLength(0);
   });

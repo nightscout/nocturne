@@ -5,7 +5,7 @@
   import { untrack } from "svelte";
   import { isHttpError } from "@sveltejs/kit";
   import { getGroups } from "#lib/api/generated/myTenants.generated.remote.js";
-  import type { TenantOverviewResponse } from "@nocturne/api-client";
+  import { OverviewRuleSet, type TenantOverviewResponse } from "@nocturne/api-client";
   import RevealableOverlay from "#lib/components/shared/RevealableOverlay.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -48,9 +48,11 @@
   let fellBack = $state<FallbackReason | null>(null);
   const group = $derived(groupOf(tab));
   const groupsQuery = getGroups();
+  // The wall is seen by everyone in the room, so it never shows one viewer's own rules.
   const overview = followPeople(
     () => group,
-    () => void groupsQuery.refresh().catch(() => {})
+    () => void groupsQuery.refresh().catch(() => {}),
+    OverviewRuleSet.Fixed
   );
   const query = $derived(overview.query);
   const groupNotFound = $derived(isHttpError(query.error) && query.error.status === 404);

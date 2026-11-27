@@ -44,11 +44,11 @@ namespace Nocturne.API.Tests.Reports;
 
 /// <summary>
 /// The flag fact evaluator across many people: each outcome, the scopes a fact needs, the own range, the keep of
-/// figures, the read audit and the batch, and that its figures are the ones a custom report's figures panel gives for
-/// the same person and range.
+/// figures and its background reads, the read audit and the batch, and that its figures are the ones a custom report's
+/// figures panel gives for the same person and range.
 /// </summary>
 [Trait("Category", "Unit")]
-public class FlagFactEvaluatorTests(ITestOutputHelper output)
+public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
 {
     private static readonly DateTimeOffset Start = new(2026, 11, 20, 12, 0, 0, TimeSpan.Zero);
 
@@ -67,31 +67,41 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
     /// <summary>
     /// One person's data: readings back over <paramref name="History"/>, their own target range schedule, and the latest
     /// reading's age. With <paramref name="ReadFailsAfter"/>, reading their glucose waits for it, then fails as the
-    /// database fails.
+    /// database fails; with <paramref name="Defect"/>, it throws that at once. <paramref name="Pumps"/> are their pump
+    /// snapshots, oldest first.
     /// </summary>
     private sealed record Person(
         Func<int, double> Mgdl,
         TimeSpan History,
         (string Time, double Low, double High)[]? Schedule = null,
         TimeSpan? LatestAge = null,
-        Task? ReadFailsAfter = null);
+        Task? ReadFailsAfter = null,
+        Exception? Defect = null,
+        PumpSnapshot[]? Pumps = null);
 
     private sealed class Harness
     {
         private int _glucoseReads;
+        private int _pumpReads;
         private int _latestReads;
         private int _scheduleReads;
         private int _roundTrips;
+        private int _glucoseReadsAtOnce;
+        private int _mostGlucoseReadsAtOnce;
         private readonly ReadAccessLogWriter _writer;
         private readonly List<ReadAccessLogEntity> _rows = [];
 
         public FakeTimeProvider Time { get; } = new(Start);
         public Dictionary<Guid, Person> Data { get; } = [];
         public IServiceProvider Request { get; }
+        public FlagFactReads Reads { get; }
         public FlagFactEvaluator Evaluator { get; }
         public ReportSpecValidator Validator { get; }
 
         public int GlucoseReads => _glucoseReads;
+
+        /// <summary>Reads of pump snapshots over a range, as the device status dataset reads them.</summary>
+        public int PumpReads => _pumpReads;
         public int LatestReads => _latestReads;
         public int ScheduleReads => _scheduleReads;
 
@@ -116,7 +126,24 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
         /// <summary>Runs as each latest reading is read.</summary>
         public Action? OnLatestRead { get; set; }
 
-        public Harness()
+        public List<string> Warnings { get; } = [];
+
+        /// <summary>The messages logged at error or above; each is in <see cref="Warnings"/> too.</summary>
+        public List<string> Errors { get; } = [];
+
+        /// <summary>When set, each glucose read waits on it before it answers.</summary>
+        public Func<Task>? DuringGlucoseRead { get; set; }
+
+        /// <summary>The most glucose reads that were running at one time.</summary>
+        public int MostGlucoseReadsAtOnce => Volatile.Read(ref _mostGlucoseReadsAtOnce);
+
+        /// <summary>The glucose reads running now.</summary>
+        public int GlucoseReadsAtOnce => Volatile.Read(ref _glucoseReadsAtOnce);
+
+        /// <summary>When set, reading this person's pump snapshots fails as the database fails.</summary>
+        public Guid? PumpFailsFor { get; set; }
+
+        public Harness(int limit = 0)
         {
             var local = new MemoryCache(new MemoryCacheOptions());
             var distributed = TestTenantCache.Distributed(local);
@@ -154,9 +181,10 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
             services.AddSingleton(auditConfig.Object);
             services.AddSingleton(_writer);
             services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
-            services.AddSingleton(Mock.Of<IPumpSnapshotRepository>());
+            services.AddScoped(sp => Pumps(sp.GetRequiredService<ITenantAccessor>().TenantId));
             services.AddSingleton(Mock.Of<IUploaderSnapshotRepository>());
-            services.AddSingleton(Mock.Of<IDeviceAgeService>());
+            services.AddSingleton(Mock.Of<IDeviceAgeService>(d =>
+                d.GetSensorAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()) == Task.FromResult(new SensorAgeInfo())));
             services.AddSingleton(Mock.Of<ITrackerRepository>());
             services.AddSingleton(boluses.Object);
             services.AddSingleton(new Mock<ITempBasalRepository>().Object);
@@ -167,16 +195,24 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
             services.AddScoped(sp => DoublesOf(sp).Latest);
             services.AddScoped(sp => DoublesOf(sp).TargetRanges);
 
-            Request = services.BuildServiceProvider().CreateScope().ServiceProvider;
+            var root = services.BuildServiceProvider();
+            Request = root.CreateScope().ServiceProvider;
+            Reads = new FlagFactReads(root.GetRequiredService<IServiceScopeFactory>(), Time, new ListLogger<FlagFactReads>(Warnings, Errors),
+                limit > 0 ? limit : Environment.ProcessorCount);
             Validator = new ReportSpecValidator(ReportSpecValidatorTests.Registry, Time);
             Evaluator = For(Viewer);
         }
 
         /// <summary>The evaluator a request of <paramref name="viewer"/> resolves.</summary>
-        public FlagFactEvaluator For(Guid viewer) => new(
-            ReportSpecValidatorTests.Registry, Validator, Request,
-            Mock.Of<IAuditContext>(a => a.SubjectId == viewer && a.SubjectName == "Viewer" && a.AuthType == "Session"),
-            new HttpContextAccessor(), Time);
+        public FlagFactEvaluator For(Guid viewer)
+        {
+            var evaluator = new FlagFactEvaluator(
+                ReportSpecValidatorTests.Registry, Validator, Reads, Request,
+                Mock.Of<IAuditContext>(a => a.SubjectId == viewer && a.SubjectName == "Viewer" && a.AuthType == "Session"),
+                new HttpContextAccessor(), Time);
+            Owners.Add(evaluator, this);
+            return evaluator;
+        }
 
         /// <summary>The read-audit rows written so far; the writer takes no more after.</summary>
         public async Task<IReadOnlyList<ReadAccessLogEntity>> AuditRowsAsync()
@@ -234,11 +270,58 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
                 {
                     Interlocked.Increment(ref _glucoseReads);
                     Interlocked.Increment(ref _roundTrips);
-                    return Data.TryGetValue(tenant, out var person) && person.ReadFailsAfter is { } gate
-                        ? FailAfter(gate)
+                    Data.TryGetValue(tenant, out var person);
+                    if (person?.Defect is { } defect)
+                        return Task.FromException<IEnumerable<SensorGlucose>>(defect);
+                    if (person?.ReadFailsAfter is { } gate)
+                        return FailAfter(gate);
+                    return DuringGlucoseRead is { } during
+                        ? Counted(during, () => Readings(tenant, from!.Value, to!.Value))
                         : Task.FromResult<IEnumerable<SensorGlucose>>(Readings(tenant, from!.Value, to!.Value));
                 });
             return glucose.Object;
+        }
+
+        private async Task<IEnumerable<SensorGlucose>> Counted(Func<Task> during, Func<IReadOnlyList<SensorGlucose>> readings)
+        {
+            var atOnce = Interlocked.Increment(ref _glucoseReadsAtOnce);
+            int most;
+            while (atOnce > (most = Volatile.Read(ref _mostGlucoseReadsAtOnce))
+                && Interlocked.CompareExchange(ref _mostGlucoseReadsAtOnce, atOnce, most) != most)
+            {
+            }
+            try
+            {
+                await during();
+                return readings();
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _glucoseReadsAtOnce);
+            }
+        }
+
+        private IPumpSnapshotRepository Pumps(Guid tenant)
+        {
+            PumpSnapshot[] Held() => Data.TryGetValue(tenant, out var person) ? person.Pumps ?? [] : [];
+            var pumps = new Mock<IPumpSnapshotRepository>();
+            pumps.Setup(p => p.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .Returns((DateTime? from, DateTime? to, string? _, string? _, int _, int _, bool _, CancellationToken _) =>
+                {
+                    Interlocked.Increment(ref _pumpReads);
+                    Interlocked.Increment(ref _roundTrips);
+                    return tenant == PumpFailsFor
+                        ? Task.FromException<IEnumerable<PumpSnapshot>>(new NpgsqlException("connection refused"))
+                        : Task.FromResult<IEnumerable<PumpSnapshot>>([.. Held().Where(p => p.Timestamp >= from && p.Timestamp <= to)]);
+                });
+            pumps.Setup(p => p.GetLatestAsync(null, It.IsAny<CancellationToken>()))
+                .Returns(() =>
+                {
+                    Interlocked.Increment(ref _roundTrips);
+                    return Task.FromResult(Held().LastOrDefault());
+                });
+            return pumps.Object;
         }
 
         private static async Task<IEnumerable<SensorGlucose>> FailAfter(Task gate)
@@ -318,7 +401,86 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
 
         public static async Task<IReadOnlyList<FlagJudgement>> JudgeAsync(
             FlagFactEvaluator evaluator, GlucoseReadTenant person, params FlagFactCondition[] conditions) =>
-            (await evaluator.JudgeAsync([person], conditions, credentialLimitTo24Hours: false, CancellationToken.None)).Single().Judgements;
+            (await JudgeManyAsync(evaluator, [person], conditions, false, CancellationToken.None)).Single();
+
+        /// <summary>
+        /// One pass as the People overview makes it: each person in their own scope, judged on the latest reading that
+        /// scope reads, then the background reads started. Nothing waits for them.
+        /// </summary>
+        public static async Task<(IReadOnlyList<FlagPersonJudging> People, int Pending)> JudgeOnceAsync(
+            FlagFactEvaluator evaluator,
+            IReadOnlyList<GlucoseReadTenant> people,
+            IReadOnlyList<FlagFactCondition> conditions,
+            bool credentialLimitTo24Hours,
+            CancellationToken cancellationToken)
+        {
+            var judging = evaluator.Begin(conditions, credentialLimitTo24Hours);
+            var judged = new List<FlagPersonJudging>();
+            var live = conditions.Any(c => c.Dataset.Name == "current_status");
+            var devices = conditions.Any(c => c.Dataset.Name == "device_status");
+            foreach (var person in people)
+            {
+                var clamped = MemberScopeResolver.IsHistoryClamped(
+                    credentialLimitTo24Hours, person.MembershipLimitTo24Hours, person.EffectivePermissions);
+                await using var scope = TenantOverviewService.OpenTenantScope(TheRequest(evaluator), person.Tenant, clamped, "test");
+                var latest = live && !clamped
+                    ? await scope.ServiceProvider.GetRequiredService<ICanonicalGlucoseService>().GetLatestAsync(cancellationToken)
+                    : null;
+                var pump = devices ? await NewestPumpAsync(person, scope.ServiceProvider, cancellationToken) : null;
+                judged.Add(await judging.JudgeAsync(person, scope.ServiceProvider, new FlagLiveReads(latest, [], pump), cancellationToken));
+            }
+            judging.Finish();
+            return (judged, judging.Pending);
+        }
+
+        /// <summary>
+        /// Every person's judgements as the overview gives them once its background reads are done: a pass, the reads it
+        /// left, and a second pass for the people that were pending.
+        /// </summary>
+        public static async Task<IReadOnlyList<IReadOnlyList<FlagJudgement>>> JudgeManyAsync(
+            FlagFactEvaluator evaluator,
+            IReadOnlyList<GlucoseReadTenant> people,
+            IReadOnlyList<FlagFactCondition> conditions,
+            bool credentialLimitTo24Hours,
+            CancellationToken cancellationToken)
+        {
+            var (first, _) = await JudgeOnceAsync(evaluator, people, conditions, credentialLimitTo24Hours, cancellationToken);
+            await ReadsOf(evaluator).WhenIdleAsync();
+            var result = new IReadOnlyList<FlagJudgement>[people.Count];
+            var again = new List<int>();
+            for (var i = 0; i < people.Count; i++)
+            {
+                if (first[i].State == FlagPersonState.Judged)
+                    result[i] = first[i].Judgements;
+                else
+                    again.Add(i);
+            }
+            if (again.Count > 0)
+            {
+                var (second, _) = await JudgeOnceAsync(
+                    evaluator, [.. again.Select(i => people[i])], conditions, credentialLimitTo24Hours, cancellationToken);
+                for (var k = 0; k < again.Count; k++)
+                {
+                    second[k].State.Should().Be(FlagPersonState.Judged, "a person is judged once their background read is kept");
+                    result[again[k]] = second[k].Judgements;
+                }
+            }
+            return result;
+        }
+
+        /// <summary>The newest pump snapshot, read as the overview reads it for a caller who may read devices.</summary>
+        public static async Task<PumpSnapshot?> NewestPumpAsync(GlucoseReadTenant person, IServiceProvider scope, CancellationToken cancellationToken) =>
+            Scope.Satisfies(person.AllowedScopes, Scope.DevicesRead)
+                ? await scope.GetRequiredService<IPumpSnapshotRepository>().GetLatestAsync(null, cancellationToken)
+                : null;
+
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FlagFactEvaluator, Harness> Owners = new();
+
+        private static IServiceProvider TheRequest(FlagFactEvaluator evaluator) =>
+            Owners.TryGetValue(evaluator, out var harness) ? harness.Request : throw new InvalidOperationException("Not a harness evaluator.");
+
+        private static FlagFactReads ReadsOf(FlagFactEvaluator evaluator) =>
+            Owners.TryGetValue(evaluator, out var harness) ? harness.Reads : throw new InvalidOperationException("Not a harness evaluator.");
 
         /// <summary>The figures a custom report's figures panel gives for <paramref name="person"/> over the last <paramref name="hours"/>.</summary>
         public async Task<IReadOnlyDictionary<string, object?>> ReportAsync(GlucoseReadTenant person, string dataset, int hours)
@@ -452,9 +614,9 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
         var harness = new Harness();
         var person = harness.Follow(new Person(Pattern, TimeSpan.FromDays(15)));
 
-        var judged = await harness.Evaluator.JudgeAsync([person], [TimeBelow(harness)], credentialLimitTo24Hours: true, CancellationToken.None);
+        var judged = await Harness.JudgeManyAsync(harness.Evaluator, [person], [TimeBelow(harness)], credentialLimitTo24Hours: true, CancellationToken.None);
 
-        judged.Single().Judgements.Single().Uncheckable.Should().Be(FlagUncheckable.HistoryLimited);
+        judged.Single().Single().Uncheckable.Should().Be(FlagUncheckable.HistoryLimited);
         harness.RoundTrips.Should().Be(0);
     }
 
@@ -516,10 +678,10 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
         var tight = harness.Follow(new Person(_ => 90, TimeSpan.FromDays(15), AllDay(100, 200)), Therapy);
         var condition = TimeBelowOwnRange(harness, 50);
 
-        var judged = await harness.Evaluator.JudgeAsync([wide, tight], [condition], false, CancellationToken.None);
+        var judged = await Harness.JudgeManyAsync(harness.Evaluator, [wide, tight], [condition], false, CancellationToken.None);
 
-        var a = judged.Single(p => p.TenantId == wide.Tenant.Id).Judgements.Single();
-        var b = judged.Single(p => p.TenantId == tight.Tenant.Id).Judgements.Single();
+        var a = judged[0].Single();
+        var b = judged[1].Single();
         (a.Outcome, a.Value, a.Bound).Should().Be((FlagOutcome.NotMatched, 0.0, new FlagBound(80, 160, false)));
         (b.Outcome, b.Value, b.Bound).Should().Be((FlagOutcome.Matched, 100.0, new FlagBound(100, 200, false)));
     }
@@ -607,24 +769,30 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
     // ---- the keep ----
 
     [Fact]
-    public async Task A_period_fact_is_read_once_inside_its_keep_and_again_after()
+    public async Task A_period_fact_is_read_once_inside_its_keep_and_read_again_behind_the_call_that_finds_it_ageing()
     {
         var harness = new Harness();
         var person = harness.Follow(new Person(Pattern, TimeSpan.FromDays(15)));
         var condition = TimeBelow(harness);
-        var life = FlagFactEvaluator.KeepLife(person.Tenant.Id, condition.ReadKey);
-        life.Should().BeGreaterThan(FlagFactEvaluator.PeriodKeep - FlagFactEvaluator.KeepSpread).And.BeLessThanOrEqualTo(FlagFactEvaluator.PeriodKeep);
+        var life = FlagFactEvaluator.KeepLife(person.Tenant.Id, condition.ReadKey, ReportFlagFactKind.Period);
+        life.Should().BeGreaterThan(FlagFactEvaluator.PeriodKeep * (1 - FlagFactEvaluator.KeepSpread))
+            .And.BeLessThanOrEqualTo(FlagFactEvaluator.PeriodKeep);
+        var ageing = life * FlagFactEvaluator.RefreshAfter;
 
         var first = (await harness.JudgeAsync(person, condition)).Single();
-        harness.Time.Advance(life - TimeSpan.FromTicks(1));
+        harness.Time.Advance(ageing - TimeSpan.FromTicks(1));
         var second = (await harness.JudgeAsync(person, condition)).Single();
         harness.GlucoseReads.Should().Be(1);
         second.Should().Be(first, "a kept figure states the window it was read over");
 
         harness.Time.Advance(TimeSpan.FromTicks(1));
-        var third = (await harness.JudgeAsync(person, condition)).Single();
+        var served = (await harness.JudgeAsync(person, condition)).Single();
+        served.Should().Be(first, "an ageing keep is still served, and read again behind the call");
         harness.GlucoseReads.Should().Be(2);
-        third.Window!.To.Should().Be(Start.Add(life).ToUnixTimeMilliseconds());
+
+        var third = (await harness.JudgeAsync(person, condition)).Single();
+        third.Window!.To.Should().Be(Start.Add(ageing).ToUnixTimeMilliseconds());
+        harness.GlucoseReads.Should().Be(2);
     }
 
     [Fact]
@@ -635,40 +803,46 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
         var late = harness.Follow(new Person(Pattern, TimeSpan.FromDays(15)));
         var condition = TimeBelow(harness);
         var gap = TimeSpan.FromMinutes(1);
-        var earlyEnds = FlagFactEvaluator.KeepLife(early.Tenant.Id, condition.ReadKey);
-        var lateEnds = gap + FlagFactEvaluator.KeepLife(late.Tenant.Id, condition.ReadKey);
+        var earlyEnds = FlagFactEvaluator.KeepLife(early.Tenant.Id, condition.ReadKey, ReportFlagFactKind.Period);
+        var lateEnds = gap + FlagFactEvaluator.KeepLife(late.Tenant.Id, condition.ReadKey, ReportFlagFactKind.Period);
+        var (first, second) = earlyEnds <= lateEnds ? (early, late) : (late, early);
 
         await harness.JudgeAsync(early, condition);
         harness.Time.Advance(gap);
         await harness.JudgeAsync(late, condition);
         harness.Time.Advance(TimeSpan.FromTicks(Math.Min(earlyEnds.Ticks, lateEnds.Ticks)) - gap);
-        await harness.Evaluator.JudgeAsync([early, late], [condition], false, CancellationToken.None);
+        var (judged, pending) = await Harness.JudgeOnceAsync(harness.Evaluator, [first, second], [condition], false, CancellationToken.None);
 
-        harness.GlucoseReads.Should().Be(3, "only the keep whose own life has run out since its read is read again");
+        judged.Select(j => j.State).Should().Equal(
+            [FlagPersonState.Pending, FlagPersonState.Judged], "only the keep whose own life has run out since its read is pending");
+        pending.Should().Be(1);
     }
 
     [Fact]
-    public async Task People_read_in_one_call_are_not_all_read_again_at_once_and_each_is_by_fifteen_minutes()
+    public async Task People_read_in_one_call_are_read_again_spread_over_several_minutes_and_a_page_polling_each_minute_never_waits()
     {
         const int people = 24;
         var harness = new Harness();
         var followed = Enumerable.Range(0, people).Select(_ => harness.Follow(new Person(Pattern, TimeSpan.FromDays(15)))).ToList();
         var condition = TimeBelow(harness);
-        await harness.Evaluator.JudgeAsync(followed, [condition], false, CancellationToken.None);
+        await Harness.JudgeManyAsync(harness.Evaluator, followed, [condition], false, CancellationToken.None);
         harness.GlucoseReads.Should().Be(people);
 
         var readsEachMinute = new List<int>();
-        for (var minute = 1; minute <= FlagFactEvaluator.PeriodKeep.TotalMinutes; minute++)
+        var lastRefresh = (int)Math.Ceiling(FlagFactEvaluator.PeriodKeep.TotalMinutes * FlagFactEvaluator.RefreshAfter);
+        for (var minute = 1; minute <= lastRefresh; minute++)
         {
             harness.Time.Advance(TimeSpan.FromMinutes(1));
             var before = harness.GlucoseReads;
-            await harness.Evaluator.JudgeAsync(followed, [condition], false, CancellationToken.None);
+            var (_, pending) = await Harness.JudgeOnceAsync(harness.Evaluator, followed, [condition], false, CancellationToken.None);
+            await harness.Reads.WhenIdleAsync();
+            pending.Should().Be(0, "a keep read again before its life runs out is never missing for a page that polls");
             readsEachMinute.Add(harness.GlucoseReads - before);
         }
 
         output.WriteLine($"Reads each minute: {string.Join(", ", readsEachMinute)}.");
-        readsEachMinute.Should().OnlyContain(reads => reads < people, "the keeps of one call run out spread over several minutes");
-        readsEachMinute.Sum().Should().Be(people, "every keep runs out by 15 minutes after its read, and is read again once");
+        readsEachMinute.Should().OnlyContain(reads => reads < people, "the keeps of one call age spread over several minutes");
+        readsEachMinute.Sum().Should().Be(people, "every keep is read again once by two thirds of the longest life");
     }
 
     [Fact]
@@ -800,36 +974,41 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task A_live_read_is_audited_on_every_call()
+    public async Task A_live_read_is_audited_once_a_keep_for_each_viewer()
     {
         var harness = new Harness();
         var person = harness.Follow(new Person(Pattern, TimeSpan.FromDays(1), LatestAge: TimeSpan.FromMinutes(30)));
 
         await harness.JudgeAsync(person, HoursSinceReading(harness));
         await harness.JudgeAsync(person, HoursSinceReading(harness));
+        harness.Time.Advance(FlagFactEvaluator.PeriodKeep);
+        await harness.JudgeAsync(person, HoursSinceReading(harness));
 
+        harness.LatestReads.Should().Be(3, "a live fact is judged on every call");
         (await harness.AuditRowsAsync()).Should().HaveCount(2).And.OnlyContain(r => r.EntityType == "glucose");
     }
 
     [Fact]
-    public async Task Figures_kept_by_a_call_that_failed_on_another_person_get_their_row_when_next_served()
+    public async Task A_person_whose_background_read_fails_is_left_unjudged_for_the_keep_logged_once_and_the_others_are_judged()
     {
         var harness = new Harness();
-        var firstJudged = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        harness.OnLatestRead = () => firstJudged.TrySetResult();
-        var served = harness.Follow(new Person(Pattern, TimeSpan.FromDays(15), LatestAge: TimeSpan.FromMinutes(10)));
-        var failing = harness.Follow(new Person(Pattern, TimeSpan.FromDays(15), ReadFailsAfter: firstJudged.Task));
+        var served = harness.Follow(new Person(Pattern, TimeSpan.FromDays(15)));
+        var failing = harness.Follow(new Person(Pattern, TimeSpan.FromDays(15), ReadFailsAfter: Task.CompletedTask));
+        IReadOnlyList<FlagFactCondition> conditions = [TimeBelow(harness)];
 
-        var failed = () => harness.Evaluator.JudgeAsync(
-            [served, failing], [TimeBelow(harness), HoursSinceReading(harness)], false, CancellationToken.None);
-        await failed.Should().ThrowAsync<NpgsqlException>();
-        harness.OnLatestRead = null;
-        var kept = (await harness.JudgeAsync(served, TimeBelow(harness))).Single();
+        await Harness.JudgeOnceAsync(harness.Evaluator, [served, failing], conditions, false, CancellationToken.None);
+        await harness.Reads.WhenIdleAsync();
+        var (judged, pending) = await Harness.JudgeOnceAsync(harness.Evaluator, [served, failing], conditions, false, CancellationToken.None);
+        var (again, _) = await Harness.JudgeOnceAsync(harness.Evaluator, [served, failing], conditions, false, CancellationToken.None);
+        await harness.Reads.WhenIdleAsync();
 
-        kept.Outcome.Should().Be(FlagOutcome.Matched);
-        harness.GlucoseReads.Should().Be(2, "the second call is served the figures the failed call kept");
-        var row = (await harness.AuditRowsAsync()).Should().ContainSingle().Subject;
-        (row.TenantId, row.EntityType).Should().Be((served.Tenant.Id, "glucose"));
+        judged.Select(j => j.State).Should().Equal(FlagPersonState.Judged, FlagPersonState.Failed);
+        pending.Should().Be(0, "a failed read is not still being checked");
+        judged[0].Judgements.Single().Outcome.Should().Be(FlagOutcome.Matched);
+        again[1].State.Should().Be(FlagPersonState.Failed, "the failure is kept, so the person is not read again on every call");
+        harness.GlucoseReads.Should().Be(2);
+        harness.Errors.Should().ContainSingle("the failure is logged once for the keep it makes");
+        (await harness.AuditRowsAsync()).Should().ContainSingle().Which.TenantId.Should().Be(served.Tenant.Id);
     }
 
     [Fact]
@@ -845,11 +1024,11 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
                 cancel.Cancel();
         };
 
-        var cancelled = () => harness.Evaluator.JudgeAsync(followed, [TimeBelow(harness)], false, cancel.Token);
+        var cancelled = () => Harness.JudgeManyAsync(harness.Evaluator, followed, [TimeBelow(harness)], false, cancel.Token);
         await cancelled.Should().ThrowAsync<OperationCanceledException>();
         harness.OnAuditSettingRead = null;
-        await harness.Evaluator.JudgeAsync(followed, [TimeBelow(harness)], false, CancellationToken.None);
-        await harness.Evaluator.JudgeAsync(followed, [TimeBelow(harness)], false, CancellationToken.None);
+        await Harness.JudgeManyAsync(harness.Evaluator, followed, [TimeBelow(harness)], false, CancellationToken.None);
+        await Harness.JudgeManyAsync(harness.Evaluator, followed, [TimeBelow(harness)], false, CancellationToken.None);
 
         harness.GlucoseReads.Should().Be(3);
         (await harness.AuditRowsAsync()).Select(r => r.TenantId).Should().Equal(
@@ -875,10 +1054,8 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
 
     // ---- the batch ----
 
-    // It writes the times to the test output but asserts none: shared CI runners are too slow and too uneven
-    // to hold a wall-clock budget. The measured times are on #4401.
     [Fact]
-    public async Task Three_hundred_people_with_two_conditions_are_each_judged_in_order_with_three_reads_cold_and_one_warm()
+    public async Task Three_hundred_people_with_two_conditions_are_pending_without_a_read_cold_and_judged_warm_with_no_read()
     {
         const int people = 300;
         var harness = new Harness();
@@ -886,29 +1063,56 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
             .Select(_ => harness.Follow(new Person(Pattern, TimeSpan.FromDays(15), AllDay(70, 180), TimeSpan.FromMinutes(10))))
             .ToList();
         IReadOnlyList<FlagFactCondition> conditions = [TimeBelow(harness), HoursSinceReading(harness)];
-        var warmUp = Enumerable.Range(0, FlagFactEvaluator.PeopleAtOnce)
+        var warmUp = Enumerable.Range(0, 8)
             .Select(_ => harness.Follow(new Person(Pattern, TimeSpan.FromDays(15), AllDay(70, 180), TimeSpan.FromMinutes(10))))
             .ToList();
         var first = Stopwatch.StartNew();
-        await harness.Evaluator.JudgeAsync(warmUp, conditions, false, CancellationToken.None);
+        await Harness.JudgeManyAsync(harness.Evaluator, warmUp, conditions, false, CancellationToken.None);
         output.WriteLine($"First call of the process, {warmUp.Count} people: {first.Elapsed.TotalMilliseconds:0} ms.");
         var warmUpTrips = harness.RoundTrips;
 
         var clock = Stopwatch.StartNew();
-        var judged = await harness.Evaluator.JudgeAsync(followed, conditions, false, CancellationToken.None);
-        var cold = clock.Elapsed;
+        var (cold, pending) = await Harness.JudgeOnceAsync(harness.Evaluator, followed, conditions, false, CancellationToken.None);
+        var coldPass = clock.Elapsed;
         var coldTrips = harness.RoundTrips - warmUpTrips;
         clock.Restart();
-        await harness.Evaluator.JudgeAsync(followed, conditions, false, CancellationToken.None);
-        var warm = clock.Elapsed;
-        var warmTrips = harness.RoundTrips - warmUpTrips - coldTrips;
+        await harness.Reads.WhenIdleAsync();
+        var background = clock.Elapsed;
+        var backgroundTrips = harness.RoundTrips - warmUpTrips - coldTrips;
+        clock.Restart();
+        var (warm, warmPending) = await Harness.JudgeOnceAsync(harness.Evaluator, followed, conditions, false, CancellationToken.None);
+        var warmPass = clock.Elapsed;
+        var warmTrips = harness.RoundTrips - warmUpTrips - coldTrips - backgroundTrips;
 
-        output.WriteLine($"{people} people, 2 conditions, {FlagFactEvaluator.PeopleAtOnce} at once: cold {cold.TotalMilliseconds:0} ms, "
-            + $"{coldTrips} round trips; warm {warm.TotalMilliseconds:0} ms, {warmTrips} round trips.");
-        judged.Select(p => p.TenantId).Should().Equal(followed.Select(p => p.Tenant.Id), "each person's judgements come back in the order given");
-        judged.Should().OnlyContain(p => p.Judgements[0].Outcome == FlagOutcome.Matched
+        output.WriteLine($"{people} people, 2 conditions, limit {harness.Reads.Size}: cold pass {coldPass.TotalMilliseconds:0} ms, "
+            + $"{coldTrips} round trips; background {background.TotalMilliseconds:0} ms, {backgroundTrips} round trips; "
+            + $"warm pass {warmPass.TotalMilliseconds:0} ms, {warmTrips} round trips.");
+        (pending, warmPending).Should().Be((people, 0));
+        cold.Should().OnlyContain(p => p.State == FlagPersonState.Pending);
+        warm.Should().OnlyContain(p => p.State == FlagPersonState.Judged
+            && p.Judgements[0].Outcome == FlagOutcome.Matched
             && p.Judgements[1].Outcome == FlagOutcome.NotMatched);
-        coldTrips.Should().Be(people * 3, "per person: the readings, the time zone and the latest reading");
-        warmTrips.Should().Be(people, "a kept period fact reads nothing; the live fact reads the latest reading");
+        coldTrips.Should().Be(people, "the cold pass reads only the latest reading the overview reads anyway");
+        backgroundTrips.Should().Be(people * 2, "per person, in the background: the readings and the time zone");
+        warmTrips.Should().Be(people, "a kept period fact reads nothing; the live fact is judged on the overview's latest reading");
+    }
+
+    private sealed class ListLogger<T>(List<string> warnings, List<string> errors) : ILogger<T>
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel < LogLevel.Warning)
+                return;
+            lock (warnings)
+            {
+                warnings.Add(formatter(state, exception));
+                if (logLevel >= LogLevel.Error)
+                    errors.Add(formatter(state, exception));
+            }
+        }
     }
 }

@@ -21,6 +21,9 @@ public class SubjectForeignKeyCoverageTests
     {
         ["tenants.setup_owner_subject_id"] =
             "set to null by the delete: a subject it names is one the owner step made, and deleting it ends the record",
+        ["flag_rules.subject_id"] =
+            "a rule is made only from its owner's own sign-in, which no unclaimed subject has had, and its strict "
+            + "subject_pin hides every rule from the unpinned context the predicates run in, so a read there would always pass",
     };
 
     [Fact]
