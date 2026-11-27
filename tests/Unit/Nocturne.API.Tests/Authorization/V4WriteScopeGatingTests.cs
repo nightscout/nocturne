@@ -297,6 +297,11 @@ public class V4WriteScopeGatingTests
             // The clock face is the capability, and the face's owner turned acknowledging on.
             ["ClockFaceAlertsController.MarkClockAlertSeen"] = NotDataCategory.AnonymousByDeclaration,
 
+            // The page-view beacon adds one to an instance-wide count of a route id and stores
+            // nothing about the caller or the tenant, and pages a viewer opens before signing in
+            // are counted too.
+            ["PageViewController.RecordPageView"] = NotDataCategory.AnonymousByDeclaration,
+
             // Actions in a controller of GateExemptControllers that declare no admission. The
             // controller entry waives only the data-category mapping, so each is named here.
             ["CoachMarkController.UpdateStatus"] = NotDataCategory.PresentationState,

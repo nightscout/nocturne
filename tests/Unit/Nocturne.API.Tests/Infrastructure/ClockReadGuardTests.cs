@@ -45,6 +45,7 @@ public class ClockReadGuardTests
         "src/API/Nocturne.API/Services/Docs",
         "src/API/Nocturne.API/Services/DevOnly",
         "src/API/Nocturne.API/Services/Jobs",
+        "src/API/Nocturne.API/Services/Telemetry",
     ];
 
     /// <summary>Migrated files whose folder is not yet migrated as a whole.</summary>

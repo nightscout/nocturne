@@ -1,0 +1,119 @@
+---
+title: Page counts
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Page counts
+
+Page counts tell you how many times each page of the app was opened each day,
+added up across every site on your instance. Use them to see which reports and
+features people use, and which they do not.
+
+<Callout type="warning" title="Off by default. Update your privacy policy first.">
+
+  Page counts are off on every new install. If your privacy policy says that
+  your sites have no analytics, change it before you turn this on, and give your
+  users the notice that your policy requires. There is suggested wording at the
+  end of this page.
+
+</Callout>
+
+## What is stored
+
+One row for each page and day, in the `page_view_counts` table of your own
+database:
+
+| Column | Example | What it is |
+|--------|---------|------------|
+| `date` | `2026-11-27` | The day of the views, in UTC. |
+| `route_id` | `/(authenticated)/reports/agp` | Which page of the app was opened. This is the page's name in the app's code, not its address. |
+| `count` | `140` | How many times that page was opened that day, on all sites together. |
+
+That is all. The rows stay in your database. Nocturne does not send them to the
+Nocturne project or to any other service.
+
+## What is not stored
+
+- **No person.** No user, member, account, session or cookie.
+- **No site.** No tenant, slug or domain. The counts of all sites are added
+  together.
+- **No device.** No IP address, user agent, browser, screen size or language.
+- **No address details.** No query string and no values from the address, such
+  as report dates, record IDs or share tokens. Only the page's name.
+- **No time of day.** Only the date.
+- **No health data.** No glucose, treatment or other health values.
+
+The web app sends the page name to the API to count it. Like any other request,
+that request can appear in your server's ordinary request logs and traces. The
+page-count feature does not add anything to them.
+
+## How a view is counted
+
+- The app counts a view when a page opens in the browser, including the first
+  page of a visit.
+- A change that stays on the same page, such as a new date range on a report,
+  is not a new view.
+- The API accepts only the names of pages that exist in the app. It refuses all
+  other names.
+- Each address can send at most 120 views a minute. This stops one script from
+  filling the counts.
+- The API keeps the counts in memory and writes them to the database every five
+  minutes and when it stops. Today's counts can be up to five minutes behind.
+
+## Turn it on
+
+Set the value to `true`, then restart the stack. The API and the web app read
+the same setting, so the web app sends nothing while the API would not count
+it.
+
+| Install method | Setting |
+|----------------|---------|
+| [Install script](/docs/installation/install-script) or [Docker Compose](/docs/installation/docker-compose) | `PAGE_COUNTS_ENABLED=true` in the `.env` file |
+| [Portainer](/docs/installation/portainer) | **Count page views**: `true` |
+| Helm | `telemetry.pageCounts.enabled: true` |
+| Your own containers | `Telemetry__PageCounts__Enabled=true` on the API, and `PUBLIC_PAGE_COUNTS_ENABLED=true` on the web app |
+
+To turn it off, set the value back to `false` and restart. The app then sends
+nothing and the API counts nothing.
+
+## Read the counts
+
+Ask the API as a platform administrator, or with the instance key:
+
+```bash
+curl "https://example.com/api/v4/admin/telemetry/page-counts?from=2026-11-01&to=2026-11-27" \
+  -H "X-Instance-Key: $(printf '%s' "$INSTANCE_KEY" | sha256sum | cut -d' ' -f1)" \
+  -H "X-Instance-Service: page-counts"
+```
+
+`from` and `to` are UTC dates and include both days. Without them you get the
+last 30 days. The answer is a list:
+
+```json
+[
+  { "date": "2026-11-27", "routeId": "/(authenticated)/reports/agp", "count": 140 },
+  { "date": "2026-11-27", "routeId": "/(authenticated)/calendar", "count": 52 }
+]
+```
+
+## How long counts are kept
+
+The API deletes counts older than 400 days, once a day. It does this while page
+counts are off too, so old counts still go away after you turn the feature off.
+To delete all counts now, run `DELETE FROM page_view_counts;` on your database.
+
+## Suggested privacy policy wording
+
+Change this to match your service, and have it checked by someone qualified
+for your location:
+
+> **Page usage counts.** We count how many times each page of the app is opened
+> each day, added up across all the sites we host. We store only the name of
+> the page (for example, "AGP report"), the date and the total. We do not store
+> who opened the page, which site it was on, your IP address, your device or
+> browser, or any of your health data. We use these totals to learn which
+> features people use, so that we know where to put our effort. We keep them
+> for 400 days and then delete them.

@@ -216,6 +216,14 @@ observability:
       # upstream Nocturne exposes a /metrics endpoint.
       enabled: false
 
+# Aggregate page counts: how often each page of the app is opened per UTC day, summed across
+# every tenant, with no tenant, user, IP or user agent stored. Off by default; update your privacy
+# policy before turning it on. Sets the API's Telemetry:PageCounts:Enabled and the web app's
+# PUBLIC_PAGE_COUNTS_ENABLED together. See docs/operations/page-counts.md.
+telemetry:
+  pageCounts:
+    enabled: false
+
 demo:
   enabled: false
   image:

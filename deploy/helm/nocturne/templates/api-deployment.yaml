@@ -105,6 +105,8 @@ spec:
             # WEB_URL is required for chat-bot alert dispatch and must name the web
             # app's in-cluster Service; the public BASE_DOMAIN origin is deliberately
             # not used (rationale: API Services/Alerts/Providers/ChatBotProvider.cs).
+            - name: Telemetry__PageCounts__Enabled
+              value: {{ .Values.telemetry.pageCounts.enabled | toString | quote }}
             - name: WEB_URL
               value: {{ include "nocturne.web.internalUrl" . | quote }}
             - name: INSTANCE_KEY

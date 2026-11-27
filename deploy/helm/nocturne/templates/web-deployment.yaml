@@ -54,6 +54,8 @@ spec:
             - name: ALLOWED_FRAME_ANCESTORS
               value: {{ . | quote }}
             {{- end }}
+            - name: PUBLIC_PAGE_COUNTS_ENABLED
+              value: {{ .Values.telemetry.pageCounts.enabled | toString | quote }}
             - name: INSTANCE_KEY
               valueFrom:
                 secretKeyRef:

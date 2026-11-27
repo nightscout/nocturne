@@ -164,6 +164,7 @@ The full set of configurable values is in [`values.yaml`](./values.yaml). Highli
 | `bootstrap.enabled` | If true, runs `bootstrap-roles.sql` as a Helm pre-install hook against your Postgres using `bootstrap.adminSecret`. |
 | `ingress.enabled` / `.host` / `.className` / `.tls` | Single-host ingress fronting the web service. Optional `ingress.api.externalPath` exposes the API on the same host. |
 | `web.replicaCount` / `web.pdb` | Web replicas (default 1) and an optional PodDisruptionBudget (with the default `minAvailable: 1`, needs 2 or more replicas). See [Web replicas](#web-replicas). The API has no replica setting: see [Single API process](#single-api-process). |
+| `telemetry.pageCounts.enabled` | Count how often each page of the app is opened per day, summed across all tenants, with nothing about who opened it. Default `false`; update your privacy policy first. See [page counts](https://github.com/nightscout/nocturne/blob/main/docs/operations/page-counts.md). |
 | `{api,web,bootstrap}.image.digest` | Pin the image to an immutable content digest (see "Image pinning" below). |
 
 ### Image pinning

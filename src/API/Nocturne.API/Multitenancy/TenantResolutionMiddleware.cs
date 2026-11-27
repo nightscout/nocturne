@@ -132,6 +132,9 @@ public class TenantResolutionMiddleware
         // The web server's bot reports which chat platforms are online from the apex it was
         // configured with. The instance key authenticates it; the channel read stays per tenant.
         new TenantlessPath("/api/v4/system/heartbeat", HttpMethods.Post),
+        // The page-view beacon. Counts are summed over every tenant and the request's tenant is
+        // never read, so the apex's login and dashboard pages are counted like any other.
+        new TenantlessPath("/api/v4/telemetry/page-view", HttpMethods.Post),
         "/api/v4/chat-identity/directory/resolve",
         "/api/v4/chat-identity/directory/pending-links",
         // OIDC login can be initiated from the apex (no subdomain) — e.g. the
@@ -220,6 +223,7 @@ public class TenantResolutionMiddleware
         new TenantlessPath("/api/v4/admin/platform-settings", Prefix: true),
         new TenantlessPath("/api/v4/admin/tenant-invites", Prefix: true),
         new TenantlessPath("/api/v4/admin/tenants", Prefix: true),
+        new TenantlessPath("/api/v4/admin/telemetry/page-counts", HttpMethods.Get),
         new TenantlessPath("/api/v4/dev-only/", Prefix: true),
         new TenantlessPath("/api/v4/platform/", Prefix: true),
         new TenantlessPath("/api/v4/setup/", Prefix: true),
