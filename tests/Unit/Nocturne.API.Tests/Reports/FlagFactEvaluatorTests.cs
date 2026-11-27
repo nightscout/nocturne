@@ -1074,30 +1074,35 @@ public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
         await Harness.JudgeManyAsync(harness.Evaluator, warmUp, conditions, false, CancellationToken.None);
         output.WriteLine($"First call of the process, {warmUp.Count} people: {first.Elapsed.TotalMilliseconds:0} ms.");
         var warmUpTrips = harness.RoundTrips;
+        var warmUpLatest = harness.LatestReads;
 
         var clock = Stopwatch.StartNew();
         var (cold, pending) = await Harness.JudgeOnceAsync(harness.Evaluator, followed, conditions, false, CancellationToken.None);
         var coldPass = clock.Elapsed;
-        var coldTrips = harness.RoundTrips - warmUpTrips;
+        var coldLatest = harness.LatestReads - warmUpLatest;
         clock.Restart();
         await harness.Reads.WhenIdleAsync();
         var background = clock.Elapsed;
-        var backgroundTrips = harness.RoundTrips - warmUpTrips - coldTrips;
+        // The cold pass starts the background reads, which may make round trips before it returns, so the two are
+        // counted together; the cold pass's own reads are the latest readings.
+        var coldAndBackgroundTrips = harness.RoundTrips - warmUpTrips;
+        var backgroundLatest = harness.LatestReads - warmUpLatest - coldLatest;
         clock.Restart();
         var (warm, warmPending) = await Harness.JudgeOnceAsync(harness.Evaluator, followed, conditions, false, CancellationToken.None);
         var warmPass = clock.Elapsed;
-        var warmTrips = harness.RoundTrips - warmUpTrips - coldTrips - backgroundTrips;
+        var warmTrips = harness.RoundTrips - warmUpTrips - coldAndBackgroundTrips;
 
         output.WriteLine($"{people} people, 2 conditions, limit {harness.Reads.Size}: cold pass {coldPass.TotalMilliseconds:0} ms, "
-            + $"{coldTrips} round trips; background {background.TotalMilliseconds:0} ms, {backgroundTrips} round trips; "
+            + $"{coldLatest} latest reads; background {background.TotalMilliseconds:0} ms, {coldAndBackgroundTrips} round trips with the cold pass; "
             + $"warm pass {warmPass.TotalMilliseconds:0} ms, {warmTrips} round trips.");
         (pending, warmPending).Should().Be((people, 0));
         cold.Should().OnlyContain(p => p.State == FlagPersonState.Pending);
         warm.Should().OnlyContain(p => p.State == FlagPersonState.Judged
             && p.Judgements[0].Outcome == FlagOutcome.Matched
             && p.Judgements[1].Outcome == FlagOutcome.NotMatched);
-        coldTrips.Should().Be(people, "the cold pass reads only the latest reading the overview reads anyway");
-        backgroundTrips.Should().Be(people * 2, "per person, in the background: the readings and the time zone");
+        coldLatest.Should().Be(people, "the cold pass reads only the latest reading the overview reads anyway");
+        backgroundLatest.Should().Be(0);
+        coldAndBackgroundTrips.Should().Be(people * 3, "the cold pass's latest reading, and per person in the background: the readings and the time zone");
         warmTrips.Should().Be(people, "a kept period fact reads nothing; the live fact is judged on the overview's latest reading");
     }
 
