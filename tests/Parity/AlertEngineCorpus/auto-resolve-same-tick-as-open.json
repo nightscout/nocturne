@@ -1,18 +1,20 @@
 {
   "schema_version": 1,
   "name": "auto-resolve-same-tick-as-open",
-  "description": "the auto-resolve pass runs unconditionally after the tracker, so a resolve predicate already true on the open tick produces opened \u002B auto-resolved in one evaluation",
+  "description": "the auto-resolve pass runs unconditionally after the tracker, so a resolve predicate already true on the open tick produces opened + auto-resolved in one evaluation",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "iob",
       "condition_params": {
-        "operator": "\u003E=",
+        "schema_version": 2,
+        "operator": ">=",
         "value": 3
       },
       "auto_resolve_enabled": true,
       "auto_resolve_params": {
+        "schema_version": 2,
         "type": "trend",
         "trend": {
           "bucket": "flat"

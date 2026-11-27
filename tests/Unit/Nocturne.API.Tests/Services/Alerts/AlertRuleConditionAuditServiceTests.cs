@@ -20,8 +20,8 @@ namespace Nocturne.API.Tests.Services.Alerts;
 [Trait("Category", "Unit")]
 public class AlertRuleConditionAuditServiceTests
 {
-    private const string Rejected = """{"operator":"and","conditions":[]}""";
-    private const string Accepted = """{"direction":"below","value":70}""";
+    private const string Rejected = """{"schema_version":2,"operator":"and","conditions":[]}""";
+    private const string Accepted = """{"schema_version":2,"operator":"<","value":70}""";
 
     private static readonly Guid ActiveTenant = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid InactiveTenant = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");

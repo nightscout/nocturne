@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "not",
       "condition_params": {
+        "schema_version": 2,
         "child": {
           "type": "sustained",
           "sustained": {
@@ -15,8 +16,8 @@
             "child": {
               "type": "threshold",
               "threshold": {
-                "direction": "above",
-                "value": 180
+                "value": 180,
+                "operator": ">"
               }
             }
           }

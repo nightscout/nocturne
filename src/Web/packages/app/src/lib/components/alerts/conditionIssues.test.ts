@@ -63,7 +63,8 @@ describe("conditionIssuesMessage", () => {
 			["unknown_field", undefined],
 			["field_missing", "value"],
 			["field_missing", "operator"],
-			["field_missing", "direction"],
+			["unsupported_schema", "schema_version"],
+			["invalid_field", "minutes"],
 			["field_missing", "state"],
 			["field_missing", "child"],
 			["unknown_value", "bucket"],
@@ -149,6 +150,21 @@ describe("conditionIssuesMessage", () => {
 		);
 		expect(conditionIssuesMessage(rejected(400, [issue("unknown_value", "reading")]))).toBe(
 			"A reading count condition needs a comparison and a glucose level for each reading."
+		);
+	});
+
+	it("tells the person to save again a condition stored in an old format", () => {
+		expect(conditionIssuesMessage(rejected(400, [issue("unsupported_schema", "schema_version")]))).toBe(
+			"This rule's conditions were saved in an old format. Check the conditions and save the rule again."
+		);
+		expect(storedConditionIssuesMessage([issue("unsupported_schema", "schema_version")])).toBe(
+			"This rule's conditions were saved in an old format. Check the conditions and save the rule again."
+		);
+	});
+
+	it("says a condition's time must be whole minutes", () => {
+		expect(conditionIssuesMessage(rejected(400, [issue("invalid_field", "minutes")]))).toBe(
+			"A time in a condition must be a whole number of minutes, 0 or more."
 		);
 	});
 

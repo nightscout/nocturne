@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -50,7 +51,7 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
     {
         name,
         conditionType = "threshold",
-        conditionParams = new { direction = "above", value = 180 },
+        conditionParams = new { schema_version = ConditionSchema.Version, @operator = ">", value = 180 },
         severity = "warning",
         isEnabled = true,
         sortOrder = 0,
@@ -332,7 +333,7 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
         {
             name = "Multi-Channel Alert",
             conditionType = "threshold",
-            conditionParams = new { direction = "above", value = 250 },
+            conditionParams = new { schema_version = ConditionSchema.Version, @operator = ">", value = 250 },
             severity = "warning",
             isEnabled = true,
             sortOrder = 0,
@@ -465,7 +466,7 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
         {
             name = "Browser push",
             conditionType = "threshold",
-            conditionParams = new { direction = "above", value = 180 },
+            conditionParams = new { schema_version = ConditionSchema.Version, @operator = ">", value = 180 },
             severity = "warning",
             channels = new[] { new { channelType = "web_push", destination = "" } },
         };

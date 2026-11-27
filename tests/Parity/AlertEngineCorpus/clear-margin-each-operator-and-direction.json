@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "iob",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">",
         "value": 2,
         "clear_margin": 1
@@ -18,6 +19,7 @@
       "name": "rule-2",
       "condition_type": "iob",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">=",
         "value": 2,
         "clear_margin": 1
@@ -28,6 +30,7 @@
       "name": "rule-3",
       "condition_type": "cob",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "value": 10,
         "clear_margin": 5
@@ -38,6 +41,7 @@
       "name": "rule-4",
       "condition_type": "cob",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<=",
         "value": 10,
         "clear_margin": 5
@@ -48,9 +52,10 @@
       "name": "rule-5",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "above",
+        "schema_version": 2,
         "value": 180,
-        "clear_margin": 20
+        "clear_margin": 20,
+        "operator": ">"
       }
     },
     {
@@ -58,9 +63,10 @@
       "name": "rule-6",
       "condition_type": "rate_of_change",
       "condition_params": {
-        "direction": "falling",
-        "rate": 2,
-        "clear_margin": 1
+        "schema_version": 2,
+        "clear_margin": 1,
+        "operator": "<=",
+        "value": -2
       }
     },
     {
@@ -68,9 +74,10 @@
       "name": "rule-7",
       "condition_type": "rate_of_change",
       "condition_params": {
-        "direction": "rising",
-        "rate": 2,
-        "clear_margin": 1
+        "schema_version": 2,
+        "clear_margin": 1,
+        "operator": ">=",
+        "value": 2
       }
     }
   ],

@@ -37,7 +37,7 @@ describe("SettingsStep rate input", () => {
 
   it("shows a rate of 1.5 mg/dL per minute as 1.5", async () => {
     const draft = draftFor("falling_fast");
-    draft.leaf!.rate_of_change!.rate = 1.5;
+    draft.leaf!.rate_of_change!.value = -1.5;
     renderStep(draft);
 
     await expect.element(rateInput()).toHaveValue(1.5);
@@ -47,7 +47,7 @@ describe("SettingsStep rate input", () => {
   it("shows the same rate as its fraction in mmol/L per minute", async () => {
     glucoseUnits.current = "mmol";
     const draft = draftFor("falling_fast");
-    draft.leaf!.rate_of_change!.rate = 1.5;
+    draft.leaf!.rate_of_change!.value = -1.5;
     renderStep(draft);
 
     await expect.element(rateInput()).toHaveValue(0.08);
@@ -61,9 +61,47 @@ describe("SettingsStep rate input", () => {
 
     await rateInput().fill("0.08");
 
-    const stored = draft.leaf!.rate_of_change!.rate;
-    expect(stored).toBe(convertRateFromDisplayUnits(0.08, "mmol"));
-    expect(stored).toBeCloseTo(1.44, 2);
+    const stored = draft.leaf!.rate_of_change!.value;
+    expect(stored).toBe(-convertRateFromDisplayUnits(0.08, "mmol"));
+    expect(stored).toBeCloseTo(-1.44, 2);
+  });
+
+  it("shows a rise as it is stored, and a fall without its sign", async () => {
+    const rising = draftFor("rising_fast");
+    renderStep(rising);
+
+    const input = page.getByRole("spinbutton", {
+      name: "Alert when glucose increases this fast, or faster",
+    });
+    await expect.element(input).toHaveValue(3);
+    await input.fill("2");
+    expect(rising.leaf!.rate_of_change).toEqual({ operator: ">=", value: 2 });
+  });
+});
+
+describe("SettingsStep age input", () => {
+  it("edits a site age in days and stores whole minutes", async () => {
+    const draft = draftFor("site_change_due");
+    renderStep(draft);
+
+    const input = page.getByRole("spinbutton", {
+      name: "Alert when the infusion site is this old, or older",
+    });
+    await expect.element(input).toHaveValue(3);
+    await input.fill("2.5");
+    expect(draft.leaf!.site_age).toEqual({ operator: ">=", minutes: 2.5 * 1440 });
+  });
+
+  it("edits a sensor age in days and stores whole minutes", async () => {
+    const draft = draftFor("sensor_change_due");
+    renderStep(draft);
+
+    const input = page.getByRole("spinbutton", {
+      name: "Alert when the sensor is this old, or older",
+    });
+    await expect.element(input).toHaveValue(10);
+    await input.fill("14");
+    expect(draft.leaf!.sensor_age).toEqual({ operator: ">=", minutes: 14 * 1440 });
   });
 });
 

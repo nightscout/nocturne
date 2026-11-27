@@ -70,9 +70,9 @@ public class AlertSweepJobRunTests
         var rules = new[]
         {
             new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "Urgent low", AlertConditionType.Threshold,
-                """{"threshold": 54}""", AlertRuleSeverity.Critical, "{}", 0, false, null),
+                """{"schema_version": 2, "threshold": 54}""", AlertRuleSeverity.Critical, "{}", 0, false, null),
             new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "High", AlertConditionType.Threshold,
-                """{"direction": "above", "value": 250}""", AlertRuleSeverity.Warning, "{}", 1, false, null),
+                """{"schema_version": 2, "operator": ">", "value": 250}""", AlertRuleSeverity.Warning, "{}", 1, false, null),
         };
         _repository
             .Setup(r => r.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()))

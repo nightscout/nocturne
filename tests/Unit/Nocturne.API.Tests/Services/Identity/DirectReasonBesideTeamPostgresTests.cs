@@ -261,7 +261,7 @@ public class DirectReasonBesideTeamPostgresTests(DirectReasonBesideTeamPostgresT
             TenantId = s.Tenant,
             Name = "High",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = """{"direction":"above","value":180}""",
+            ConditionParams = """{"schema_version":2,"operator":">","value":180}""",
             IsEnabled = true,
         };
         db.AlertRules.Add(rule);

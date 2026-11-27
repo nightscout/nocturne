@@ -42,7 +42,7 @@ pub(super) fn signal_loss(
         DataStopped::At(anchor, source) => ClockLeaf::Measured(Elapsed {
             anchor,
             source: Some(source),
-            measure: Measure::AtLeast(Duration::minutes(i64::from(p.timeout_minutes.get()))),
+            measure: Measure::at_least(Duration::minutes(i64::from(p.timeout_minutes.get()))),
         }),
         DataStopped::Forever => ClockLeaf::Fixed(Truth::True),
         DataStopped::Unknown => ClockLeaf::Unknown(ContextFact::Glucose, UnknownReason::Absent),

@@ -20,7 +20,7 @@ public class ClockAnomalyBindingTests
             {
                 Id = Guid.Empty,
                 ConditionType = "signal_loss",
-                ConditionParams = JsonSerializer.SerializeToElement(new { timeout_minutes = 20 }),
+                ConditionParams = JsonSerializer.SerializeToElement(new { schema_version = 2, timeout_minutes = 20 }),
             },
             JsonSerializer.SerializeToElement(new { last_reading_at = lastReadingAt }),
             Now));

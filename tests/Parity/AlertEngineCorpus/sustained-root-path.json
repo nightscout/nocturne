@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
   "name": "sustained-root-path",
-  "description": "a sustained at the rule root keys its timer under the bare root path \u0027sustained\u0027",
+  "description": "a sustained at the rule root keys its timer under the bare root path 'sustained'",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "sustained",
       "condition_params": {
+        "schema_version": 2,
         "minutes": 5,
         "child": {
           "type": "trend",

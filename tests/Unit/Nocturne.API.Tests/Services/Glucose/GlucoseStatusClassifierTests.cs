@@ -40,12 +40,12 @@ public class GlucoseStatusClassifierTests
     {
         var resolved = NewClassifier().ResolveThresholds(
         [
-            Rule(AlertConditionType.Threshold, """{"direction":"below","value":65}""", AlertRuleSeverity.Warning),
-            Rule(AlertConditionType.Threshold, """{"direction":"above","value":220}""", AlertRuleSeverity.Warning),
+            Rule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":65}""", AlertRuleSeverity.Warning),
+            Rule(AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":220}""", AlertRuleSeverity.Warning),
             Rule(AlertConditionType.Threshold, "not json", AlertRuleSeverity.Critical),
-            Rule(AlertConditionType.Threshold, """{"value":300}""", AlertRuleSeverity.Critical),
-            Rule(AlertConditionType.Threshold, """{"direction":"below","value_from":{"fact":"target_low"}}""", AlertRuleSeverity.Critical),
-            Rule(AlertConditionType.RateOfChange, """{"direction":"below","rate":2}""", AlertRuleSeverity.Critical),
+            Rule(AlertConditionType.Threshold, """{"schema_version":2,"value":300}""", AlertRuleSeverity.Critical),
+            Rule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value_from":{"fact":"target_low"}}""", AlertRuleSeverity.Critical),
+            Rule(AlertConditionType.RateOfChange, """{"schema_version":2,"operator":"<=","value":-2}""", AlertRuleSeverity.Critical),
         ]);
 
         resolved.Should().Be(new TenantOverviewThresholds(55, 65, 220, 260));

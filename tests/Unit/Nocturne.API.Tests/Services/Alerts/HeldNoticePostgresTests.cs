@@ -59,7 +59,7 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
             TenantId = tenant,
             Name = "Urgent Low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = """{"direction": "below", "value": 54}""",
+            ConditionParams = """{"schema_version": 2, "operator": "<", "value": 54}""",
             Severity = AlertRuleSeverity.Critical,
             IsEnabled = true,
             CreatedAt = HeldSince,
@@ -79,7 +79,7 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
     }
 
     private static AlertRuleSnapshot Snapshot(Guid tenant, Guid rule) =>
-        new(rule, tenant, "Urgent Low", AlertConditionType.Threshold, """{"direction": "below", "value": 54}""",
+        new(rule, tenant, "Urgent Low", AlertConditionType.Threshold, """{"schema_version": 2, "operator": "<", "value": 54}""",
             AlertRuleSeverity.Critical, "{}", 0, false, null);
 
     private sealed record Sent(Mock<IAlertDeliveryService> Delivery, HeldRuleNotice Notice);
@@ -247,7 +247,7 @@ public class HeldNoticePostgresTests(HeldNoticePostgresTests.Database database)
             db.AlertRules.Add(new AlertRuleEntity
             {
                 Id = other, TenantId = tenant, Name = "Urgent Low", ConditionType = AlertConditionType.Threshold,
-                ConditionParams = """{"direction": "below", "value": 54}""", Severity = AlertRuleSeverity.Critical,
+                ConditionParams = """{"schema_version": 2, "operator": "<", "value": 54}""", Severity = AlertRuleSeverity.Critical,
                 IsEnabled = true, CreatedAt = HeldSince, UpdatedAt = HeldSince,
             });
             db.AlertTrackerState.Add(new AlertTrackerStateEntity

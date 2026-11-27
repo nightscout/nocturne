@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
   "name": "decimal-high-precision-boundary",
-  "description": "high-precision decimal comparison: 100.0001 vs threshold 100.0001 across \u003E=, \u003E, ==",
+  "description": "high-precision decimal comparison: 100.0001 vs threshold 100.0001 across >=, >, ==",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "iob",
       "condition_params": {
-        "operator": "\u003E=",
+        "schema_version": 2,
+        "operator": ">=",
         "value": 100.0001
       },
       "auto_resolve_enabled": false
@@ -18,7 +19,8 @@
       "name": "rule-2",
       "condition_type": "iob",
       "condition_params": {
-        "operator": "\u003E",
+        "schema_version": 2,
+        "operator": ">",
         "value": 100.0001
       },
       "auto_resolve_enabled": false
@@ -28,6 +30,7 @@
       "name": "rule-3",
       "condition_type": "iob",
       "condition_params": {
+        "schema_version": 2,
         "operator": "==",
         "value": 100.0001
       },

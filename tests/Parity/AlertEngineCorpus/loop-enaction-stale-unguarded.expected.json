@@ -1,31 +1,23 @@
 {
   "schema_version": 1,
-  "scenario": "loop-enaction-stale-shared-guard",
+  "scenario": "loop-enaction-stale-unguarded",
   "ticks": [
     {
       "at": "2026-01-05T12:00:00Z",
       "rules": [
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
-          "root": false,
-          "unknown": true,
-          "unknown_facts": [
-            {
-              "fact": "aps",
-              "reason": "absent"
-            }
-          ],
+          "root": true,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": false,
-              "unknown": true
+              "value": true
             }
           ],
-          "transition": "none",
+          "transition": "opened",
           "tracker": {
-            "state": "idle",
-            "held_since": "2026-01-05T12:00:00Z"
+            "state": "active",
+            "excursion": 1
           }
         }
       ]
@@ -42,7 +34,7 @@
               "value": true
             }
           ],
-          "transition": "opened",
+          "transition": "continues",
           "tracker": {
             "state": "active",
             "excursion": 1
@@ -67,7 +59,38 @@
             "state": "hysteresis",
             "excursion": 1,
             "hysteresis_started_at": "2026-01-05T12:10:00Z"
-          }
+          },
+          "next_change_at": "2026-01-05T12:10:00.000000100Z"
+        }
+      ]
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "root": false,
+          "unknown": true,
+          "unknown_facts": [
+            {
+              "fact": "aps",
+              "reason": "absent"
+            }
+          ],
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": false,
+              "unknown": true
+            }
+          ],
+          "transition": "closed",
+          "close_reason": "hysteresis",
+          "tracker": {
+            "state": "idle",
+            "held_since": "2026-01-05T12:15:00Z"
+          },
+          "next_change_at": "2026-01-06T12:15:00Z"
         }
       ]
     }

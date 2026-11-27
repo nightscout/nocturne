@@ -8,8 +8,9 @@
       "name": "rule-1",
       "condition_type": "tracker_age",
       "condition_params": {
+        "schema_version": 2,
         "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
-        "operator": "\u003E=",
+        "operator": ">=",
         "minutes": 0
       },
       "auto_resolve_enabled": false

@@ -16,7 +16,7 @@ let rule = {
   isEnabled: true,
   severity: "warning",
   conditionType: "threshold",
-  conditionParams: { direction: "below", value: 70 },
+  conditionParams: { operator: "<", value: 70 },
   channels: [],
 } as unknown as AlertRuleResponse;
 const lastCover = { ...rule, coversLow: true, isLastLowCover: true } as unknown as AlertRuleResponse;
@@ -204,7 +204,7 @@ describe("alert rule editor", () => {
     render(RuleEditorPage, {});
 
     const row = page.getByTestId("alert-condition-card").getByTestId("alert-condition-row");
-    await expect.element(row.getByRole("button", { name: "Direction" })).toHaveTextContent("below");
+    await expect.element(row.getByRole("button", { name: "Comparison" })).toHaveTextContent("less than");
   });
 
   describe("the last rule that covers low glucose", () => {

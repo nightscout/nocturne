@@ -210,7 +210,7 @@ public class AlertSnoozeServiceTests
         var time = new ManualTimeProvider();
         time.SetUtcNow(Now);
         var escalation =
-            $$$"""[{"type":"alert_state","alert_state":{"alert_id":"{{{seeded.RuleId}}}","state":"unacknowledged","for_minutes":15}}]""";
+            $$$"""[{"schema_version":2,"type":"alert_state","alert_state":{"alert_id":"{{{seeded.RuleId}}}","state":"unacknowledged","for_minutes":15}}]""";
         var watcher = new AlertRule
         {
             Id = Guid.NewGuid(),

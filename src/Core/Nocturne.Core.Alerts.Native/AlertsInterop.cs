@@ -34,13 +34,14 @@ public static partial class AlertsInterop
     private const string DescribeExport = "nocturne_alerts_describe";
     private const string ReferencesWallClockExport = "nocturne_alerts_references_wall_clock";
     private const string RuleReadsExport = "nocturne_alerts_rule_reads";
+    private const string MigrateExport = "nocturne_alerts_migrate";
 
     /// <summary>Every export bound below; <see cref="Probe"/> resolves each one.</summary>
     private static readonly string[] BoundExports =
     [
         FreeStringExport, VersionExport, TzdbVersionExport, ClockToleranceExport, HoldBoundExport, EvaluateExport, EvaluateNodeExport,
         LeafPathsExport, ClassifyExport, ValidateExport, ReplayExport, DescribeExport,
-        ReferencesWallClockExport, RuleReadsExport,
+        ReferencesWallClockExport, RuleReadsExport, MigrateExport,
         TrackerProcessExport, TrackerForceCloseExport, TrackerCloseElapsedHysteresisExport,
     ];
 
@@ -206,6 +207,14 @@ public static partial class AlertsInterop
     [LibraryImport(LibraryName, EntryPoint = RuleReadsExport, StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr RuleReadsNative(string requestJson);
 
+    /// <summary>
+    /// Rewrites one stored condition tree from condition schema 1 to schema 2. Request/response are
+    /// the JSON envelopes documented in crates/nocturne-alerts-ffi/README.md. Must be freed with
+    /// FreeString.
+    /// </summary>
+    [LibraryImport(LibraryName, EntryPoint = MigrateExport, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial IntPtr MigrateNative(string requestJson);
+
     /// <summary>Get the nocturne_alerts library version as a managed string.</summary>
     public static string GetVersion() => ConsumeString(VersionNative(), string.Empty);
 
@@ -245,6 +254,9 @@ public static partial class AlertsInterop
 
     /// <summary>Raw rule-reads call: request envelope JSON in, response envelope JSON out.</summary>
     public static string RuleReads(string requestJson) => ConsumeString(RuleReadsNative(requestJson), "{}");
+
+    /// <summary>Raw migrate call: request envelope JSON in, response envelope JSON out.</summary>
+    public static string Migrate(string requestJson) => ConsumeString(MigrateNative(requestJson), "{}");
 
     private static string ConsumeString(IntPtr ptr, string fallback)
     {

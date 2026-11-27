@@ -8,12 +8,13 @@
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "conditions": [
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           }
         ]
@@ -25,6 +26,7 @@
       "name": "rule-2",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "conditions": []
       },
       "auto_resolve_enabled": false

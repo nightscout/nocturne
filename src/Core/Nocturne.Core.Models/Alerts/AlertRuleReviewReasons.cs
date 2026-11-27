@@ -31,4 +31,11 @@ public static class AlertRuleReviewReasons
 
     /// <summary>A rule whose severity was not a known one. It was made critical.</summary>
     public const string SeverityUnrecognized = "severity_unrecognized";
+
+    /// <summary>
+    /// A rule whose site or sensor age, stored in hours or days, was not a whole number of minutes
+    /// when its condition moved to whole minutes. It was rounded toward the side that alerts no
+    /// later (docs/alerts/engine-semantics.md §1.5).
+    /// </summary>
+    public const string ConditionDurationRounded = "condition_duration_rounded";
 }

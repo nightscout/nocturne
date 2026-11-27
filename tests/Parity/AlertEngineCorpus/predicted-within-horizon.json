@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
   "name": "predicted-within-horizon",
-  "description": "any prediction at offset \u003C= within_minutes satisfying the comparison fires; points beyond the horizon are ignored",
+  "description": "any prediction at offset <= within_minutes satisfying the comparison fires; points beyond the horizon are ignored",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "predicted",
       "condition_params": {
-        "operator": "\u003C",
+        "schema_version": 2,
+        "operator": "<",
         "value": 70,
         "within_minutes": 30
       },

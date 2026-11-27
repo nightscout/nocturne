@@ -22,12 +22,12 @@ public class RustEnvelopeMapperTests
     {
         Id = Guid.Parse("00000000-0000-0000-0000-0000000000aa"),
         ConditionType = AlertConditionType.Threshold,
-        ConditionParams = """{"direction":"below","value":70}""",
+        ConditionParams = """{"schema_version":2,"operator":"<","value":70}""",
         AutoResolveEnabled = autoResolveEnabled,
         AutoResolveParams = autoResolveParams,
     };
 
-    private const string AutoResolveNode = """{"type":"threshold","threshold":{"direction":"above","value":90}}""";
+    private const string AutoResolveNode = """{"schema_version":2,"type":"threshold","threshold":{"operator":">","value":90}}""";
 
     [Fact]
     public void BuildRule_sends_auto_resolve_params_when_enabled()
@@ -167,9 +167,12 @@ public class RustEnvelopeMapperTests
     }
 
     [Theory]
+    [InlineData("""{"schema_version":2,"operator":"<","value":70}""", """{"schema_version":2,"type":"threshold","threshold":{"operator":"<","value":70}}""")]
+    [InlineData("""{"operator":"<","schema_version":2.0,"value":70}""", """{"schema_version":2.0,"type":"threshold","threshold":{"operator":"<","value":70}}""")]
     [InlineData("""{"direction":"below","value":70}""", """{"type":"threshold","threshold":{"direction":"below","value":70}}""")]
-    [InlineData("   ", """{"type":"threshold","threshold":null}""")]
-    [InlineData(null, """{"type":"threshold","threshold":null}""")]
+    [InlineData("""[70]""", """{"type":"threshold","threshold":[70]}""")]
+    [InlineData("   ", """{"schema_version":2,"type":"threshold","threshold":null}""")]
+    [InlineData(null, """{"schema_version":2,"type":"threshold","threshold":null}""")]
     public void WrapPayload_builds_the_full_node(string? payload, string expected)
     {
         RustEnvelopeMapper.WrapPayload("threshold", payload).Should().Be(expected);

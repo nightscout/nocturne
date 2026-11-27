@@ -62,9 +62,7 @@ export function summarizeCondition(
 			const p = node.threshold;
 			if (!p) return "";
 			return withMargin(
-				p.direction === "below"
-					? `Glucose below ${limitPhrase(p)}`
-					: `Glucose above ${limitPhrase(p)}`,
+				thresholdChip(p.operator, limitPhrase(p)),
 				p.clear_margin,
 				(m) => `${bg(m)} ${bgLabel()}`,
 			);
@@ -72,12 +70,12 @@ export function summarizeCondition(
 		case "rate_of_change": {
 			const p = node.rate_of_change;
 			if (!p) return "";
-			return withMargin(rateChip(p.direction, ratePerMinuteText(p.rate ?? 0)), p.clear_margin, ratePerMinuteText);
+			return withMargin(rateChip(p.operator, p.value ?? 0), p.clear_margin, ratePerMinuteText);
 		}
 		case "staleness": {
 			const p = node.staleness;
 			if (!p) return "";
-			return `Sensor data age ${opSymbol(p.operator)} ${formatMinutes(p.value ?? 0)}`;
+			return `Sensor data age ${opSymbol(p.operator)} ${formatDuration(p.minutes ?? 0)}`;
 		}
 		case "predicted": {
 			const p = node.predicted;
@@ -173,12 +171,12 @@ export function summarizeCondition(
 		case "site_age": {
 			const p = node.site_age;
 			if (!p) return "";
-			return `Site age ${opSymbol(p.operator)} ${formatHours(p.value ?? 0)}`;
+			return `Site age ${opSymbol(p.operator)} ${formatDuration(p.minutes ?? 0)}`;
 		}
 		case "sensor_age": {
 			const p = node.sensor_age;
 			if (!p) return "";
-			return `Sensor age ${opSymbol(p.operator)} ${formatDays(p.value ?? 0)}`;
+			return `Sensor age ${opSymbol(p.operator)} ${formatDuration(p.minutes ?? 0)}`;
 		}
 		case "alert_state": {
 			const p = node.alert_state;
@@ -357,15 +355,25 @@ function forecastChip(p: PredictedCondition): string {
 	return "Predicted glucose";
 }
 
-function rateChip(direction: string | undefined, rate: string): string {
-	switch (direction) {
-		case "falling":
-			return `Glucose falling at least ${rate}`;
-		case "rising":
-			return `Glucose rising at least ${rate}`;
+/** A threshold in words for the sides a schema 1 threshold had, else by its symbol. */
+function thresholdChip(operator: string | undefined, limit: string): string {
+	switch (operator) {
+		case "<":
+			return `Glucose below ${limit}`;
+		case ">":
+			return `Glucose above ${limit}`;
 		default:
-			return `Glucose changing at least ${rate}`;
+			return `Glucose ${opSymbol(operator)} ${limit}`;
 	}
+}
+
+/** A rate that bounds a fall or a rise in words, else by its symbol and signed value. */
+function rateChip(operator: string | undefined, value: number): string {
+	if (value < 0 && operator === "<=") return `Glucose falling at least ${ratePerMinuteText(-value)}`;
+	if (value < 0 && operator === "<") return `Glucose falling more than ${ratePerMinuteText(-value)}`;
+	if (value > 0 && operator === ">=") return `Glucose rising at least ${ratePerMinuteText(value)}`;
+	if (value > 0 && operator === ">") return `Glucose rising more than ${ratePerMinuteText(value)}`;
+	return `Rate of change ${opSymbol(operator)} ${ratePerMinuteText(value)}`;
 }
 
 function transmitterChip(
@@ -524,9 +532,10 @@ function formatSignedMinutes(minutes: number): string {
 	return minutes < 0 ? `-${formatMinutes(-minutes)}` : formatMinutes(minutes);
 }
 
-function formatHours(hours: number): string {
-	if (hours >= 24 && hours % 24 === 0) return formatDays(hours / 24);
-	return plural(hours, ["# hour", "# hours"]);
+/** Whole minutes in the largest unit that holds them exactly. */
+function formatDuration(minutes: number): string {
+	if (minutes !== 0 && minutes % (24 * 60) === 0) return formatDays(minutes / (24 * 60));
+	return formatMinutes(minutes);
 }
 
 function formatDays(days: number): string {

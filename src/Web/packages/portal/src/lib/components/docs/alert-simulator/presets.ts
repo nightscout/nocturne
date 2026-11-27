@@ -1,8 +1,9 @@
 import type { CompareOperator, ConditionNode, SimRule } from "./wire";
 
-const below = (value: number): ConditionNode => ({ type: "threshold", threshold: { direction: "below", value } });
-const above = (value: number): ConditionNode => ({ type: "threshold", threshold: { direction: "above", value } });
-const falling = (rate: number): ConditionNode => ({ type: "rate_of_change", rate_of_change: { direction: "falling", rate } });
+const below = (value: number): ConditionNode => ({ type: "threshold", threshold: { operator: "<", value } });
+const above = (value: number): ConditionNode => ({ type: "threshold", threshold: { operator: ">", value } });
+/** Falls at least `rate` mg/dL a minute: a rate at or below the negative. */
+const falling = (rate: number): ConditionNode => ({ type: "rate_of_change", rate_of_change: { operator: "<=", value: -rate } });
 const sustained = (minutes: number, child: ConditionNode): ConditionNode => ({ type: "sustained", sustained: { minutes, child } });
 const all = (...conditions: ConditionNode[]): ConditionNode => ({ type: "composite", composite: { operator: "and", conditions } });
 const any = (...conditions: ConditionNode[]): ConditionNode => ({ type: "composite", composite: { operator: "or", conditions } });

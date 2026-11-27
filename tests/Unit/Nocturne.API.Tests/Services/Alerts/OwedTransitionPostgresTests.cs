@@ -348,7 +348,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                 TenantId = tenant,
                 Name = "Urgent Low",
                 ConditionType = AlertConditionType.Threshold,
-                ConditionParams = """{"direction":"below","value":55}""",
+                ConditionParams = """{"schema_version":2,"operator":"<","value":55}""",
                 Severity = severity,
                 ScopeClass = RuleScopeClass.Low,
                 IsEnabled = true,
@@ -368,7 +368,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
         }
 
         var snapshot = new AlertRuleSnapshot(
-            rule, tenant, "Urgent Low", AlertConditionType.Threshold, """{"direction":"below","value":55}""",
+            rule, tenant, "Urgent Low", AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":55}""",
             severity, "{}", 0, false, null, ScopeClass: RuleScopeClass.Low);
         var seeded = new Tenant
         {
@@ -641,7 +641,7 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
             db.AlertRules.Add(new AlertRuleEntity
             {
                 Id = high, TenantId = tenant.Id, Name = "High", ConditionType = AlertConditionType.Threshold,
-                ConditionParams = """{"direction":"above","value":250}""", Severity = AlertRuleSeverity.Warning,
+                ConditionParams = """{"schema_version":2,"operator":">","value":250}""", Severity = AlertRuleSeverity.Warning,
                 IsEnabled = true, CreatedAt = Opened, UpdatedAt = Opened,
             });
             db.AlertExcursions.Add(new AlertExcursionEntity

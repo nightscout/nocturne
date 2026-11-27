@@ -8,8 +8,9 @@
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": false,
       "on_unknown": "met"
@@ -19,8 +20,9 @@
       "name": "rule-2",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": false,
       "on_unknown": "not_met"

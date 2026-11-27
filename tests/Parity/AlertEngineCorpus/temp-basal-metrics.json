@@ -8,8 +8,9 @@
       "name": "rule-1",
       "condition_type": "temp_basal",
       "condition_params": {
+        "schema_version": 2,
         "metric": "rate",
-        "operator": "\u003E=",
+        "operator": ">=",
         "value": 2
       },
       "auto_resolve_enabled": false
@@ -19,8 +20,9 @@
       "name": "rule-2",
       "condition_type": "temp_basal",
       "condition_params": {
+        "schema_version": 2,
         "metric": "percent_of_scheduled",
-        "operator": "\u003C=",
+        "operator": "<=",
         "value": 50
       },
       "auto_resolve_enabled": false

@@ -20,6 +20,7 @@ use uuid::Uuid;
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{EngineState, Evaluation, Rule, WireRule};
 use nocturne_alerts_core::excursion::{HOLD_BOUND, TrackerState, TrackerStateKind};
+use nocturne_alerts_core::model::{CURRENT_SCHEMA, SCHEMA_VERSION};
 use nocturne_alerts_core::next_change::RESOLUTION;
 use nocturne_alerts_core::sustained::TimerState;
 
@@ -50,13 +51,19 @@ fn rule(kind: &str, params: Value) -> Rule {
     rule_with(kind, params, None)
 }
 
+/// `doc` as a stored tree's root, naming schema 2 (engine-semantics.md §1.2).
+fn rooted(mut doc: Value) -> Value {
+    doc[SCHEMA_VERSION] = json!(CURRENT_SCHEMA);
+    doc
+}
+
 fn rule_with(kind: &str, params: Value, auto_resolve: Option<Value>) -> Rule {
     let wire: WireRule = serde_json::from_value(json!({
         "id": RULE,
         "condition_type": kind,
-        "condition_params": params,
+        "condition_params": rooted(params),
         "auto_resolve_enabled": auto_resolve.is_some(),
-        "auto_resolve_params": auto_resolve,
+        "auto_resolve_params": auto_resolve.map(rooted),
     }))
     .unwrap();
     Rule::try_from(wire).unwrap()
@@ -174,13 +181,17 @@ fn assert_next_change(case: &Case, expected: DateTime<Utc>) {
 
 const OPS: [&str; 5] = [">", ">=", "<", "<=", "=="];
 
-/// `>` and `<=` change once the elapsed time passes the bound, a tick after
-/// the others.
-fn flip(op: &str, due: DateTime<Utc>) -> DateTime<Utc> {
+/// The elapsed time reaches the bound at `due`, where `<` and `>=` change,
+/// and passes it a nanosecond later, where `>` and `<=` do. The tick grid
+/// reports both at `due` (engine-semantics.md §5.3), and an evaluation at
+/// `due` sees only the first.
+fn assert_flips_at(case: &Case, op: &str, due: DateTime<Utc>) {
+    assert_next_change(case, due);
+    let at_bound = case.quiet_at(due);
     if matches!(op, ">" | "<=") {
-        due + RESOLUTION
+        at_bound.unwrap_or_else(|e| panic!("{op}: {e}"));
     } else {
-        due
+        assert!(at_bound.is_err(), "{op}: nothing changed at {due}");
     }
 }
 
@@ -211,17 +222,17 @@ fn signal_loss_already_lost_or_cold_has_none() {
 fn staleness_flips_at_the_bound_for_each_operator() {
     for op in OPS {
         let case = Case::new(
-            rule("staleness", json!({ "operator": op, "value": 15 })),
+            rule("staleness", json!({ "operator": op, "minutes": 15 })),
             ctx(json!({ "last_reading_at": ago(min(5)) })),
         );
-        assert_next_change(&case, flip(op, now() + min(10)));
+        assert_flips_at(&case, op, now() + min(10));
     }
 }
 
 #[test]
 fn equality_changes_again_just_after_the_bound() {
     let case = Case::new(
-        rule("staleness", json!({ "operator": "==", "value": 15 })),
+        rule("staleness", json!({ "operator": "==", "minutes": 15 })),
         ctx(json!({ "last_reading_at": ago(min(15)) })),
     );
     assert_next_change(&case, now() + TimeDelta::nanoseconds(100));
@@ -232,13 +243,13 @@ fn every_elapsed_kind_and_operator_flips_at_its_next_change() {
     let kinds: Vec<(&str, Value, Value, TimeDelta)> = vec![
         (
             "site_age",
-            json!({ "value": 24 }),
+            json!({ "minutes": 1440 }),
             json!({ "last_site_change_at": ago(TimeDelta::hours(20)) }),
             TimeDelta::hours(4),
         ),
         (
             "sensor_age",
-            json!({ "value": 10 }),
+            json!({ "minutes": 14400 }),
             json!({ "last_sensor_start_at": ago(TimeDelta::days(9)) }),
             TimeDelta::days(1),
         ),
@@ -252,6 +263,12 @@ fn every_elapsed_kind_and_operator_flips_at_its_next_change() {
             "loop_enaction_stale",
             json!({ "minutes": 20 }),
             json!({ "last_aps_enacted_at": ago(min(5)), "has_ever_aps_cycled": true }),
+            min(15),
+        ),
+        (
+            "loop_enaction_stale",
+            json!({ "minutes": 20 }),
+            json!({ "last_aps_enacted_at": ago(min(5)), "has_ever_aps_cycled": false }),
             min(15),
         ),
         (
@@ -281,14 +298,7 @@ fn every_elapsed_kind_and_operator_flips_at_its_next_change() {
         for op in OPS {
             params["operator"] = json!(op);
             let case = Case::new(rule(kind, params.clone()), ctx(context.clone()));
-            // A negative elapsed time truncates toward zero, so it flips
-            // within the tick before, reported at the start of that tick.
-            let expected = if kind == "tracker_age" {
-                flip(op, now() + due) - RESOLUTION
-            } else {
-                flip(op, now() + due)
-            };
-            assert_next_change(&case, expected);
+            assert_flips_at(&case, op, now() + due);
         }
     }
 }
@@ -399,7 +409,7 @@ fn a_guard_that_holds_the_leaf_constant_contributes_nothing() {
         ),
         (
             "threshold",
-            json!({ "direction": "below", "value": 70 }),
+            json!({ "operator": "<", "value": 70 }),
             json!({ "latest_value": 60 }),
         ),
     ];
@@ -426,25 +436,31 @@ fn tracker_age_recorded_before_due_changes_when_due() {
     assert_next_change(&case, now() + min(30));
 }
 
-/// The decimal conversion keeps 15 significant digits, a step of 60 ticks at
-/// 100 million minutes, so an elapsed time just short of the bound rounds up
-/// to it and holds before the exact instant.
+/// Elapsed time is compared exactly (engine-semantics.md §1.3), so a bound of
+/// a hundred million minutes is reached at exactly its instant, and one a
+/// nanosecond past a tick is reported at that tick, where it has not yet
+/// changed.
 #[test]
-fn decimal_rounding_moves_the_flip_before_the_exact_bound() {
-    let case = Case::new(
-        rule(
-            "tracker_age",
-            json!({ "tracker_definition_id": TRACKER, "operator": ">=", "minutes": 100_000_000 }),
-        ),
-        ctx(json!({ "active_trackers": [{
-            "tracker_definition_id": TRACKER,
-            "reference_at": ago(min(99_999_999)),
-        }] })),
-    );
-    let exact = now() + min(1);
-    let next = case.next_change().unwrap();
-    assert!(next < exact, "{next} is not before {exact}");
-    assert_next_change(&case, next);
+fn a_large_bound_flips_at_the_exact_instant() {
+    let tracker = |reference_at: DateTime<Utc>, op: &str| {
+        Case::new(
+            rule(
+                "tracker_age",
+                json!({ "tracker_definition_id": TRACKER, "operator": op, "minutes": 100_000_000 }),
+            ),
+            ctx(json!({ "active_trackers": [{
+                "tracker_definition_id": TRACKER,
+                "reference_at": reference_at.to_rfc3339(),
+            }] })),
+        )
+    };
+    for op in OPS {
+        assert_flips_at(&tracker(now() - min(99_999_999), op), op, now() + min(1));
+    }
+    let off_tick = now() - min(99_999_999) + TimeDelta::nanoseconds(1);
+    let case = tracker(off_tick, ">=");
+    assert_next_change(&case, now() + min(1));
+    case.quiet_at(now() + min(1)).unwrap();
 }
 
 #[test]
@@ -452,7 +468,7 @@ fn sustained_over_a_reading_driven_child_changes_when_its_window_ends() {
     let case = Case::new(
         rule(
             "sustained",
-            json!({ "minutes": 15, "child": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } } }),
+            json!({ "minutes": 15, "child": { "type": "threshold", "threshold": { "operator": "<", "value": 70 } } }),
         ),
         ctx(json!({ "latest_value": 60 })),
     );
@@ -495,7 +511,7 @@ fn sustained_over_a_false_child_has_only_its_childs() {
     let case = Case::new(
         rule(
             "sustained",
-            json!({ "minutes": 15, "child": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } } }),
+            json!({ "minutes": 15, "child": { "type": "threshold", "threshold": { "operator": "<", "value": 70 } } }),
         ),
         ctx(json!({ "latest_value": 120 })),
     );
@@ -506,16 +522,21 @@ fn sustained_over_a_false_child_has_only_its_childs() {
 /// host can represent, so it reads as none.
 #[test]
 fn a_change_past_the_host_calendar_is_none() {
+    let late = at("9000-01-01T00:00:00Z");
     let case = Case::new(
-        rule("sensor_age", json!({ "operator": ">", "value": 3_000_000 })),
-        ctx(json!({ "last_sensor_start_at": ago(TimeDelta::days(1)) })),
-    );
+        rule(
+            "sensor_age",
+            json!({ "operator": ">", "minutes": 2_000_000_000 }),
+        ),
+        ctx(json!({ "last_sensor_start_at": (late - TimeDelta::days(1)).to_rfc3339() })),
+    )
+    .at(late);
     assert_eq!(case.next_change(), None);
 }
 
 #[test]
 fn hysteresis_changes_when_its_window_closes() {
-    let condition = json!({ "direction": "below", "value": 70 });
+    let condition = json!({ "operator": "<", "value": 70 });
     let closes_at_once = Case::new(
         rule("threshold", condition.clone()),
         ctx(json!({ "latest_value": 120 })),
@@ -597,8 +618,8 @@ fn day_of_week_changes_at_the_next_local_midnight() {
 
 #[test]
 fn the_auto_resolve_tree_counts_while_auto_resolve_is_enabled() {
-    let condition = json!({ "direction": "below", "value": 70 });
-    let resolve = json!({ "type": "staleness", "staleness": { "operator": ">=", "value": 15 } });
+    let condition = json!({ "operator": "<", "value": 70 });
+    let resolve = json!({ "type": "staleness", "staleness": { "operator": ">=", "minutes": 15 } });
     let context = ctx(json!({ "latest_value": 60, "last_reading_at": ago(min(5)) }));
     let enabled = Case::new(
         rule_with("threshold", condition.clone(), Some(resolve)),
@@ -612,9 +633,9 @@ fn the_auto_resolve_tree_counts_while_auto_resolve_is_enabled() {
 #[test]
 fn every_part_of_a_tree_counts_whatever_its_siblings_hold() {
     let tree = json!({ "operator": "and", "conditions": [
-        { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+        { "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
         { "type": "sustained", "sustained": { "minutes": 30, "child":
-            { "type": "staleness", "staleness": { "operator": "<", "value": 60 } } } },
+            { "type": "staleness", "staleness": { "operator": "<", "minutes": 60 } } } },
         { "type": "time_since_last_bolus", "time_since_last_bolus": { "operator": ">", "minutes": 20 } }
     ] });
     let case = Case::new(
@@ -623,7 +644,7 @@ fn every_part_of_a_tree_counts_whatever_its_siblings_hold() {
             json!({ "latest_value": 120, "last_reading_at": ago(min(1)), "last_bolus_at": ago(min(5)) }),
         ),
     );
-    assert_eq!(case.next_change(), Some(now() + min(15) + RESOLUTION));
+    assert_eq!(case.next_change(), Some(now() + min(15)));
     assert_quiet_until_next_change(&case, "composite");
 }
 
@@ -631,12 +652,12 @@ fn reading_driven_leaves() -> Vec<(&'static str, Value, Value)> {
     vec![
         (
             "threshold",
-            json!({ "direction": "below", "value": 70 }),
+            json!({ "operator": "<", "value": 70 }),
             json!({ "latest_value": 60 }),
         ),
         (
             "rate_of_change",
-            json!({ "direction": "falling", "rate": 2 }),
+            json!({ "operator": "<=", "value": -2 }),
             json!({ "trend_rate": -3 }),
         ),
         (
@@ -662,7 +683,7 @@ fn fresh_for(kind: &str, params: Value, minutes: i64) -> Rule {
     let wire: WireRule = serde_json::from_value(json!({
         "id": RULE,
         "condition_type": kind,
-        "condition_params": params,
+        "condition_params": rooted(params),
         "glucose_freshness_minutes": minutes,
     }))
     .unwrap();

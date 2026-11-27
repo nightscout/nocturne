@@ -5,6 +5,8 @@ const REVIEW_MESSAGES: Record<string, string> = {
 		"This rule was set up before alerts were redesigned and has been converted, but its glucose threshold is missing, not a number, or below 40 mg/dL, which may be a mmol/L value. Its confirmation readings and hysteresis could not be carried over either. Check its threshold and save it.",
 	condition_type_unrecognized:
 		"Nocturne does not know the condition type of this rule, so the rule does not run. Edit its conditions and save it.",
+	condition_duration_rounded:
+		"An update rounded the site age or sensor age of this rule to a whole minute. Check the age and save the rule.",
 	severity_unrecognized:
 		"Nocturne does not know the severity of this rule, so the rule shows it as critical. Check its severity and save it.",
 };

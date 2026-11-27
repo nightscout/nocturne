@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "signal_loss",
       "condition_params": {
+        "schema_version": 2,
         "timeout_minutes": 30
       },
       "auto_resolve_enabled": false

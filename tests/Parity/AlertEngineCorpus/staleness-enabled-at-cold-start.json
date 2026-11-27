@@ -1,15 +1,16 @@
 {
   "schema_version": 1,
   "name": "staleness-enabled-at-cold-start",
-  "description": "with no reading history staleness compares the minutes since the rule's enabled_at with its operator and value, at the bound exactly and either side; without enabled_at it stays unknown; with a reading it measures from the reading whatever enabled_at says",
+  "description": "with no reading history staleness compares the minutes since the rule's enabled_at with its operator and minutes, at the bound exactly and either side; without enabled_at it stays unknown; with a reading it measures from the reading whatever enabled_at says",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "staleness",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">=",
-        "value": 20
+        "minutes": 20
       },
       "auto_resolve_enabled": false,
       "enabled_at": "2026-03-02T12:00:00Z"
@@ -19,8 +20,9 @@
       "name": "rule-2",
       "condition_type": "staleness",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">",
-        "value": 20
+        "minutes": 20
       },
       "auto_resolve_enabled": false,
       "enabled_at": "2026-03-02T12:00:00Z"
@@ -30,8 +32,9 @@
       "name": "rule-3",
       "condition_type": "staleness",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
-        "value": 20
+        "minutes": 20
       },
       "auto_resolve_enabled": false,
       "enabled_at": "2026-03-02T12:00:00Z"
@@ -41,8 +44,9 @@
       "name": "rule-4",
       "condition_type": "staleness",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<=",
-        "value": 20
+        "minutes": 20
       },
       "auto_resolve_enabled": false,
       "enabled_at": "2026-03-02T12:00:00Z"
@@ -52,8 +56,9 @@
       "name": "rule-5",
       "condition_type": "staleness",
       "condition_params": {
+        "schema_version": 2,
         "operator": "==",
-        "value": 20
+        "minutes": 20
       },
       "auto_resolve_enabled": false,
       "enabled_at": "2026-03-02T12:00:00Z"
@@ -63,8 +68,9 @@
       "name": "rule-6",
       "condition_type": "staleness",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">=",
-        "value": 20
+        "minutes": 20
       },
       "auto_resolve_enabled": false
     }

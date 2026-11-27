@@ -8,13 +8,14 @@
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": [
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           },
           {
@@ -33,13 +34,14 @@
       "name": "rule-2",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "or",
         "conditions": [
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           },
           {
@@ -58,6 +60,7 @@
       "name": "rule-3",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": [
           {
@@ -68,8 +71,8 @@
                 {
                   "type": "threshold",
                   "threshold": {
-                    "direction": "below",
-                    "value": 70
+                    "value": 70,
+                    "operator": "<"
                   }
                 },
                 {
@@ -103,8 +106,9 @@
       "name": "rule-4",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     },
@@ -113,8 +117,9 @@
       "name": "rule-5",
       "condition_type": "site_age",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">",
-        "value": 72
+        "minutes": 4320
       },
       "auto_resolve_enabled": false
     },
@@ -123,6 +128,7 @@
       "name": "rule-6",
       "condition_type": "pump_state",
       "condition_params": {
+        "schema_version": 2,
         "mode": "Automatic",
         "is_active": true
       },
@@ -133,6 +139,7 @@
       "name": "rule-7",
       "condition_type": "reservoir",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "value": 20
       },
@@ -143,20 +150,21 @@
       "name": "rule-8",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "or",
         "conditions": [
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           },
           {
             "type": "site_age",
             "site_age": {
               "operator": ">",
-              "value": 72
+              "minutes": 4320
             }
           }
         ]

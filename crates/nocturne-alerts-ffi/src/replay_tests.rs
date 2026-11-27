@@ -24,7 +24,7 @@ fn threshold_rule(id: &str) -> Value {
     json!({
         "id": id,
         "condition_type": "threshold",
-        "condition_params": { "direction": "below", "value": 70 },
+        "condition_params": { "schema_version": 2, "operator": "<", "value": 70 },
     })
 }
 
@@ -106,7 +106,7 @@ fn until_steps_past_the_last_tick_and_a_sample_skips_a_glucose_rule() {
     let signal_loss = json!({
         "id": RULE_1,
         "condition_type": "signal_loss",
-        "condition_params": { "timeout_minutes": 15 },
+        "condition_params": { "schema_version": 2, "timeout_minutes": 15 },
     });
     let low = threshold_rule("00000000-0000-0000-0000-000000000002");
     let mut sample = tick("2026-01-05T12:00:00Z", 60);
@@ -132,7 +132,7 @@ fn an_unevaluable_rule_is_skipped_not_an_error() {
         "rules": [{
             "id": RULE_1,
             "condition_type": "threshold",
-            "condition_params": { "direction": null, "value": 70 },
+            "condition_params": { "schema_version": 2, "operator": null, "value": 70 },
         }],
         "ticks": [tick("2026-01-05T12:00:00Z", 60)],
         "include_ticks": true,

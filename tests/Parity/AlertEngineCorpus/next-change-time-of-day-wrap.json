@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "time_of_day",
       "condition_params": {
+        "schema_version": 2,
         "from": "22:00",
         "to": "06:00",
         "timezone": "Etc/UTC"

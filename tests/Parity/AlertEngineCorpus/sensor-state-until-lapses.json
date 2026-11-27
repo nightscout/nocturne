@@ -8,8 +8,9 @@
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     },
@@ -18,6 +19,7 @@
       "name": "rule-2",
       "condition_type": "sensor_state",
       "condition_params": {
+        "schema_version": 2,
         "states": [
           "error"
         ]

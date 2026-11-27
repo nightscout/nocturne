@@ -19,8 +19,15 @@ Two things apply to all of them.
 does not have, the rule does what you set in **When data is missing** (see
 [Building a rule](/docs/alerts/building-rules#when-data-is-missing)).
 
-**Values are compared exactly as written.** "Below 70" means 69 counts and 70
-does not. "At least 2" means 2 counts.
+**Values are compared exactly as written.** "Less than 70" means 69 counts and
+70 does not. "At least 2" means 2 counts.
+
+**Times are whole minutes.** A time since an event, such as a site age, has a
+number and a unit: minutes, hours or days. Nocturne keeps it as minutes, so 1.5
+hours is 90 minutes. A value that is not a whole number of minutes, such as 0.5
+minutes, cannot be saved. The editor shows a stored time in the largest unit
+that holds it exactly: 4320 minutes shows as 3 days, and 90 minutes shows as 90
+minutes.
 
 <Callout type="info" title="Not medical advice">
 
@@ -33,14 +40,17 @@ does not. "At least 2" means 2 counts.
 
 ### Glucose
 
-The latest CGM reading compared with a value: below it (`<`) or above it (`>`).
+The latest CGM reading compared with a value.
 
-- **Settings:** below or above, and a glucose value in your units. In place of
+- **Settings:** a comparison (at least, more than, at most or less than), and a
+  glucose value in your units. In place of
   the value it can use your target low or target high, with an amount added. See
   [Compare with a target or the latest glucose](/docs/alerts/building-rules#compare-with-a-target-or-the-latest-glucose).
 - **Use it for:** the core low and high alerts.
-- **Good to know:** "below" and "above" are strict. A rule for "below 70" does
-  not fire on a reading of exactly 70. Between readings, the last reading is
+- **Good to know:** "less than" and "more than" are strict. A rule for "less
+  than 70" does not fire on a reading of exactly 70. The summary shows "less
+  than" as below and "more than" as above, for example "Glucose below 70
+  mg/dL". Between readings, the last reading is
   what the rule sees. A condition that uses a target waits if your profile has no
   target range.
 
@@ -101,8 +111,9 @@ result.
 How fast glucose is moving, in mg/dL (or mmol/L) per minute, as reported by
 your CGM with each reading.
 
-- **Settings:** rising or falling, and a rate. The condition is true when
-  glucose is moving at least that fast in that direction.
+- **Settings:** a comparison and a rate. A fall is a negative number. For a
+  fall of 2 or more a minute, set at most and -2. For a rise of 2 or more a
+  minute, set at least and 2.
 - **Use it for:** catching a fast fall early, usually combined with a glucose
   value (see [Combining conditions](/docs/alerts/combining)).
 - **Good to know:** a fall of 2 mg/dL a minute is 0.11 mmol/L a minute, and
@@ -169,7 +180,7 @@ falling fast.
 
 How long since the last CGM reading arrived.
 
-- **Settings:** at least (≥) or more than (>), and a number of minutes.
+- **Settings:** a comparison and a time: a number, and minutes, hours or days.
 - **Use it for:** the same job as **Signal loss** below. Use whichever reads
   more naturally to you.
 - **Good to know:** this is checked every 30 seconds, not only when a reading
@@ -252,16 +263,18 @@ The insulin left in the pump, in units.
 
 ### Site age
 
-Hours since the last infusion site (cannula) change.
+The time since the last infusion site (cannula) change.
 
-- **Settings:** a comparison and hours. 72 hours is three days.
+- **Settings:** a comparison and a time: a number, and minutes, hours or days.
+  For example, at least 3 days.
 - **Use it for:** a site change reminder, usually as an Info rule.
 
 ### Sensor age
 
-Days since the current CGM sensor was started.
+The time since the current CGM sensor was started.
 
-- **Settings:** a comparison and days.
+- **Settings:** a comparison and a time: a number, and minutes, hours or days.
+  For example, at least 10 days.
 
 ### Tracker age
 

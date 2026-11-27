@@ -18,7 +18,7 @@ import {
 import type { ConditionNode } from "./types";
 
 function leaf(uid: string): ConditionNode {
-	return { type: "threshold", _uid: uid, threshold: { direction: "below", value: 70 } };
+	return { type: "threshold", _uid: uid, threshold: { operator: "<", value: 70 } };
 }
 
 function and(uid: string, ...children: ConditionNode[]): ConditionNode {

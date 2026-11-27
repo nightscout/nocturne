@@ -135,7 +135,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
     }
 
     private async Task<Guid> SeedRuleAsync(Guid tenant, string name, string conditionType, string severity,
-        string scopeClass = "undirected", string conditionParams = """{"direction":"below","value":70}""")
+        string scopeClass = "undirected", string conditionParams = """{"schema_version":2,"operator":"<","value":70}""")
     {
         var id = Guid.CreateVersion7();
         await using var conn = new NpgsqlConnection(database.MigratorConnectionString);
@@ -390,7 +390,7 @@ public sealed class UnreadableRuleNoticePostgresTests(UnreadableRuleNoticePostgr
         var harness = await CreateAsync();
         var target = await SeedRuleAsync(harness.Tenant, "Low", "threshold", "warning");
         var referencing = await SeedRuleAsync(harness.Tenant, "After low", "alert_state", "warning",
-            conditionParams: $$"""{"alert_id":"{{target}}","state":"firing"}""");
+            conditionParams: $$"""{"schema_version":2,"alert_id":"{{target}}","state":"firing"}""");
         await UpdateRuleAsync(harness.Tenant, referencing, $"{column} = @value", unreadable);
         var accessor = SettableTenantAccessor.Resolved(harness.Tenant);
         var references = new AlertReferenceService(

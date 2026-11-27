@@ -33,6 +33,7 @@ char* nocturne_alerts_rule_reads(const char* request_json);
 char* nocturne_alerts_references_any(const char* request_json);
 char* nocturne_alerts_describe(const char* request_json);
 char* nocturne_alerts_validate(const char* request_json);
+char* nocturne_alerts_migrate(const char* request_json);
 char* nocturne_alerts_tracker_process(const char* request_json);
 char* nocturne_alerts_tracker_force_close(const char* request_json);
 char* nocturne_alerts_tracker_close_elapsed_hysteresis(const char* request_json);
@@ -43,7 +44,7 @@ void  nocturne_alerts_free_string(char* ptr);
 - All strings are UTF-8, NUL-terminated. Every returned pointer is owned by
   the caller and must be released with `nocturne_alerts_free_string` exactly
   once (null is a no-op).
-- `nocturne_alerts_version` returns the crate version (e.g. `0.1.0`) and
+- `nocturne_alerts_version` returns the crate version (e.g. `0.2.0`) and
   `nocturne_alerts_tzdb_version` the IANA time zone database release compiled
   in (e.g. `2025b`), both plain strings, not JSON.
   `nocturne_alerts_clock_tolerance_ms` returns how far ahead of `now` an anchor
@@ -130,7 +131,7 @@ preserves sub-second precision when present.
   "rule": {                                 // ScenarioRule corpus shape
     "id": "00000000-0000-0000-0000-000000000001",
     "condition_type": "sustained",          // canonical wire string
-    "condition_params": { /* payload */ },  // payload object as stored
+    "condition_params": { "schema_version": 2, /* payload */ }, // payload object as stored
     "auto_resolve_enabled": false,          // default false
     "auto_resolve_params": { "type": "…" }, // full ConditionNode or null
     "on_unknown": "hold",                   // hold|met|not_met; default hold; any other word is an envelope error
@@ -540,7 +541,7 @@ Request:
 {
   "schema_version": 1,
   "condition_type": "threshold",
-  "condition_params": { "direction": "below", "value": 70 }
+  "condition_params": { "schema_version": 2, "operator": "<", "value": 70 }
 }
 ```
 
@@ -653,9 +654,10 @@ Input is the rule's `condition_type` + `condition_params` (the same split shape
   "schema_version": 1,
   "condition_type": "composite",
   "condition_params": {
+    "schema_version": 2,
     "operator": "and",
     "conditions": [
-      { "type": "threshold", "threshold": { "direction": "below", "value": 80 } },
+      { "type": "threshold", "threshold": { "operator": "<", "value": 80 } },
       { "type": "sustained", "sustained": {
           "minutes": 15,
           "child": { "type": "iob", "iob": { "operator": "<", "value": 1 } } } }
@@ -677,7 +679,7 @@ Response — a recursive `tree`:
     "conditions": [
       { "leaf_id": 0, "path": "composite[0].threshold",
         "type": "threshold", "kind": "threshold",
-        "params": { "direction": "below", "value": 80 } },
+        "params": { "operator": "<", "value": 80 } },
       { "type": "sustained", "path": "composite[1].sustained", "minutes": 15,
         "child": { "leaf_id": 1, "path": "composite[1].sustained[0].iob",
                    "type": "iob", "kind": "iob",
@@ -733,6 +735,12 @@ Request:
 }
 ```
 
+Each tree names its schema at its root (`"schema_version": 2`, below): the
+`condition_params` object, the `auto_resolve_params` node and each snooze
+condition. The snooze conditions are checked as the `composite{and}` that
+`snooze_tree` builds, which names schema 2 when every condition does, so one
+that does not is an `unsupported_schema` issue on `snooze`.
+
 Pass `auto_resolve_params` only when auto-resolve is enabled, and
 `snooze_conditions` only when smart snooze is on — the trees the rule actually
 evaluates. An empty `snooze_conditions` list is valid (the trend fallback).
@@ -757,6 +765,50 @@ node's condition path under that scope's root (a null slot's path ends in
 on, when there is one. Neither ever carries a payload value. Issues are listed
 in pre-order. A rule with issues is `ok: true`; only an unusable envelope is the
 error envelope.
+
+## Condition schema and migrate (`nocturne_alerts_migrate`)
+
+Every stored condition tree names its schema at its root: `"schema_version": 2`
+on a rule body, and on the root node of an auto-resolve tree or a snooze
+condition (`docs/alerts/engine-semantics.md` §1.2). The engine reads schema 2
+only; any other root is `unsupported_schema`, so a rule with one is skipped
+like any rule that cannot be evaluated. This is not the envelope's
+`schema_version`, which stays `1`.
+
+Schema 1 trees, stored before the schema was named, are rewritten once by
+`migrate`, one tree per call (§1.5):
+
+```jsonc
+{
+  "schema_version": 1,                 // the envelope's
+  "condition_type": "threshold",       // a rule body: the kind it is the payload of
+  "tree": { "direction": "below", "value": 70 }
+}
+// or a full node: "root": "auto_resolve" | "snooze" in place of condition_type
+```
+
+Response:
+
+```jsonc
+{ "schema_version": 1, "ok": true, "outcome": "migrated",
+  "tree": { "schema_version": 2, "value": 70, "operator": "<" }, "rounded": false }
+{ "schema_version": 1, "ok": true, "outcome": "current" }   // already schema 2; store nothing
+{ "schema_version": 1, "ok": true, "outcome": "failed",
+  "issue": { "path": "threshold", "reason": "unknown_value", "field": "direction" } }
+```
+
+- `rounded` is true when a `site_age` or `sensor_age` value was not a whole
+  number of minutes and was rounded (§1.5); the backend then asks for the
+  rule to be reviewed.
+- `failed` means the tree cannot be read as schema 1; it was not evaluable
+  before either. Keep it as it is: it reads as `unsupported_schema`.
+- A request with both or neither of `condition_type` and `root` is the error
+  envelope.
+
+The backend migrates every stored tree at startup, after its database
+migrations and before it evaluates anything. Prelude moves to the crate version
+that reads schema 2 in step with the backend; an older build skips every rule
+until it updates.
 
 ## Tracker (`nocturne_alerts_tracker_*`)
 
@@ -930,6 +982,7 @@ fun referencesAny(requestJson: String): String        // nocturne_alerts_referen
 fun leafPaths(requestJson: String): String            // nocturne_alerts_leaf_paths
 fun describe(requestJson: String): String             // nocturne_alerts_describe
 fun validate(requestJson: String): String             // nocturne_alerts_validate
+fun migrate(requestJson: String): String              // nocturne_alerts_migrate
 fun trackerProcess(requestJson: String): String       // nocturne_alerts_tracker_process
 fun trackerForceClose(requestJson: String): String    // nocturne_alerts_tracker_force_close
 fun trackerCloseElapsedHysteresis(requestJson: String): String // nocturne_alerts_tracker_close_elapsed_hysteresis
@@ -1082,7 +1135,8 @@ cargo build --release --target wasm32-unknown-unknown -p nocturne-alerts-ffi --f
 
 ## Versioning
 
-`schema_version` covers the envelope layer. The time zone rules `time_of_day`
+`schema_version` covers the envelope layer; a stored condition tree names
+its own schema at its root (above). The time zone rules `time_of_day`
 and `day_of_week` apply are the IANA release compiled into the library
 (`chrono-tz`), not the host's; `nocturne_alerts_tzdb_version` reports it, so a
 host can log it at load and notice when it falls behind a zone change. Keeping

@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "state_span_active",
       "condition_params": {
+        "schema_version": 2,
         "category": "Illness",
         "is_active": true,
         "for_minutes": 120

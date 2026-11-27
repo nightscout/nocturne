@@ -57,7 +57,7 @@ public class NotTrueRecordingFloorTests
             Name = "override held",
             ConditionType = AlertConditionType.Sustained,
             ConditionParams =
-                """{"minutes":30,"child":{"type":"override_active","override_active":{"is_active":true}}}""",
+                """{"schema_version":2,"minutes":30,"child":{"type":"override_active","override_active":{"is_active":true}}}""",
         };
         var trackerRepo = new InMemoryTrackerRepository([rule]);
         await trackerRepo.Timers.SetNotTrueAsync(RuleId, "sustained", Noon.AddDays(-1), CancellationToken.None);

@@ -8,7 +8,7 @@ import {
 	type FactSnapshotPoint,
 } from "@nocturne/api-client";
 import { transformChartData, type TransformedChartData } from "@nocturne/charts/core";
-import { wirePayload, type ConditionNode, type ReplayResult, type ReplayTick, type Severity, type SimRule } from "./wire";
+import { wirePayload, withSchemaVersion, type ConditionNode, type ReplayResult, type ReplayTick, type Severity, type SimRule } from "./wire";
 import { carbsOnBoard, insulinOnBoard, tickTimes, type Scenario } from "./fixtures";
 
 /**
@@ -40,18 +40,18 @@ const SEVERITIES: Record<Severity, AlertRuleSeverity> = {
 	info: AlertRuleSeverity.Info,
 };
 
-/** Each rule as the app's API returns one: the root node's payload is `conditionParams`. */
+/** Each rule as the app's API returns one: the root node's payload is `conditionParams`, and each tree names its schema. */
 export function ruleResponses(rules: SimRule[]): AlertRuleResponse[] {
 	return rules.map((rule, index) => ({
 		id: rule.id,
 		name: rule.name,
 		severity: SEVERITIES[rule.severity],
 		conditionType: CONDITION_TYPES[rule.condition.type],
-		conditionParams: wirePayload(rule.condition),
+		conditionParams: withSchemaVersion(wirePayload(rule.condition)),
 		isEnabled: true,
 		sortOrder: index,
 		autoResolveEnabled: rule.autoResolve !== undefined,
-		autoResolveParams: rule.autoResolve,
+		autoResolveParams: rule.autoResolve ? withSchemaVersion(rule.autoResolve) : undefined,
 	}));
 }
 

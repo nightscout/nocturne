@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "day_of_week",
       "condition_params": {
+        "schema_version": 2,
         "days": [
           "monday"
         ]
@@ -19,6 +20,7 @@
       "name": "rule-2",
       "condition_type": "day_of_week",
       "condition_params": {
+        "schema_version": 2,
         "days": [
           "tuesday"
         ]
@@ -30,6 +32,7 @@
       "name": "rule-3",
       "condition_type": "day_of_week",
       "condition_params": {
+        "schema_version": 2,
         "days": []
       },
       "auto_resolve_enabled": false

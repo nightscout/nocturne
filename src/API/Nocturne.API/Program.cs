@@ -669,6 +669,8 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
     // requests, so no request can read a column in the old format.
     await CredentialAtRestStartupTask.RunAsync(app.Services);
 
+    await Nocturne.API.Services.Alerts.ConditionSchemaMigration.RunAsync(app.Services);
+
     app.Lifetime.ApplicationStarted.Register(() => _ = app.Services
         .GetRequiredService<Nocturne.API.Services.V4.RawMmolProfileNotifier>()
         .NotifyAllAsync(app.Lifetime.ApplicationStopping));

@@ -25,7 +25,7 @@ public class TimerContinuityTests
         Name = "sustained low",
         ConditionType = AlertConditionType.Sustained,
         ConditionParams =
-            """{"minutes":10,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}""",
+            """{"schema_version":2,"minutes":10,"child":{"type":"threshold","threshold":{"operator":"<","value":70}}}""",
     };
 
     private static AlertRuleSnapshot ToSnapshot(AlertRule rule) => new(
@@ -72,7 +72,7 @@ public class TimerContinuityTests
     public async Task Snooze_timers_thread_through_their_own_path_root()
     {
         const string conditions =
-            """[{"type":"sustained","sustained":{"minutes":10,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}}]""";
+            """[{"schema_version":2,"type":"sustained","sustained":{"minutes":10,"child":{"type":"threshold","threshold":{"operator":"<","value":70}}}}]""";
         var rule = BuildSustainedRule();
         rule.ClientConfiguration = $$$"""{"snooze":{"smartSnooze":true,"conditions":{{{conditions}}}}}""";
         var time = new ManualTimeProvider();

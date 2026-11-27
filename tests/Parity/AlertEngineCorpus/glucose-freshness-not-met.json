@@ -8,8 +8,9 @@
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "above",
-        "value": 250
+        "schema_version": 2,
+        "value": 250,
+        "operator": ">"
       },
       "auto_resolve_enabled": false,
       "on_unknown": "not_met"

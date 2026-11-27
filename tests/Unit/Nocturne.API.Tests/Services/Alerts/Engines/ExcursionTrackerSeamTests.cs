@@ -70,7 +70,7 @@ public class ExcursionTrackerSeamTests
             Id = RuleId,
             Name = "low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = """{"direction":"below","value":70}""",
+            ConditionParams = """{"schema_version":2,"operator":"<","value":70}""",
         };
         var repository = new RecordingTrackerRepository(rule);
         repository.States[RuleId] = new AlertTrackerState

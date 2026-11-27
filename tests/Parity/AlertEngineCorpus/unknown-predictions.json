@@ -8,7 +8,8 @@
       "name": "rule-1",
       "condition_type": "predicted",
       "condition_params": {
-        "operator": "\u003C",
+        "schema_version": 2,
+        "operator": "<",
         "value": 70,
         "within_minutes": 30
       },
@@ -19,7 +20,8 @@
       "name": "rule-2",
       "condition_type": "predicted",
       "condition_params": {
-        "operator": "\u003C",
+        "schema_version": 2,
+        "operator": "<",
         "value": 70,
         "within_minutes": 10
       },

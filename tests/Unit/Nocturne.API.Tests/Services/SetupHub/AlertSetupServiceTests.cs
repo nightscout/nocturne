@@ -83,7 +83,7 @@ public class AlertSetupServiceTests : IDisposable
         _db.AlertRules.Add(new AlertRuleEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, Name = kind.ToString(), StarterKind = kind,
-            ConditionParams = $$"""{"direction":"below","value":{{threshold}}}""", IsEnabled = enabled,
+            ConditionParams = $$"""{"schema_version":2,"operator":"<","value":{{threshold}}}""", IsEnabled = enabled,
         });
         await _db.SaveChangesAsync();
     }

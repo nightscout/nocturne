@@ -743,7 +743,7 @@ public class TrackerAlertRuleSyncServiceTests
                 TenantId = _tenantId,
                 Name = "old name",
                 ConditionType = AlertConditionType.Reservoir,
-                ConditionParams = """{"operator":"<","value":25}""",
+                ConditionParams = """{"schema_version":2,"operator":"<","value":25}""",
                 Severity = AlertRuleSeverity.Info,
                 ManagedBy = $"tracker:{definition.Id}",
                 IsEnabled = true,

@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
   "name": "unknown-carbs",
-  "description": "cob unknown without cob_grams; time_since_last_carb with no carb stays infinitely long ago (true for \u003E), not unknown",
+  "description": "cob unknown without cob_grams; time_since_last_carb with no carb stays infinitely long ago (true for >), not unknown",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "cob",
       "condition_params": {
-        "operator": "\u003E",
+        "schema_version": 2,
+        "operator": ">",
         "value": 10
       },
       "auto_resolve_enabled": false
@@ -18,7 +19,8 @@
       "name": "rule-2",
       "condition_type": "time_since_last_carb",
       "condition_params": {
-        "operator": "\u003E",
+        "schema_version": 2,
+        "operator": ">",
         "minutes": 60
       },
       "auto_resolve_enabled": false

@@ -188,7 +188,7 @@ impl TrackerState {
         self.held_since.map(|since| Elapsed {
             anchor: since,
             source: Some(ClockAnchor::HeldSince),
-            measure: Measure::AtLeast(HOLD_BOUND),
+            measure: Measure::at_least(HOLD_BOUND),
         })
     }
 
@@ -199,7 +199,7 @@ impl TrackerState {
         Elapsed {
             anchor: self.updated_at,
             source: Some(ClockAnchor::UpdatedAt),
-            measure: Measure::AtLeast(TimeDelta::zero()),
+            measure: Measure::at_least(TimeDelta::zero()),
         }
         .ahead(now)
     }
@@ -578,6 +578,6 @@ pub(crate) fn hysteresis_window(state: &TrackerState) -> Option<Elapsed> {
     state.hysteresis_started_at.map(|started| Elapsed {
         anchor: started,
         source: Some(ClockAnchor::HysteresisStartedAt),
-        measure: Measure::AtLeast(TimeDelta::zero()),
+        measure: Measure::at_least(TimeDelta::zero()),
     })
 }

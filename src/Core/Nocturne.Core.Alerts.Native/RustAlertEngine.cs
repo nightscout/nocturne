@@ -108,7 +108,7 @@ public static partial class RustAlertEngine
             {
                 Id = Guid.Empty,
                 ConditionType = "signal_loss",
-                ConditionParams = JsonSerializer.SerializeToElement(new { timeout_minutes = 15 }),
+                ConditionParams = JsonSerializer.SerializeToElement(new { schema_version = 2, timeout_minutes = 15 }),
             },
             Context = JsonSerializer.SerializeToElement(new { last_reading_at = now.AddMinutes(-5) }),
             Now = now,
@@ -355,6 +355,34 @@ public static partial class RustAlertEngine
 
         var response = ParseResponse<RustValidateResponse>(AlertsInterop.Validate(Serialize(request)), "validate");
         Require(response.Issues is not null, "validate", "issues");
+        return response;
+    }
+
+    /// <summary>
+    /// Rewrites one stored condition tree from condition schema 1 to schema 2
+    /// (docs/alerts/engine-semantics.md §1.5). A tree that cannot be read as schema 1 is a
+    /// <see cref="RustMigrateOutcome.Failed"/> outcome, not an exception.
+    /// </summary>
+    /// <exception cref="RustAlertEngineException">
+    /// The engine rejected the request (<c>ok: false</c>, a malformed envelope) or returned a
+    /// response <see cref="ParseMigrateResponse"/> refuses.
+    /// </exception>
+    public static RustMigrateResponse Migrate(RustMigrateRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return ParseMigrateResponse(AlertsInterop.Migrate(Serialize(request)));
+    }
+
+    /// <summary>
+    /// A successful migrate envelope carries <c>outcome</c>, a <c>tree</c> when it is
+    /// <c>migrated</c> and an <c>issue</c> when it is <c>failed</c>.
+    /// </summary>
+    internal static RustMigrateResponse ParseMigrateResponse(string responseJson)
+    {
+        var response = ParseResponse<RustMigrateResponse>(responseJson, "migrate");
+        Require(response.Outcome is not null, "migrate", "outcome");
+        Require(response.Outcome != RustMigrateOutcome.Migrated || response.Tree is { ValueKind: JsonValueKind.Object }, "migrate", "tree");
+        Require(response.Outcome != RustMigrateOutcome.Failed || response.Issue is not null, "migrate", "issue");
         return response;
     }
 

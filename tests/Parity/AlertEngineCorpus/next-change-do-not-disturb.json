@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "do_not_disturb",
       "condition_params": {
+        "schema_version": 2,
         "is_active": true,
         "for_minutes": 10
       },

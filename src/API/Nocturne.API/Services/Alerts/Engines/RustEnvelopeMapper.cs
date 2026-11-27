@@ -93,8 +93,11 @@ internal static class RustEnvelopeMapper
     }
 
     /// <summary>
-    /// The full node <c>{"type": wire, wire: payload}</c> for a stored payload-only body, the payload
-    /// copied verbatim; a blank body is JSON <c>null</c>.
+    /// The full node <c>{"type": wire, wire: payload}</c> for a stored payload-only body. The body's
+    /// <see cref="ConditionSchema"/> name, which a body carries at its own root, moves to the node's
+    /// root, where a node carries it; the rest of the payload is copied verbatim. A blank body is JSON
+    /// <c>null</c> under a node naming the current schema, so the engine reports the payload missing,
+    /// as it does for a blank body it is given as a body.
     /// </summary>
     /// <exception cref="JsonException">The payload is not valid JSON.</exception>
     public static string WrapPayload(string wire, string? payloadJson)
@@ -103,12 +106,38 @@ internal static class RustEnvelopeMapper
         using (var writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
-            writer.WriteString("type", wire);
-            writer.WritePropertyName(wire);
             if (string.IsNullOrWhiteSpace(payloadJson))
-                writer.WriteNullValue();
+            {
+                writer.WriteNumber(ConditionSchema.Property, ConditionSchema.Version);
+                writer.WriteString("type", wire);
+                writer.WriteNull(wire);
+            }
             else
-                writer.WriteRawValue(payloadJson);
+            {
+                using var payload = JsonDocument.Parse(payloadJson);
+                var body = payload.RootElement;
+                if (body.ValueKind == JsonValueKind.Object && body.TryGetProperty(ConditionSchema.Property, out var schema))
+                {
+                    writer.WritePropertyName(ConditionSchema.Property);
+                    writer.WriteRawValue(schema.GetRawText());
+                    writer.WriteString("type", wire);
+                    writer.WriteStartObject(wire);
+                    foreach (var property in body.EnumerateObject())
+                    {
+                        if (property.NameEquals(ConditionSchema.Property))
+                            continue;
+                        writer.WritePropertyName(property.Name);
+                        writer.WriteRawValue(property.Value.GetRawText());
+                    }
+                    writer.WriteEndObject();
+                }
+                else
+                {
+                    writer.WriteString("type", wire);
+                    writer.WritePropertyName(wire);
+                    writer.WriteRawValue(payloadJson);
+                }
+            }
             writer.WriteEndObject();
         }
         return System.Text.Encoding.UTF8.GetString(buffer.WrittenSpan);

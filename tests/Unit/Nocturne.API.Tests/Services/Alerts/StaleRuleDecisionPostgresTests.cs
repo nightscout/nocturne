@@ -31,17 +31,17 @@ namespace Nocturne.API.Tests.Services.Alerts;
 public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Database database)
     : IClassFixture<StaleRuleDecisionPostgresTests.Database>
 {
-    private const string Body = """{"direction":"below","value":70}""";
-    private const string EditedBody = """{"direction":"below","value":60}""";
-    private const string Resolve = """{"type":"threshold","threshold":{"direction":"below","value":90}}""";
-    private const string SustainedBody = """{"minutes":10,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}""";
-    private const string EditedSustainedBody = """{"minutes":15,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}""";
-    private const string SustainedResolve = """{"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"direction":"above","value":90}}}}""";
-    private const string EditedSustainedResolve = """{"type":"sustained","sustained":{"minutes":6,"child":{"type":"threshold","threshold":{"direction":"above","value":90}}}}""";
-    private const string SustainedSnooze = """{"snooze":{"smartSnooze":true,"conditions":[{"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"direction":"above","value":90}}}}]}}""";
-    private const string SustainedSnoozeConditions = """[{"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"direction":"above","value":90}}}}]""";
-    private const string LongerSustainedSnooze = """{"snooze":{"smartSnooze":true,"conditions":[{"type":"sustained","sustained":{"minutes":6,"child":{"type":"threshold","threshold":{"direction":"above","value":90}}}}]}}""";
-    private const string ReorderedSnooze = """{"snooze":{"smartSnooze":true,"conditions":[{"type":"threshold","threshold":{"direction":"above","value":90}},{"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"direction":"above","value":90}}}}]}}""";
+    private const string Body = """{"schema_version":2,"operator":"<","value":70}""";
+    private const string EditedBody = """{"schema_version":2,"operator":"<","value":60}""";
+    private const string Resolve = """{"schema_version":2,"type":"threshold","threshold":{"operator":"<","value":90}}""";
+    private const string SustainedBody = """{"schema_version":2,"minutes":10,"child":{"type":"threshold","threshold":{"operator":"<","value":70}}}""";
+    private const string EditedSustainedBody = """{"schema_version":2,"minutes":15,"child":{"type":"threshold","threshold":{"operator":"<","value":70}}}""";
+    private const string SustainedResolve = """{"schema_version":2,"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"operator":">","value":90}}}}""";
+    private const string EditedSustainedResolve = """{"schema_version":2,"type":"sustained","sustained":{"minutes":6,"child":{"type":"threshold","threshold":{"operator":">","value":90}}}}""";
+    private const string SustainedSnooze = """{"snooze":{"smartSnooze":true,"conditions":[{"schema_version":2,"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"operator":">","value":90}}}}]}}""";
+    private const string SustainedSnoozeConditions = """[{"schema_version":2,"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"operator":">","value":90}}}}]""";
+    private const string LongerSustainedSnooze = """{"snooze":{"smartSnooze":true,"conditions":[{"schema_version":2,"type":"sustained","sustained":{"minutes":6,"child":{"type":"threshold","threshold":{"operator":">","value":90}}}}]}}""";
+    private const string ReorderedSnooze = """{"snooze":{"smartSnooze":true,"conditions":[{"schema_version":2,"type":"threshold","threshold":{"operator":">","value":90}},{"schema_version":2,"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"operator":">","value":90}}}}]}}""";
     private static readonly DateTimeOffset Now = new(2026, 1, 5, 12, 0, 0, TimeSpan.Zero);
 
     public sealed class Database() : MigratedDatabase("stale_rule_decision");

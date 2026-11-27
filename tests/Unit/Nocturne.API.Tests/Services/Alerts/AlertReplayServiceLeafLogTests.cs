@@ -112,18 +112,18 @@ public class AlertReplayServiceLeafLogTests
             TimeProvider.System);
     }
 
-    private static AlertRuleSnapshot ThresholdRule(Guid id, string direction, decimal value) =>
-        new(id, Guid.NewGuid(), $"{direction}-{value}", AlertConditionType.Threshold,
-            $$"""{"direction":"{{direction}}","value":{{value}}}""", AlertRuleSeverity.Warning, "{}", 0,
+    private static AlertRuleSnapshot ThresholdRule(Guid id, string @operator, decimal value) =>
+        new(id, Guid.NewGuid(), $"{@operator}{value}", AlertConditionType.Threshold,
+            $$"""{"schema_version":2,"operator":"{{@operator}}","value":{{value}}}""", AlertRuleSeverity.Warning, "{}", 0,
             AutoResolveEnabled: false, AutoResolveParams: null);
 
     private static AlertRuleSnapshot CompositeAndOfTwoThresholds(
-        Guid id, string direction1, decimal value1, string direction2, decimal value2)
+        Guid id, string operator1, decimal value1, string operator2, decimal value2)
     {
-        string Leaf(string dir, decimal val) =>
-            "{\"type\":\"threshold\",\"threshold\":{\"direction\":\"" + dir + "\",\"value\":" + val + "}}";
-        var paramsJson = "{\"operator\":\"and\",\"conditions\":[" + Leaf(direction1, value1)
-            + "," + Leaf(direction2, value2) + "]}";
+        string Leaf(string op, decimal val) =>
+            "{\"type\":\"threshold\",\"threshold\":{\"operator\":\"" + op + "\",\"value\":" + val + "}}";
+        var paramsJson = "{\"schema_version\":2,\"operator\":\"and\",\"conditions\":[" + Leaf(operator1, value1)
+            + "," + Leaf(operator2, value2) + "]}";
         return new(id, Guid.NewGuid(), "and-of-two", AlertConditionType.Composite,
             paramsJson, AlertRuleSeverity.Warning, "{}", 0,
             AutoResolveEnabled: false, AutoResolveParams: null);
@@ -141,7 +141,7 @@ public class AlertReplayServiceLeafLogTests
     public async Task SingleThresholdLeaf_FalseThenTrueThenFalse_RecordsThreeTransitions()
     {
         var ruleId = Guid.NewGuid();
-        var rule = ThresholdRule(ruleId, "below", 70m);
+        var rule = ThresholdRule(ruleId, "<", 70m);
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
@@ -191,7 +191,7 @@ public class AlertReplayServiceLeafLogTests
     public async Task LeafStableAcrossWindow_RecordsExactlyOneBaselineTransition()
     {
         var ruleId = Guid.NewGuid();
-        var rule = ThresholdRule(ruleId, "below", 70m);
+        var rule = ThresholdRule(ruleId, "<", 70m);
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
@@ -222,7 +222,7 @@ public class AlertReplayServiceLeafLogTests
     {
         var ruleId = Guid.NewGuid();
         // AND(below 70, above 100) — leaf 0 watches lows, leaf 1 watches highs.
-        var rule = CompositeAndOfTwoThresholds(ruleId, "below", 70m, "above", 100m);
+        var rule = CompositeAndOfTwoThresholds(ruleId, "<", 70m, ">", 100m);
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 

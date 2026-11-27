@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "glucose_change",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<=",
         "value": -30,
         "window_minutes": 15,
@@ -20,6 +21,7 @@
       "name": "rule-2",
       "condition_type": "glucose_extreme",
       "condition_params": {
+        "schema_version": 2,
         "of": "max",
         "operator": ">",
         "value": 250,
@@ -32,6 +34,7 @@
       "name": "rule-3",
       "condition_type": "glucose_count",
       "condition_params": {
+        "schema_version": 2,
         "reading": {
           "operator": "<",
           "value": 70
@@ -49,6 +52,7 @@
       "name": "rule-4",
       "condition_type": "glucose_count",
       "condition_params": {
+        "schema_version": 2,
         "reading": {
           "operator": ">",
           "value": 100

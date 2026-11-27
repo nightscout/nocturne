@@ -1,18 +1,20 @@
 {
   "schema_version": 1,
   "name": "replay-auto-resolve-read-while-body-false",
-  "description": "awaiting re-arm, the auto-resolve tree is evaluated on a tick whose body is false too, so its sustained timer clears there as the live engine\u0027s does and a later fire starts the hold over; pinned against the live scenario auto-resolve-read-while-body-false",
+  "description": "awaiting re-arm, the auto-resolve tree is evaluated on a tick whose body is false too, so its sustained timer clears there as the live engine's does and a later fire starts the hold over; pinned against the live scenario auto-resolve-read-while-body-false",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": true,
       "auto_resolve_params": {
+        "schema_version": 2,
         "type": "sustained",
         "sustained": {
           "minutes": 10,
@@ -24,15 +26,15 @@
                 {
                   "type": "threshold",
                   "threshold": {
-                    "direction": "above",
-                    "value": 60
+                    "value": 60,
+                    "operator": ">"
                   }
                 },
                 {
                   "type": "threshold",
                   "threshold": {
-                    "direction": "below",
-                    "value": 75
+                    "value": 75,
+                    "operator": "<"
                   }
                 }
               ]

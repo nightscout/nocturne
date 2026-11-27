@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "glucose_bucket",
       "condition_params": {
+        "schema_version": 2,
         "buckets": [
           "very_low",
           "low"
@@ -20,6 +21,7 @@
       "name": "rule-2",
       "condition_type": "glucose_bucket",
       "condition_params": {
+        "schema_version": 2,
         "buckets": []
       },
       "auto_resolve_enabled": false

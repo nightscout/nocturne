@@ -117,10 +117,10 @@ public class AlertReplayServiceTests
             TimeProvider.System);
     }
 
-    private static AlertRuleSnapshot ThresholdRule(Guid id, string direction, decimal value,
+    private static AlertRuleSnapshot ThresholdRule(Guid id, string @operator, decimal value,
         AlertRuleSeverity severity = AlertRuleSeverity.Warning) =>
-        new(id, Guid.NewGuid(), $"{direction}-{value}", AlertConditionType.Threshold,
-            $$"""{"direction":"{{direction}}","value":{{value}}}""", severity, "{}", 0,
+        new(id, Guid.NewGuid(), $"{@operator}{value}", AlertConditionType.Threshold,
+            $$"""{"schema_version":2,"operator":"{{@operator}}","value":{{value}}}""", severity, "{}", 0,
             AutoResolveEnabled: false, AutoResolveParams: null);
 
     private static SensorGlucose Reading(DateTime at, double mgdl) => new()
@@ -171,7 +171,7 @@ public class AlertReplayServiceTests
 
     private static AlertRuleSnapshot SignalLoss(Guid id, int minutes) =>
         new(id, Guid.NewGuid(), "signal-loss", AlertConditionType.SignalLoss,
-            $$"""{"timeout_minutes":{{minutes}}}""", AlertRuleSeverity.Warning, "{}", 0, false, null);
+            $$"""{"schema_version":2,"timeout_minutes":{{minutes}}}""", AlertRuleSeverity.Warning, "{}", 0, false, null);
 
     /// <summary>
     /// Every rule is evaluated at the window's start and at each reading where live evaluated it:
@@ -186,7 +186,7 @@ public class AlertReplayServiceTests
         var windowStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
         var windowEnd = windowStart.AddMinutes(40);
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { ThresholdRule(Guid.NewGuid(), "below", 70m) });
+            .ReturnsAsync(new[] { ThresholdRule(Guid.NewGuid(), "<", 70m) });
         var import = Arriving(windowStart.AddMinutes(30), 130, TimeSpan.FromDays(1));
         SetupReadings(
             Reading(windowStart.AddMinutes(2.5), 100),
@@ -230,7 +230,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[]
             {
                 new AlertRuleSnapshot(Guid.NewGuid(), Guid.NewGuid(), "fall", AlertConditionType.GlucoseChange,
-                    """{"operator":"<=","value":-30,"window_minutes":15}""", AlertRuleSeverity.Warning, "{}", 0,
+                    """{"schema_version":2,"operator":"<=","value":-30,"window_minutes":15}""", AlertRuleSeverity.Warning, "{}", 0,
                     AutoResolveEnabled: false, AutoResolveParams: null),
             });
         var otherUploader = Reading(windowStart.AddMinutes(3), 300);
@@ -284,7 +284,7 @@ public class AlertReplayServiceTests
             .ReturnsAsync(new[]
             {
                 new AlertRuleSnapshot(Guid.NewGuid(), Guid.NewGuid(), "lowest", AlertConditionType.GlucoseExtreme,
-                    """{"of":"min","operator":"<","value":70,"window_minutes":30}""", AlertRuleSeverity.Warning, "{}", 0,
+                    """{"schema_version":2,"of":"min","operator":"<","value":70,"window_minutes":30}""", AlertRuleSeverity.Warning, "{}", 0,
                     AutoResolveEnabled: false, AutoResolveParams: null),
             });
         const string Dexcom = "dexcom-connector";
@@ -331,7 +331,7 @@ public class AlertReplayServiceTests
     {
         var windowStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { ThresholdRule(Guid.NewGuid(), "below", 70m) });
+            .ReturnsAsync(new[] { ThresholdRule(Guid.NewGuid(), "<", 70m) });
         SetupReadings(Reading(windowStart.AddMinutes(-10), 150), Reading(windowStart.AddMinutes(5), 120));
         var engine = new CapturingReplayEngine();
         var sut = new AlertReplayService(
@@ -357,7 +357,7 @@ public class AlertReplayServiceTests
     {
         var windowStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { ThresholdRule(Guid.NewGuid(), "below", 70m) });
+            .ReturnsAsync(new[] { ThresholdRule(Guid.NewGuid(), "<", 70m) });
         SetupReadings(
             Reading(windowStart.AddMinutes(5), 60),
             Reading(windowStart.AddMinutes(10), 0),
@@ -471,7 +471,7 @@ public class AlertReplayServiceTests
         var ruleId = Guid.NewGuid();
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { ThresholdRule(ruleId, "below", 70m) with { OnUnknown = onUnknown } });
+            .ReturnsAsync(new[] { ThresholdRule(ruleId, "<", 70m) with { OnUnknown = onUnknown } });
         var backfill = TimeSpan.FromDays(1);
         SensorGlucose[] readings =
         [
@@ -526,7 +526,7 @@ public class AlertReplayServiceTests
     public async Task ThresholdBelow_LowReading_FiresOneEventAtLeadingEdge()
     {
         var ruleId = Guid.NewGuid();
-        var rule = ThresholdRule(ruleId, "below", 70m);
+        var rule = ThresholdRule(ruleId, "<", 70m);
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
@@ -556,7 +556,7 @@ public class AlertReplayServiceTests
     [NativeFact]
     public async Task ContinuouslyMet_ProducesSingleLeadingEdgeEvent()
     {
-        var rule = ThresholdRule(Guid.NewGuid(), "below", 70m);
+        var rule = ThresholdRule(Guid.NewGuid(), "<", 70m);
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
@@ -582,7 +582,7 @@ public class AlertReplayServiceTests
     public async Task ScopedDnd_LowsWindow_SuppressesALowRuleInReplay()
     {
         var rule = new AlertRuleSnapshot(Guid.NewGuid(), _tenantId, "low", AlertConditionType.Threshold,
-            """{"direction":"below","value":70}""", AlertRuleSeverity.Warning, "{}", 0,
+            """{"schema_version":2,"operator":"<","value":70}""", AlertRuleSeverity.Warning, "{}", 0,
             AutoResolveEnabled: false, AutoResolveParams: null, AllowThroughDnd: false,
             ScopeClass: RuleScopeClass.Low);
         var date = new DateOnly(2026, 4, 28);
@@ -616,7 +616,7 @@ public class AlertReplayServiceTests
     public async Task ScopedDnd_WindowReceivedAfterTheFire_DoesNotSuppress_ReceiptGating()
     {
         var rule = new AlertRuleSnapshot(Guid.NewGuid(), _tenantId, "low", AlertConditionType.Threshold,
-            """{"direction":"below","value":70}""", AlertRuleSeverity.Warning, "{}", 0,
+            """{"schema_version":2,"operator":"<","value":70}""", AlertRuleSeverity.Warning, "{}", 0,
             AutoResolveEnabled: false, AutoResolveParams: null, AllowThroughDnd: false,
             ScopeClass: RuleScopeClass.Low);
         var date = new DateOnly(2026, 4, 28);
@@ -655,7 +655,7 @@ public class AlertReplayServiceTests
         // itself suppressed by the same all-window that makes the leaf true.
         var ruleId = Guid.NewGuid();
         var rule = new AlertRuleSnapshot(ruleId, _tenantId, "dnd-on", AlertConditionType.DoNotDisturb,
-            """{"is_active":true}""", AlertRuleSeverity.Info, "{}", 0,
+            """{"schema_version":2,"is_active":true}""", AlertRuleSeverity.Info, "{}", 0,
             AutoResolveEnabled: false, AutoResolveParams: null, AllowThroughDnd: true);
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
@@ -694,10 +694,10 @@ public class AlertReplayServiceTests
         // Rule B: alert_state(A, "firing") — should fire at the SAME tick as A, but only after.
         var ruleAId = Guid.NewGuid();
         var ruleBId = Guid.NewGuid();
-        var ruleA = ThresholdRule(ruleAId, "below", 70m);
+        var ruleA = ThresholdRule(ruleAId, "<", 70m);
         var ruleB = new AlertRuleSnapshot(ruleBId, _tenantId, "B-chains-A",
             AlertConditionType.AlertState,
-            $$"""{"alert_id":"{{ruleAId}}","state":"firing"}""",
+            $$"""{"schema_version":2,"alert_id":"{{ruleAId}}","state":"firing"}""",
             AlertRuleSeverity.Critical, "{}", 0, false, null);
 
         var date = new DateOnly(2026, 4, 28);
@@ -736,10 +736,10 @@ public class AlertReplayServiceTests
         var rule = new AlertRuleSnapshot(
             ruleId, _tenantId, "open-and-resolve",
             AlertConditionType.Threshold,
-            """{"direction":"below","value":80}""",
+            """{"schema_version":2,"operator":"<","value":80}""",
             AlertRuleSeverity.Warning, "{}", 0,
             AutoResolveEnabled: true,
-            AutoResolveParams: """{"type":"threshold","threshold":{"direction":"above","value":70}}""");
+            AutoResolveParams: """{"schema_version":2,"type":"threshold","threshold":{"operator":">","value":70}}""");
 
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
@@ -788,7 +788,7 @@ public class AlertReplayServiceTests
         var ruleId = Guid.NewGuid();
         var rule = new AlertRuleSnapshot(ruleId, _tenantId, "loop-stale-5",
             AlertConditionType.LoopStale,
-            """{"operator":">","minutes":5}""",
+            """{"schema_version":2,"operator":">","minutes":5}""",
             AlertRuleSeverity.Warning, "{}", 0, false, null);
 
         var date = new DateOnly(2026, 4, 28);
@@ -825,7 +825,7 @@ public class AlertReplayServiceTests
         var ruleId = Guid.NewGuid();
         var rule = new AlertRuleSnapshot(ruleId, _tenantId, "pump-suspended",
             AlertConditionType.PumpSuspended,
-            """{"is_active":true}""",
+            """{"schema_version":2,"is_active":true}""",
             AlertRuleSeverity.Warning, "{}", 0, false, null);
 
         var date = new DateOnly(2026, 4, 28);
@@ -874,7 +874,7 @@ public class AlertReplayServiceTests
     [NativeFact]
     public async Task FactTimelines_LatestGlucose_EmitsOnReadingChange()
     {
-        var rule = ThresholdRule(Guid.NewGuid(), "below", 70m);
+        var rule = ThresholdRule(Guid.NewGuid(), "<", 70m);
         var date = new DateOnly(2026, 4, 28);
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
 
@@ -911,7 +911,7 @@ public class AlertReplayServiceTests
     {
         var rule = new AlertRuleSnapshot(
             Guid.NewGuid(), Guid.NewGuid(), "reservoir-low", AlertConditionType.Reservoir,
-            """{"operator":"<","value":10}""", AlertRuleSeverity.Warning, "{}", 0,
+            """{"schema_version":2,"operator":"<","value":10}""", AlertRuleSeverity.Warning, "{}", 0,
             AutoResolveEnabled: false, AutoResolveParams: null);
         var date = new DateOnly(2026, 4, 28);
 
@@ -941,13 +941,13 @@ public class AlertReplayServiceTests
         var ruleId = Guid.NewGuid();
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { ThresholdRule(ruleId, "below", 70m) });
+            .ReturnsAsync(new[] { ThresholdRule(ruleId, "<", 70m) });
         _glucoseRepository.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
                 It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(new[] { Reading(dayStart.AddHours(1), 90) });
         var ruleOverride = new ReplayRuleOverride(
-            ruleId, "tightened", AlertConditionType.Threshold, """{"direction":"below","value":100}""",
+            ruleId, "tightened", AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":100}""",
             AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null);
         var result = await _sut.ReplayDryRunAsync(
             null, null, dayStart, dayStart.AddHours(2), ruleOverride, CancellationToken.None);
@@ -970,7 +970,7 @@ public class AlertReplayServiceTests
     {
         var ruleId = Guid.NewGuid();
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
-        var stored = ThresholdRule(ruleId, "below", 70m) with { OnUnknown = storedWord };
+        var stored = ThresholdRule(ruleId, "<", 70m) with { OnUnknown = storedWord };
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { stored });
         _alertRepository.Setup(r => r.GetRuleAsync(ruleId, It.IsAny<CancellationToken>()))
@@ -980,7 +980,7 @@ public class AlertReplayServiceTests
                 It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(new[] { Reading(dayStart.AddHours(1), 90) });
         var ruleOverride = new ReplayRuleOverride(
-            ruleId, "low", AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+            ruleId, "low", AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""",
             AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null,
             OnUnknown: overrideWord);
 
@@ -1005,7 +1005,7 @@ public class AlertReplayServiceTests
     {
         var ruleId = Guid.NewGuid();
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
-        var stored = ThresholdRule(ruleId, "below", 70m) with
+        var stored = ThresholdRule(ruleId, "<", 70m) with
         {
             OnUnknown = AlertRuleOnUnknown.Met,
             GlucoseFreshnessMinutes = storedMinutes,
@@ -1020,7 +1020,7 @@ public class AlertReplayServiceTests
                 It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(new[] { Reading(reading, 90) });
         var ruleOverride = new ReplayRuleOverride(
-            ruleId, "low", AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+            ruleId, "low", AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""",
             AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null,
             GlucoseFreshnessMinutes: overrideMinutes);
 
@@ -1047,7 +1047,7 @@ public class AlertReplayServiceTests
     {
         var ruleId = Guid.NewGuid();
         var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
-        var stored = ThresholdRule(ruleId, "below", 70m) with { OnUnknown = AlertRuleOnUnknown.Met };
+        var stored = ThresholdRule(ruleId, "<", 70m) with { OnUnknown = AlertRuleOnUnknown.Met };
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { stored });
         _alertRepository.Setup(r => r.GetRuleAsync(ruleId, It.IsAny<CancellationToken>()))
@@ -1060,7 +1060,7 @@ public class AlertReplayServiceTests
                 It.IsAny<int>(), It.IsAny<int>(), false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, It.IsAny<GlucoseStreams>()))
             .ReturnsAsync(new[] { late });
         var ruleOverride = new ReplayRuleOverride(
-            ruleId, "low", AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+            ruleId, "low", AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""",
             AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null);
 
         var result = await _sut.ReplayDryRunAsync(
@@ -1100,7 +1100,7 @@ public class AlertReplayServiceTests
                     .ToList()));
 
     private static ReplayRuleOverride LowDraft() => new(
-        Id: null, "draft", AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+        Id: null, "draft", AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""",
         AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null);
 
     [NativeFact]

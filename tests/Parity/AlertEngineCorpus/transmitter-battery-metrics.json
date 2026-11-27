@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "transmitter_battery",
       "condition_params": {
+        "schema_version": 2,
         "metric": "voltage_a",
         "operator": "<",
         "value": 290
@@ -19,6 +20,7 @@
       "name": "rule-2",
       "condition_type": "transmitter_battery",
       "condition_params": {
+        "schema_version": 2,
         "metric": "voltage_b",
         "operator": "<",
         "value": 270
@@ -30,6 +32,7 @@
       "name": "rule-3",
       "condition_type": "transmitter_battery",
       "condition_params": {
+        "schema_version": 2,
         "metric": "resistance",
         "operator": ">=",
         "value": 1400
@@ -41,6 +44,7 @@
       "name": "rule-4",
       "condition_type": "transmitter_battery",
       "condition_params": {
+        "schema_version": 2,
         "metric": "days",
         "operator": ">",
         "value": 90

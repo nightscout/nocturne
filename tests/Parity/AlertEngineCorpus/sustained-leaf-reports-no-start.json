@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "sustained",
       "condition_params": {
+        "schema_version": 2,
         "minutes": 15,
         "child": {
           "type": "iob",

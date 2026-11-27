@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "signal_loss",
       "condition_params": {
+        "schema_version": 2,
         "timeout_minutes": 15
       },
       "auto_resolve_enabled": false
@@ -17,8 +18,9 @@
       "name": "rule-2",
       "condition_type": "staleness",
       "condition_params": {
-        "operator": "\u003E=",
-        "value": 10
+        "schema_version": 2,
+        "operator": ">=",
+        "minutes": 10
       },
       "auto_resolve_enabled": false
     }

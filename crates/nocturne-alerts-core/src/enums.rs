@@ -237,22 +237,6 @@ wire_enum! {
 }
 
 wire_enum! {
-    /// `threshold.direction`.
-    pub enum ThresholdDirection {
-        Above = "above",
-        Below = "below",
-    }
-}
-
-wire_enum! {
-    /// `rate_of_change.direction`.
-    pub enum RateDirection {
-        Rising = "rising",
-        Falling = "falling",
-    }
-}
-
-wire_enum! {
     /// `composite.operator`.
     pub enum CompositeOp {
         And = "and",
@@ -350,11 +334,8 @@ mod tests {
 
     #[test]
     fn a_name_matches_only_exactly() {
-        assert_eq!(
-            ThresholdDirection::from_name("below"),
-            Some(ThresholdDirection::Below)
-        );
-        assert_eq!(ThresholdDirection::from_name("BELOW"), None);
+        assert_eq!(WindowExtreme::from_name("min"), Some(WindowExtreme::Min));
+        assert_eq!(WindowExtreme::from_name("MIN"), None);
         assert_eq!(AlertStateKind::from_name("ac\u{212A}nowledged"), None);
         assert_eq!(TrendBucket::from_name("Flat"), None);
         assert_eq!(PumpMode::from_name("suspended"), None);

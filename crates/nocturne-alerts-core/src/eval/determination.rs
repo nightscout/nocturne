@@ -31,7 +31,7 @@ fn expiry(d: &ApsDetermination, bound: TimeDelta) -> Elapsed {
     Elapsed {
         anchor: d.at,
         source: Some(ClockAnchor::ApsDetermination),
-        measure: Measure::Over(bound),
+        measure: Measure::over(bound),
     }
 }
 

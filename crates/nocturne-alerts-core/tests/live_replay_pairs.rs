@@ -30,7 +30,7 @@ use nocturne_alerts_core::engine::{EngineState, Evaluation, OnUnknown, Rule, eva
 use nocturne_alerts_core::enums::{SensorState, WireEnum};
 use nocturne_alerts_core::excursion::{CloseReason, HOLD_BOUND, Transition, TransitionType};
 use nocturne_alerts_core::facts::{ContextFact, RuleConditions, rule_reads};
-use nocturne_alerts_core::model::ConditionKind;
+use nocturne_alerts_core::model::{CURRENT_SCHEMA, ConditionKind, SCHEMA_VERSION};
 use nocturne_alerts_core::next_change::RESOLUTION;
 use nocturne_alerts_core::replay::{ReplayEventKind, ReplayOptions, ReplayTick, replay};
 use nocturne_alerts_core::wall_clock::references_wall_clock;
@@ -562,18 +562,27 @@ fn hidden_opens(replay: &[Event], live: &[Event]) -> usize {
         .sum()
 }
 
-fn threshold(direction: &str, value: i64) -> Value {
-    json!({ "type": "threshold", "threshold": { "direction": direction, "value": value } })
+fn threshold(operator: &str, value: i64) -> Value {
+    json!({ "type": "threshold", "threshold": { "operator": operator, "value": value } })
+}
+
+/// `doc` as a stored tree's root, naming schema 2 (engine-semantics.md §1.2).
+fn rooted(mut doc: Value) -> Value {
+    doc[SCHEMA_VERSION] = json!(CURRENT_SCHEMA);
+    doc
+}
+
+fn operator() -> impl Strategy<Value = &'static str> + Clone {
+    select(vec!["<", "<=", ">", ">="])
 }
 
 fn body() -> impl Strategy<Value = Value> {
     let level = select(vec![70i64, 80, 180]);
-    let leaf = (select(vec!["below", "above"]), level.clone()).prop_map(|(d, v)| threshold(d, v));
-    let margined =
-        (select(vec!["below", "above"]), level.clone(), 1i64..=20).prop_map(|(d, v, m)| {
-            json!({ "type": "threshold",
-                "threshold": { "direction": d, "value": v, "clear_margin": m } })
-        });
+    let leaf = (operator(), level.clone()).prop_map(|(op, v)| threshold(op, v));
+    let margined = (operator(), level.clone(), 1i64..=20).prop_map(|(op, v, m)| {
+        json!({ "type": "threshold",
+            "threshold": { "operator": op, "value": v, "clear_margin": m } })
+    });
     prop_oneof![
         3 => leaf.clone(),
         2 => margined.clone(),
@@ -583,7 +592,7 @@ fn body() -> impl Strategy<Value = Value> {
         2 => (5i64..=40).prop_map(|m| json!({
             "type": "signal_loss", "signal_loss": { "timeout_minutes": m } })),
         1 => (5i64..=40).prop_map(|m| json!({
-            "type": "staleness", "staleness": { "operator": ">=", "value": m } })),
+            "type": "staleness", "staleness": { "operator": ">=", "minutes": m } })),
         2 => (leaf.clone(), 0u32..24, 1u32..24).prop_map(|(child, from, len)| json!({
             "type": "composite", "composite": { "operator": "and", "conditions": [
                 child,
@@ -606,7 +615,7 @@ fn rule_from(n: u128, node: &Value) -> Rule {
     Rule {
         id: Uuid::from_u128(n),
         condition_type: kind,
-        condition_params: node[kind.name()].clone(),
+        condition_params: rooted(node[kind.name()].clone()),
         auto_resolve_enabled: false,
         auto_resolve_params: None,
         on_unknown: OnUnknown::Hold,
@@ -620,18 +629,18 @@ fn rule_of(n: u128) -> impl Strategy<Value = Rule> {
         body(),
         prop_oneof![
             2 => Just(None),
-            1 => (select(vec!["below", "above"]), select(vec![70i64, 100, 180]))
-                .prop_map(|(d, v)| Some(threshold(d, v))),
+            1 => (operator(), select(vec![70i64, 100, 180]))
+                .prop_map(|(op, v)| Some(threshold(op, v))),
             1 => (1i64..=15, select(vec![70i64, 100, 180])).prop_map(|(m, v)| Some(json!({
                 "type": "sustained", "sustained": { "minutes": m,
-                    "child": threshold("above", v) } }))),
+                    "child": threshold(">", v) } }))),
         ],
         select(vec![OnUnknown::Hold, OnUnknown::Met, OnUnknown::NotMet]),
         select(vec![5i64, 11, 20]),
     )
         .prop_map(move |(node, auto_resolve, on_unknown, fresh)| Rule {
             auto_resolve_enabled: auto_resolve.is_some(),
-            auto_resolve_params: auto_resolve,
+            auto_resolve_params: auto_resolve.map(rooted),
             on_unknown,
             glucose_freshness: TimeDelta::minutes(fresh),
             ..rule_from(n, &node)
@@ -662,7 +671,7 @@ fn child_rule() -> impl Strategy<Value = Rule> {
         move |(for_minutes, with_low)| {
             let node = if with_low {
                 json!({ "type": "composite", "composite": { "operator": "and",
-                "conditions": [state(for_minutes), threshold("below", 80)] } })
+                "conditions": [state(for_minutes), threshold("<", 80)] } })
             } else {
                 state(for_minutes)
             };
@@ -911,7 +920,7 @@ fn fixed_cases_pair() {
             .map(|(m, v)| (m, v, 0))
             .collect()
     };
-    let low = threshold("below", 70);
+    let low = threshold("<", 70);
 
     let flapping_low = fixed_rule(low.clone());
 
@@ -920,7 +929,7 @@ fn fixed_cases_pair() {
 
     let mut rearm = fixed_rule(low.clone());
     rearm.auto_resolve_enabled = true;
-    rearm.auto_resolve_params = Some(threshold("below", 100));
+    rearm.auto_resolve_params = Some(rooted(threshold("<", 100)));
 
     let gap = [(0, 60, 0), (5, 60, 0), (60, 60, 0), (65, 90, 0)];
     let on_unknown = [OnUnknown::Hold, OnUnknown::Met, OnUnknown::NotMet].map(|word| {
@@ -1178,15 +1187,15 @@ fn a_backfilled_day_goes_stale_across_a_gap() {
     };
     let past = |m: i64| TimeDelta::minutes(m) + RESOLUTION;
     assert_eq!(
-        fires(OnUnknown::Met, threshold("above", 200), 60, 60),
+        fires(OnUnknown::Met, threshold(">", 200), 60, 60),
         vec![past(16), past(81)]
     );
     assert_eq!(
-        fires(OnUnknown::NotMet, threshold("below", 70), 60, 60),
+        fires(OnUnknown::NotMet, threshold("<", 70), 60, 60),
         vec![TimeDelta::zero(), TimeDelta::minutes(65)]
     );
     assert_eq!(
-        fires(OnUnknown::Hold, threshold("below", 70), 60, 60),
+        fires(OnUnknown::Hold, threshold("<", 70), 60, 60),
         vec![TimeDelta::zero()]
     );
 }

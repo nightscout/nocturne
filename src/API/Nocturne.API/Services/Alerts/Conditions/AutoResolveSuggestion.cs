@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.API.Services.Alerts.Conditions;
 
@@ -8,7 +9,8 @@ namespace Nocturne.API.Services.Alerts.Conditions;
 /// the conditions that have one. The alert wizard stores it, the rule editor offers it, and the
 /// setup hub stores it for its starter rules.
 /// <para>
-/// A node is the envelope a rule stores: <c>{"type":"threshold","threshold":{...}}</c>. An "and"
+/// A node is the envelope a rule stores: <c>{"type":"threshold","threshold":{...}}</c>, naming its
+/// <see cref="ConditionSchema"/> at the root only. An "and"
 /// of conditions closes when any one is no longer true, so its opposites join with "or", and the
 /// reverse. A wait (<c>sustained</c>) is dropped: the alert closes when the condition lifts, not
 /// after it has been lifted for the wait. A condition with no opposite is left out of an "and",
@@ -29,11 +31,12 @@ internal static class AutoResolveSuggestion
             return null;
         try
         {
-            var opposite = For(JsonNode.Parse(condition));
+            var root = JsonNode.Parse(condition);
+            var opposite = For(root is JsonObject node ? ConditionSchema.Unstamp(node) : root);
             if (opposite is null)
                 return null;
             DropClearMargins(opposite);
-            return opposite.ToJsonString();
+            return ConditionSchema.Stamp(opposite).ToJsonString();
         }
         catch (JsonException)
         {
@@ -80,10 +83,10 @@ internal static class AutoResolveSuggestion
 
             case "threshold":
             {
-                if (payload is null)
+                if (payload is null || OppositeThresholdOperator(TextOf(payload["operator"])) is not { } turned)
                     return null;
                 var opposite = (JsonObject)payload.DeepClone();
-                opposite["direction"] = TextOf(payload["direction"]) == "below" ? "above" : "below";
+                opposite["operator"] = turned;
                 return Node(type, opposite);
             }
 
@@ -91,9 +94,8 @@ internal static class AutoResolveSuggestion
             case "trend":
                 return payload is null || TextOf(payload["bucket"]) == "flat" ? null : Flat();
 
-            // Only the negation is the opposite of these. A rate has no comparison to turn round,
-            // and a slow one is true inside the flat trend. A forecast is true when any of its
-            // points matches, so one with the comparison turned round is true together with it.
+            // Only the negation is the opposite of these. A forecast is true when any of its points
+            // matches, so one with the comparison turned round is true together with it.
             case "rate_of_change":
             case "predicted":
                 return payload is null ? null : Negated(node);
@@ -193,6 +195,17 @@ internal static class AutoResolveSuggestion
 
     private static string? TextOf(JsonNode? node) =>
         node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+
+    /// <summary>
+    /// A strict limit turns to the strict other side, so the two leave the limit itself to neither;
+    /// an inclusive one turns as <see cref="OppositeOperator"/> does.
+    /// </summary>
+    private static string? OppositeThresholdOperator(string? op) => op switch
+    {
+        "<" => ">",
+        ">" => "<",
+        _ => OppositeOperator(op),
+    };
 
     private static string? OppositeOperator(string? op) => op switch
     {

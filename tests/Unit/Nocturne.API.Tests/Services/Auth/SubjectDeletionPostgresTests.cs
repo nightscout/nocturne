@@ -134,7 +134,7 @@ public class SubjectDeletionPostgresTests(SubjectDeletionPostgresTests.Database 
         var rule = await new AlertRuleRepository(Contexts(site.Tenant), TimeProvider.System).CreateAsync(
             new NewAlertRule(
                 new AlertRuleWrite(
-                    "Urgent low", null, AlertConditionType.Threshold, """{"direction":"below","value":55}""",
+                    "Urgent low", null, AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":55}""",
                     RuleScopeClass.Low, AlertRuleSeverity.Critical, IsEnabled: true, SortOrder: 0,
                     AllowThroughDnd: true, AutoResolveEnabled: false, AutoResolveParams: null, ClientConfiguration: "{}"),
                 [new AlertRuleChannelWrite(ChannelType.Webhook, "https://example.invalid/hook", maker, null, null)]),

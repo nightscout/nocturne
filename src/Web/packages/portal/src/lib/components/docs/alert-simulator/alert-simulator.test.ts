@@ -102,8 +102,10 @@ describe('replay in the shape the app reads', () => {
 
 	it('stores each rule as the API does, the root payload as its params', () => {
 		const [low, high] = ruleResponses(rules);
-		expect(low).toMatchObject({ conditionType: 'threshold', conditionParams: { direction: 'below', value: 70 }, severity: 'warning' });
-		expect(high).toMatchObject({ autoResolveEnabled: true });
+		expect(low).toMatchObject({ conditionType: 'threshold', conditionParams: { schema_version: 2, operator: '<', value: 70 }, severity: 'warning' });
+		expect(high).toMatchObject({ autoResolveEnabled: true, autoResolveParams: { schema_version: 2, type: 'sustained' } });
+		expect(high.autoResolveParams).toMatchObject({ sustained: { child: { rate_of_change: { operator: '<=', value: -1 } } } });
+		expect(high.autoResolveParams.sustained.child).not.toHaveProperty('schema_version');
 	});
 
 	it('names and colours each event by its rule, and leaves out the hysteresis transitions', () => {
@@ -131,7 +133,7 @@ describe('replay in the shape the app reads', () => {
 		responses.forEach((response, i) => {
 			const leaf = leaves[i].condition as Record<string, unknown>;
 			expect(response.conditionType).toBe(leaf.type);
-			expect(response.conditionParams).toEqual(leaf[leaf.type as string]);
+			expect(response.conditionParams).toEqual({ schema_version: 2, ...(leaf[leaf.type as string] as object) });
 		});
 		const wrapped = ruleResponses([
 			{ id: 'n', name: 'not', severity: 'critical', condition: { type: 'not', not: { child: defaultLeaf('iob') } } },
@@ -172,7 +174,7 @@ describe('replay in the shape the app reads', () => {
 });
 
 describe('tree', () => {
-	const below = (value: number): ConditionNode => ({ type: 'threshold', threshold: { direction: 'below', value } });
+	const below = (value: number): ConditionNode => ({ type: 'threshold', threshold: { operator: '<', value } });
 	const tree: ConditionNode = {
 		type: 'composite',
 		composite: {

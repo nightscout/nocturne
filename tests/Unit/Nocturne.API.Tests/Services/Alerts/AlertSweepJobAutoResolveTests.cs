@@ -39,9 +39,9 @@ public class AlertSweepJobAutoResolveTests
     private async Task SweepAsync()
     {
         var rule = new AlertRuleSnapshot(
-            Guid.NewGuid(), Tenant, "rule", AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+            Guid.NewGuid(), Tenant, "rule", AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""",
             AlertRuleSeverity.Warning, "{}", 0, AutoResolveEnabled: true,
-            AutoResolveParams: """{"type":"signal_loss","signal_loss":{"timeout_minutes":30}}""");
+            AutoResolveParams: """{"schema_version":2,"type":"signal_loss","signal_loss":{"timeout_minutes":30}}""");
 
         var repository = AlertSweepRuns.Repository(Tenant, () => _anySourceLastReadingAt);
         repository

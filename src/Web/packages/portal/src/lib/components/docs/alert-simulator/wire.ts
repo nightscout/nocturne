@@ -8,8 +8,9 @@ export type ConditionNode =
 	| { type: "composite"; composite: { operator: "and" | "or"; conditions: ConditionNode[] } }
 	| { type: "not"; not: { child: ConditionNode } }
 	| { type: "sustained"; sustained: { minutes: number; child: ConditionNode } }
-	| { type: "threshold"; threshold: { direction: "above" | "below"; value: number } }
-	| { type: "rate_of_change"; rate_of_change: { direction: "rising" | "falling"; rate: number } }
+	| { type: "threshold"; threshold: { operator: CompareOperator; value: number } }
+	/** `value` is signed, in mg/dL a minute: a fall is negative. */
+	| { type: "rate_of_change"; rate_of_change: { operator: CompareOperator; value: number } }
 	| { type: "signal_loss"; signal_loss: { timeout_minutes: number } }
 	| { type: "time_of_day"; time_of_day: { from: string; to: string } }
 	| { type: "cob"; cob: { operator: CompareOperator; value: number } }
@@ -78,8 +79,16 @@ export interface ValidationIssue {
 	field?: string | null;
 }
 
+/** The condition schema the demo writes, named at the root of every tree it hands the engine (engine-semantics.md §1.2). */
+export const CONDITION_SCHEMA_VERSION = 2;
+
+/** `tree` as a root that names {@link CONDITION_SCHEMA_VERSION}. */
+export function withSchemaVersion<T extends object>(tree: T): T & { schema_version: typeof CONDITION_SCHEMA_VERSION } {
+	return { schema_version: CONDITION_SCHEMA_VERSION, ...tree };
+}
+
 /** The payload a node carries under the property named after its `type`. */
-export function wirePayload(node: ConditionNode): unknown {
+export function wirePayload(node: ConditionNode): object {
 	switch (node.type) {
 		case "composite":
 			return node.composite;

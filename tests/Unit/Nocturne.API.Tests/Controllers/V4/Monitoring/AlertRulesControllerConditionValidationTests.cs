@@ -72,7 +72,7 @@ public class AlertRulesControllerConditionValidationTests
         {
             Name = "Low",
             ConditionType = AlertConditionType.Composite,
-            ConditionParams = Json("""{"operator": "and", "conditions": []}"""),
+            ConditionParams = Json("""{"schema_version": 2, "operator": "and", "conditions": []}"""),
             AutoResolveEnabled = true,
             AutoResolveParams = Json("[]"),
         }, CancellationToken.None);
@@ -89,7 +89,7 @@ public class AlertRulesControllerConditionValidationTests
         (await db.AlertRules.CountAsync()).Should().Be(0);
         validator.Verify(v => v.Validate(
             AlertConditionType.Composite,
-            """{"operator":"and","conditions":[]}""",
+            """{"schema_version":2,"operator":"and","conditions":[]}""",
             true,
             "[]",
             null));
@@ -103,7 +103,7 @@ public class AlertRulesControllerConditionValidationTests
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([]);
         var (controller, db) = CreateController(validator.Object);
-        var body = Json("""{"direction": "below", "value": 70}""");
+        var body = Json("""{"schema_version": 2, "operator": "<", "value": 70}""");
 
         var created = (await controller.CreateRule(new CreateAlertRuleRequest
         {
@@ -148,7 +148,7 @@ public class AlertRulesControllerConditionValidationTests
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([]);
         var (controller, db) = CreateController(validator.Object);
-        var body = Json("""{"direction": "below", "value": 70}""");
+        var body = Json("""{"schema_version": 2, "operator": "<", "value": 70}""");
 
         var unset = (await controller.CreateRule(new CreateAlertRuleRequest
         {
@@ -223,7 +223,7 @@ public class AlertRulesControllerConditionValidationTests
         {
             Name = "Low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = Json("""{"direction": "below", "value": 70}"""),
+            ConditionParams = Json("""{"schema_version": 2, "operator": "<", "value": 70}"""),
         }, CancellationToken.None)).Result.Should().BeOfType<CreatedAtActionResult>().Which.Value
             .Should().BeOfType<AlertRuleResponse>().Which;
 
@@ -245,7 +245,7 @@ public class AlertRulesControllerConditionValidationTests
             TenantId = Tenant,
             Name = "Stored",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = """{"direction":"below","value":70}""",
+            ConditionParams = """{"schema_version":2,"operator":"<","value":70}""",
         });
         await db.SaveChangesAsync();
 
@@ -253,7 +253,7 @@ public class AlertRulesControllerConditionValidationTests
         {
             Name = "Low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = Json("""{"value": 70}"""),
+            ConditionParams = Json("""{"schema_version": 2, "value": 70}"""),
         }, CancellationToken.None);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
@@ -273,7 +273,7 @@ public class AlertRulesControllerConditionValidationTests
         {
             Name = "Low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = Json("""{"value": 70}"""),
+            ConditionParams = Json("""{"schema_version": 2, "value": 70}"""),
         }, CancellationToken.None);
 
         result.Result.Should().BeOfType<NotFoundResult>();
@@ -285,7 +285,7 @@ public class AlertRulesControllerConditionValidationTests
         TenantId = Tenant,
         Name = "Low",
         ConditionType = AlertConditionType.Threshold,
-        ConditionParams = """{"direction":"below","value":70,"legacyLabel":"Low"}""",
+        ConditionParams = """{"schema_version":2,"operator":"<","value":70,"legacyLabel":"Low"}""",
     };
 
     [NativeFact]
@@ -301,7 +301,7 @@ public class AlertRulesControllerConditionValidationTests
         {
             Name = "Low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = Json("""{"direction": "below", "value": 65, "legacyLabel": "Low"}"""),
+            ConditionParams = Json("""{"schema_version": 2, "operator": "<", "value": 65, "legacyLabel": "Low"}"""),
         }, CancellationToken.None);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value
@@ -321,7 +321,7 @@ public class AlertRulesControllerConditionValidationTests
     {
         var issues = new AlertRuleConditionValidator().Validate(
             AlertConditionType.TimeOfDay,
-            $$"""{"from": "22:00", "to": "06:00", "timezone": "{{zone}}"}""",
+            $$"""{"schema_version": 2, "from": "22:00", "to": "06:00", "timezone": "{{zone}}"}""",
             autoResolveEnabled: false,
             autoResolveParamsJson: null,
             clientConfigurationJson: null);
@@ -336,9 +336,9 @@ public class AlertRulesControllerConditionValidationTests
 
         var issues = validator.Validate(
             AlertConditionType.TimeOfDay,
-            """{"from": "22:00", "to": "06:00", "timezone": "Not/AZone"}""",
+            """{"schema_version": 2, "from": "22:00", "to": "06:00", "timezone": "Not/AZone"}""",
             autoResolveEnabled: true,
-            """{"type": "time_of_day", "time_of_day": {"from": "06:00", "to": "07:00", "timezone": "Also/NotAZone"}}""",
+            """{"schema_version": 2, "type": "time_of_day", "time_of_day": {"from": "06:00", "to": "07:00", "timezone": "Also/NotAZone"}}""",
             clientConfigurationJson: null);
 
         issues.Should().Contain(new RustValidationIssue("condition", "time_of_day", "invalid_field", "timezone"))
@@ -352,10 +352,10 @@ public class AlertRulesControllerConditionValidationTests
 
         var issues = validator.Validate(
             AlertConditionType.Composite,
-            """{"operator": "and", "conditions": [{"type": "sustained", "sustained": {"minutes": 0, "child": {"type": "threshold", "threshold": {"direction": "below", "value": 70}}}}]}""",
+            """{"schema_version": 2, "operator": "and", "conditions": [{"type": "sustained", "sustained": {"minutes": 0, "child": {"type": "threshold", "threshold": {"operator": "<", "value": 70}}}}]}""",
             autoResolveEnabled: true,
-            """{"type": "alert_state", "alert_state": {"alert_id": ""}}""",
-            """{"snooze": {"smartSnooze": true, "conditions": [{"type": "composite", "composite": {"operator": "and", "conditions": []}}]}}""");
+            """{"schema_version": 2, "type": "alert_state", "alert_state": {"alert_id": ""}}""",
+            """{"snooze": {"smartSnooze": true, "conditions": [{"schema_version": 2, "type": "composite", "composite": {"operator": "and", "conditions": []}}]}}""");
 
         issues.Should().Equal(
             new RustValidationIssue("condition", "composite[0].sustained", "minutes_not_positive", "minutes"),
@@ -371,18 +371,18 @@ public class AlertRulesControllerConditionValidationTests
 
         var issues = validator.Validate(
             AlertConditionType.Threshold,
-            """{"direction": "below", "value": 70}""",
+            """{"schema_version": 2, "operator": "<", "value": 70}""",
             autoResolveEnabled: false,
-            """{"type": "not", "not": {}}""",
+            """{"schema_version": 2, "type": "not", "not": {}}""",
             """{"snooze": {"smartSnooze": false, "conditions": [{"type": "warp_drive"}]}}""");
 
         issues.Should().BeEmpty();
     }
 
     [NativeTheory]
-    [InlineData("StateSpanActive", """{"category": "PumpMode", "is_active": true}""", "state_span_active")]
+    [InlineData("StateSpanActive", """{"schema_version": 2, "category": "PumpMode", "is_active": true}""", "state_span_active")]
     [InlineData("Sustained",
-        """{"minutes": 10, "child": {"type": "not", "not": {"child": {"type": "state_span_active", "state_span_active": {"category": "PumpMode", "is_active": false}}}}}""",
+        """{"schema_version": 2, "minutes": 10, "child": {"type": "not", "not": {"child": {"type": "state_span_active", "state_span_active": {"category": "PumpMode", "is_active": false}}}}}""",
         "sustained[0].not[0].state_span_active")]
     public async Task CreateRule_rejects_a_generic_state_span_on_the_pump_mode_category(
         string type, string conditionParams, string path)
@@ -407,17 +407,17 @@ public class AlertRulesControllerConditionValidationTests
     }
 
     [NativeTheory]
-    [InlineData("Threshold", """{"direction": "below", "value": 70, "clear_margin": -5}""", "threshold", "margin_negative:clear_margin")]
-    [InlineData("Iob", """{"operator": "==", "value": 2, "clear_margin": 1}""", "iob", "margin_on_equality:clear_margin")]
-    [InlineData("Cob", """{"operator": ">", "value": 2, "clear_margin": "1"}""", "cob", "invalid_field:clear_margin")]
-    [InlineData("SiteAge", """{"operator": ">=", "value": 72, "clear_margin": 5}""", "site_age", "unknown_field")]
+    [InlineData("Threshold", """{"schema_version": 2, "operator": "<", "value": 70, "clear_margin": -5}""", "threshold", "margin_negative:clear_margin")]
+    [InlineData("Iob", """{"schema_version": 2, "operator": "==", "value": 2, "clear_margin": 1}""", "iob", "margin_on_equality:clear_margin")]
+    [InlineData("Cob", """{"schema_version": 2, "operator": ">", "value": 2, "clear_margin": "1"}""", "cob", "invalid_field:clear_margin")]
+    [InlineData("SiteAge", """{"schema_version": 2, "operator": ">=", "minutes": 4320, "clear_margin": 5}""", "site_age", "unknown_field")]
     [InlineData("Not",
-        """{"child": {"type": "reservoir", "reservoir": {"operator": "<", "value": 20, "clear_margin": -1}}}""",
+        """{"schema_version": 2, "child": {"type": "reservoir", "reservoir": {"operator": "<", "value": 20, "clear_margin": -1}}}""",
         "not[0].reservoir", "margin_negative:clear_margin")]
     [InlineData("Sustained",
-        """{"minutes": 15, "child": {"type": "composite", "composite": {"operator": "and", "conditions": [{"type": "iob", "iob": {"operator": ">", "value": 1}}, {"type": "threshold", "threshold": {"direction": "below", "value": 70, "clear_margin": 5}}]}}}""",
+        """{"schema_version": 2, "minutes": 15, "child": {"type": "composite", "composite": {"operator": "and", "conditions": [{"type": "iob", "iob": {"operator": ">", "value": 1}}, {"type": "threshold", "threshold": {"operator": "<", "value": 70, "clear_margin": 5}}]}}}""",
         "sustained[0].composite[1].threshold", "margin_under_sustained:clear_margin")]
-    [InlineData("RateOfChange", """{"direction": "falling", "rate": 1, "clear_margin": 1.5}""", "rate_of_change", "margin_past_zero:clear_margin")]
+    [InlineData("RateOfChange", """{"schema_version": 2, "operator": "<=", "value": -1, "clear_margin": 1.5}""", "rate_of_change", "margin_past_zero:clear_margin")]
     public async Task CreateRule_rejects_an_invalid_clear_margin(
         string type, string conditionParams, string path, string error)
     {
@@ -441,15 +441,15 @@ public class AlertRulesControllerConditionValidationTests
     }
 
     [NativeTheory]
-    [InlineData("Threshold", """{"direction": "below", "value": 70, "value_from": {"fact": "target_low"}}""", "threshold", "limit_conflict:value_from")]
-    [InlineData("Threshold", """{"direction": "below"}""", "threshold", "field_missing:value")]
-    [InlineData("Threshold", """{"direction": "above", "value_from": {"fact": "latest_glucose"}}""", "threshold", "self_reference:value_from")]
-    [InlineData("Predicted", """{"operator": "<", "within_minutes": 30, "value_from": {"fact": "latest_glucose", "offset": -1000.5}}""", "predicted", "offset_out_of_range:offset")]
-    [InlineData("EventualGlucose", """{"operator": "<", "value_from": {"fact": "target_low", "offset": "-10"}}""", "eventual_glucose", "invalid_field:offset")]
-    [InlineData("EventualGlucose", """{"operator": "<", "value_from": {"fact": "max_iob"}}""", "eventual_glucose", "unknown_value:fact")]
-    [InlineData("Iob", """{"operator": ">", "value": 2, "value_from": {"fact": "target_low"}}""", "iob", "unknown_field")]
+    [InlineData("Threshold", """{"schema_version": 2, "operator": "<", "value": 70, "value_from": {"fact": "target_low"}}""", "threshold", "limit_conflict:value_from")]
+    [InlineData("Threshold", """{"schema_version": 2, "operator": "<"}""", "threshold", "field_missing:value")]
+    [InlineData("Threshold", """{"schema_version": 2, "operator": ">", "value_from": {"fact": "latest_glucose"}}""", "threshold", "self_reference:value_from")]
+    [InlineData("Predicted", """{"schema_version": 2, "operator": "<", "within_minutes": 30, "value_from": {"fact": "latest_glucose", "offset": -1000.5}}""", "predicted", "offset_out_of_range:offset")]
+    [InlineData("EventualGlucose", """{"schema_version": 2, "operator": "<", "value_from": {"fact": "target_low", "offset": "-10"}}""", "eventual_glucose", "invalid_field:offset")]
+    [InlineData("EventualGlucose", """{"schema_version": 2, "operator": "<", "value_from": {"fact": "max_iob"}}""", "eventual_glucose", "unknown_value:fact")]
+    [InlineData("Iob", """{"schema_version": 2, "operator": ">", "value": 2, "value_from": {"fact": "target_low"}}""", "iob", "unknown_field")]
     [InlineData("Sustained",
-        """{"minutes": 15, "child": {"type": "threshold", "threshold": {"direction": "below", "value_from": {"fact": "target_low"}, "clear_margin": 5}}}""",
+        """{"schema_version": 2, "minutes": 15, "child": {"type": "threshold", "threshold": {"operator": "<", "value_from": {"fact": "target_low"}, "clear_margin": 5}}}""",
         "sustained[0].threshold", "margin_under_sustained:clear_margin")]
     public async Task CreateRule_rejects_an_invalid_limit_from_a_fact(
         string type, string conditionParams, string path, string error)
@@ -474,11 +474,11 @@ public class AlertRulesControllerConditionValidationTests
     }
 
     [NativeTheory]
-    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "curve": "iob", "min_of": ["cob"]}""", "selector_conflict:min_of")]
-    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "min_of": ["iob"], "max_of": ["cob"]}""", "selector_conflict:max_of")]
-    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "min_of": []}""", "list_empty:min_of")]
-    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "curve": "ar2"}""", "unknown_value:curve")]
-    [InlineData("""{"operator": "<", "value": 70, "within_minutes": 30, "max_of": ["iob", "Cob"]}""", "unknown_value:max_of")]
+    [InlineData("""{"schema_version": 2, "operator": "<", "value": 70, "within_minutes": 30, "curve": "iob", "min_of": ["cob"]}""", "selector_conflict:min_of")]
+    [InlineData("""{"schema_version": 2, "operator": "<", "value": 70, "within_minutes": 30, "min_of": ["iob"], "max_of": ["cob"]}""", "selector_conflict:max_of")]
+    [InlineData("""{"schema_version": 2, "operator": "<", "value": 70, "within_minutes": 30, "min_of": []}""", "list_empty:min_of")]
+    [InlineData("""{"schema_version": 2, "operator": "<", "value": 70, "within_minutes": 30, "curve": "ar2"}""", "unknown_value:curve")]
+    [InlineData("""{"schema_version": 2, "operator": "<", "value": 70, "within_minutes": 30, "max_of": ["iob", "Cob"]}""", "unknown_value:max_of")]
     public async Task CreateRule_rejects_an_invalid_curve_selection(string conditionParams, string error)
     {
         var (controller, db) = CreateController(
@@ -501,9 +501,9 @@ public class AlertRulesControllerConditionValidationTests
     }
 
     [NativeTheory]
-    [InlineData("Predicted", """{"operator": "<", "value": 70, "within_minutes": 30, "min_of": ["iob", "cob", "uam", "zt"]}""")]
-    [InlineData("EventualGlucose", """{"operator": "<", "value": 80, "clear_margin": 5}""")]
-    [InlineData("CarbsRequired", """{"operator": ">=", "value": 10}""")]
+    [InlineData("Predicted", """{"schema_version": 2, "operator": "<", "value": 70, "within_minutes": 30, "min_of": ["iob", "cob", "uam", "zt"]}""")]
+    [InlineData("EventualGlucose", """{"schema_version": 2, "operator": "<", "value": 80, "clear_margin": 5}""")]
+    [InlineData("CarbsRequired", """{"schema_version": 2, "operator": ">=", "value": 10}""")]
     public async Task CreateRule_saves_a_curve_selection_and_the_loop_conditions(string type, string conditionParams)
     {
         var (controller, db) = CreateController(
@@ -521,10 +521,10 @@ public class AlertRulesControllerConditionValidationTests
     }
 
     [NativeTheory]
-    [InlineData("GlucoseChange", """{"operator": "<=", "value": -30, "window_minutes": 15, "clear_margin": 10}""")]
-    [InlineData("GlucoseExtreme", """{"of": "max", "operator": ">", "value": 250, "window_minutes": 180}""")]
-    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 3}}""")]
-    [InlineData("GlucoseCount", """{"reading": {"operator": ">", "value": 180}, "window_minutes": 5, "percent": {"operator": ">=", "value": 50.5}}""")]
+    [InlineData("GlucoseChange", """{"schema_version": 2, "operator": "<=", "value": -30, "window_minutes": 15, "clear_margin": 10}""")]
+    [InlineData("GlucoseExtreme", """{"schema_version": 2, "of": "max", "operator": ">", "value": 250, "window_minutes": 180}""")]
+    [InlineData("GlucoseCount", """{"schema_version": 2, "reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 3}}""")]
+    [InlineData("GlucoseCount", """{"schema_version": 2, "reading": {"operator": ">", "value": 180}, "window_minutes": 5, "percent": {"operator": ">=", "value": 50.5}}""")]
     public async Task CreateRule_saves_the_windowed_conditions(string type, string conditionParams)
     {
         var (controller, db) = CreateController(
@@ -542,16 +542,16 @@ public class AlertRulesControllerConditionValidationTests
     }
 
     [NativeTheory]
-    [InlineData("GlucoseChange", """{"operator": "<=", "value": -30, "window_minutes": 4}""", "glucose_change", "window_out_of_range:window_minutes")]
-    [InlineData("GlucoseExtreme", """{"of": "min", "operator": "<", "value": 70, "window_minutes": 181}""", "glucose_extreme", "window_out_of_range:window_minutes")]
-    [InlineData("GlucoseChange", """{"operator": "<=", "value": -30, "window_minutes": 15, "clear_margin": 31}""", "glucose_change", "margin_past_zero:clear_margin")]
-    [InlineData("GlucoseExtreme", """{"of": "median", "operator": "<", "value": 70, "window_minutes": 60}""", "glucose_extreme", "unknown_value:of")]
-    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 3}, "percent": {"operator": ">=", "value": 10}}""", "glucose_count", "selector_conflict:percent")]
-    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60}""", "glucose_count", "field_missing:count")]
-    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 2.5}}""", "glucose_count", "invalid_field:count")]
-    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60, "percent": {"operator": ">=", "value": 101}}""", "glucose_count", "invalid_field:percent")]
-    [InlineData("GlucoseCount", """{"window_minutes": 60, "count": {"operator": ">=", "value": 3}}""", "glucose_count", "field_missing:reading")]
-    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 3}, "clear_margin": 1}""", "glucose_count", "unknown_field")]
+    [InlineData("GlucoseChange", """{"schema_version": 2, "operator": "<=", "value": -30, "window_minutes": 4}""", "glucose_change", "window_out_of_range:window_minutes")]
+    [InlineData("GlucoseExtreme", """{"schema_version": 2, "of": "min", "operator": "<", "value": 70, "window_minutes": 181}""", "glucose_extreme", "window_out_of_range:window_minutes")]
+    [InlineData("GlucoseChange", """{"schema_version": 2, "operator": "<=", "value": -30, "window_minutes": 15, "clear_margin": 31}""", "glucose_change", "margin_past_zero:clear_margin")]
+    [InlineData("GlucoseExtreme", """{"schema_version": 2, "of": "median", "operator": "<", "value": 70, "window_minutes": 60}""", "glucose_extreme", "unknown_value:of")]
+    [InlineData("GlucoseCount", """{"schema_version": 2, "reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 3}, "percent": {"operator": ">=", "value": 10}}""", "glucose_count", "selector_conflict:percent")]
+    [InlineData("GlucoseCount", """{"schema_version": 2, "reading": {"operator": "<", "value": 70}, "window_minutes": 60}""", "glucose_count", "field_missing:count")]
+    [InlineData("GlucoseCount", """{"schema_version": 2, "reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 2.5}}""", "glucose_count", "invalid_field:count")]
+    [InlineData("GlucoseCount", """{"schema_version": 2, "reading": {"operator": "<", "value": 70}, "window_minutes": 60, "percent": {"operator": ">=", "value": 101}}""", "glucose_count", "invalid_field:percent")]
+    [InlineData("GlucoseCount", """{"schema_version": 2, "window_minutes": 60, "count": {"operator": ">=", "value": 3}}""", "glucose_count", "field_missing:reading")]
+    [InlineData("GlucoseCount", """{"schema_version": 2, "reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 3}, "clear_margin": 1}""", "glucose_count", "unknown_field")]
     public async Task CreateRule_rejects_an_invalid_windowed_condition(
         string type, string conditionParams, string path, string error)
     {
@@ -584,7 +584,7 @@ public class AlertRulesControllerConditionValidationTests
         {
             Name = "Low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = Json("""{"direction": "below", "value": 70, "clear_margin": 5}"""),
+            ConditionParams = Json("""{"schema_version": 2, "operator": "<", "value": 70, "clear_margin": 5}"""),
         }, CancellationToken.None);
 
         result.Result.Should().NotBeOfType<BadRequestObjectResult>();

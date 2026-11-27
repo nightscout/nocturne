@@ -8,11 +8,13 @@
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": true,
       "auto_resolve_params": {
+        "schema_version": 2,
         "type": "composite",
         "composite": {
           "operator": "or",
@@ -20,7 +22,7 @@
             {
               "type": "threshold",
               "threshold": {
-                "direction": "above",
+                "operator": ">",
                 "value": 60
               }
             },

@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "signal_loss",
       "condition_params": {
+        "schema_version": 2,
         "timeout_minutes": 20
       },
       "auto_resolve_enabled": false
@@ -17,8 +18,9 @@
       "name": "rule-2",
       "condition_type": "staleness",
       "condition_params": {
+        "schema_version": 2,
         "operator": "==",
-        "value": 0
+        "minutes": 0
       },
       "auto_resolve_enabled": false
     },
@@ -27,6 +29,7 @@
       "name": "rule-3",
       "condition_type": "loop_stale",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "minutes": 10
       },
@@ -37,6 +40,7 @@
       "name": "rule-4",
       "condition_type": "loop_enaction_stale",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "minutes": 10
       },
@@ -47,8 +51,9 @@
       "name": "rule-5",
       "condition_type": "site_age",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
-        "value": 1
+        "minutes": 60
       },
       "auto_resolve_enabled": false
     },
@@ -57,8 +62,9 @@
       "name": "rule-6",
       "condition_type": "sensor_age",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
-        "value": 1
+        "minutes": 1440
       },
       "auto_resolve_enabled": false
     },
@@ -67,6 +73,7 @@
       "name": "rule-7",
       "condition_type": "time_since_last_carb",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "minutes": 30
       },
@@ -77,6 +84,7 @@
       "name": "rule-8",
       "condition_type": "time_since_last_bolus",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "minutes": 30
       },
@@ -87,6 +95,7 @@
       "name": "rule-9",
       "condition_type": "alert_state",
       "condition_params": {
+        "schema_version": 2,
         "alert_id": "00000000-0000-0000-0000-000000000900",
         "state": "firing",
         "for_minutes": 0
@@ -98,6 +107,7 @@
       "name": "rule-10",
       "condition_type": "pump_suspended",
       "condition_params": {
+        "schema_version": 2,
         "is_active": true,
         "for_minutes": 0
       },
@@ -108,6 +118,7 @@
       "name": "rule-11",
       "condition_type": "override_active",
       "condition_params": {
+        "schema_version": 2,
         "is_active": true,
         "for_minutes": 0
       },
@@ -118,6 +129,7 @@
       "name": "rule-12",
       "condition_type": "do_not_disturb",
       "condition_params": {
+        "schema_version": 2,
         "is_active": true,
         "for_minutes": 0
       },
@@ -128,6 +140,7 @@
       "name": "rule-13",
       "condition_type": "pump_state",
       "condition_params": {
+        "schema_version": 2,
         "mode": "Automatic",
         "is_active": true,
         "for_minutes": 0
@@ -139,6 +152,7 @@
       "name": "rule-14",
       "condition_type": "state_span_active",
       "condition_params": {
+        "schema_version": 2,
         "category": "Illness",
         "is_active": true,
         "for_minutes": 0

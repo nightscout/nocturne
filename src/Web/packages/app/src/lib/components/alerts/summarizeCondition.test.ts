@@ -91,7 +91,7 @@ describe("summarizeCondition", () => {
 		expect(
 			summarizeCondition({
 				type: "threshold",
-				threshold: { direction: "below", value_from: { fact: AlertLimitFact.TargetLow, offset: -10 } },
+				threshold: { operator: "<", value_from: { fact: AlertLimitFact.TargetLow, offset: -10 } },
 			}),
 		).toBe("Glucose below target low minus 10 mg/dL");
 		expect(
@@ -109,7 +109,7 @@ describe("summarizeCondition", () => {
 		expect(
 			summarizeCondition({
 				type: "threshold",
-				threshold: { direction: "above", value_from: { fact: AlertLimitFact.TargetHigh }, clear_margin: 5 },
+				threshold: { operator: ">", value_from: { fact: AlertLimitFact.TargetHigh }, clear_margin: 5 },
 			}),
 		).toBe("Glucose above target high, clear margin 5 mg/dL");
 	});
@@ -119,7 +119,7 @@ describe("summarizeCondition", () => {
 		expect(
 			summarizeCondition({
 				type: "threshold",
-				threshold: { direction: "below", value_from: { fact: AlertLimitFact.TargetLow, offset: -18 } },
+				threshold: { operator: "<", value_from: { fact: AlertLimitFact.TargetLow, offset: -18 } },
 			}),
 		).toBe("Glucose below target low minus 1 mmol/L");
 		glucoseUnits.current = "mg/dl";
@@ -138,7 +138,7 @@ describe("summarizeCondition", () => {
 		glucoseUnits.current = "mg/dl";
 		const low = (clear_margin?: number): ConditionNode => ({
 			type: "threshold",
-			threshold: { direction: "below", value: 70, clear_margin },
+			threshold: { operator: "<", value: 70, clear_margin },
 		});
 		expect(summarizeCondition(low(5))).toBe("Glucose below 70 mg/dL, clear margin 5 mg/dL");
 		expect(summarizeCondition(low(0))).toBe("Glucose below 70 mg/dL");
@@ -153,7 +153,7 @@ describe("summarizeCondition", () => {
 		expect(
 			summarizeCondition({
 				type: "rate_of_change",
-				rate_of_change: { direction: "falling", rate: 2, clear_margin: 0.4 },
+				rate_of_change: { operator: "<=", value: -2, clear_margin: 0.4 },
 			}),
 		).toBe("Glucose falling at least 2 mg/dL per minute, clear margin 0.4 mg/dL per minute");
 	});
@@ -163,7 +163,7 @@ describe("summarizeCondition", () => {
 		expect(
 			summarizeCondition({
 				type: "rate_of_change",
-				rate_of_change: { direction: "falling", rate: 1.5 },
+				rate_of_change: { operator: "<=", value: -1.5 },
 			}),
 		).toBe("Glucose falling at least 1.5 mg/dL per minute");
 	});
@@ -174,7 +174,7 @@ describe("summarizeCondition", () => {
 			expect(
 				summarizeCondition({
 					type: "rate_of_change",
-					rate_of_change: { direction: "falling", rate: 1.5, clear_margin: 0.5 },
+					rate_of_change: { operator: "<=", value: -1.5, clear_margin: 0.5 },
 				}),
 			).toBe("Glucose falling at least 0.08 mmol/L per minute, clear margin 0.03 mmol/L per minute");
 		} finally {
@@ -187,7 +187,7 @@ describe("summarizeCondition", () => {
 		try {
 			const summary = summarizeCondition({
 				type: "threshold",
-				threshold: { direction: "below", value: 72, clear_margin: 18 },
+				threshold: { operator: "<", value: 72, clear_margin: 18 },
 			});
 			expect(summary).toBe("Glucose below 4 mmol/L, clear margin 1 mmol/L");
 		} finally {
@@ -246,13 +246,17 @@ describe("summarizeCondition", () => {
 		expect(summarizeCondition(node)).toBe("Pump boosting for 90 minutes");
 	});
 
-	it("renders rate of change by direction", () => {
-		const chip = (direction: string): ConditionNode => ({
+	it("renders a rate of change by its operator and signed value", () => {
+		const chip = (operator: string, value: number): ConditionNode => ({
 			type: "rate_of_change",
-			rate_of_change: { direction, rate: 3 },
+			rate_of_change: { operator, value },
 		});
-		expect(summarizeCondition(chip("falling"))).toBe("Glucose falling at least 3 mg/dL per minute");
-		expect(summarizeCondition(chip("rising"))).toBe("Glucose rising at least 3 mg/dL per minute");
+		expect(summarizeCondition(chip("<=", -3))).toBe("Glucose falling at least 3 mg/dL per minute");
+		expect(summarizeCondition(chip("<", -3))).toBe("Glucose falling more than 3 mg/dL per minute");
+		expect(summarizeCondition(chip(">=", 3))).toBe("Glucose rising at least 3 mg/dL per minute");
+		expect(summarizeCondition(chip(">", 3))).toBe("Glucose rising more than 3 mg/dL per minute");
+		expect(summarizeCondition(chip(">=", -1))).toBe("Rate of change ≥ -1 mg/dL per minute");
+		expect(summarizeCondition(chip("<", 0.5))).toBe("Rate of change < 0.5 mg/dL per minute");
 	});
 
 	it("joins composite OR with the word or", () => {
@@ -278,9 +282,20 @@ describe("summarizeCondition", () => {
 	it("renders a threshold above", () => {
 		const node: ConditionNode = {
 			type: "threshold",
-			threshold: { direction: "above", value: 200 },
+			threshold: { operator: ">", value: 200 },
 		};
 		expect(summarizeCondition(node)).toBe("Glucose above 200 mg/dL");
+	});
+
+	it("renders a threshold with an inclusive operator by its symbol", () => {
+		const node: ConditionNode = {
+			type: "threshold",
+			threshold: { operator: "<=", value: 70 },
+		};
+		expect(summarizeCondition(node)).toBe("Glucose ≤ 70 mg/dL");
+		expect(summarizeCondition({ type: "threshold", threshold: { operator: ">=", value: 250 } })).toBe(
+			"Glucose ≥ 250 mg/dL",
+		);
 	});
 
 	it("uses mmol/L when configured", () => {
@@ -330,12 +345,22 @@ describe("summarizeCondition", () => {
 		expect(summarizeCondition(node)).toBe("Glucose below 70 mg/dL for 2 hours");
 	});
 
-	it("renders day-aligned site age in days", () => {
-		const node: ConditionNode = {
-			type: "site_age",
-			site_age: { operator: ">=", value: 72 },
-		};
-		expect(summarizeCondition(node)).toBe("Site age ≥ 3 days");
+	it("renders an age or a data age in the largest unit that holds its minutes exactly", () => {
+		expect(summarizeCondition({ type: "site_age", site_age: { operator: ">=", minutes: 4320 } })).toBe(
+			"Site age ≥ 3 days",
+		);
+		expect(summarizeCondition({ type: "site_age", site_age: { operator: ">=", minutes: 4380 } })).toBe(
+			"Site age ≥ 73 hours",
+		);
+		expect(summarizeCondition({ type: "sensor_age", sensor_age: { operator: ">", minutes: 14400 } })).toBe(
+			"Sensor age > 10 days",
+		);
+		expect(summarizeCondition({ type: "sensor_age", sensor_age: { operator: ">", minutes: 14430 } })).toBe(
+			"Sensor age > 14,430 minutes",
+		);
+		expect(summarizeCondition({ type: "staleness", staleness: { operator: ">=", minutes: 15 } })).toBe(
+			"Sensor data age ≥ 15 minutes",
+		);
 	});
 
 	it("joins composite AND with the word and", () => {

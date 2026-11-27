@@ -19,7 +19,7 @@ use uuid::Uuid;
 use nocturne_alerts_core::context::SensorContext;
 use nocturne_alerts_core::engine::{OnUnknown, Rule};
 use nocturne_alerts_core::eval::DEFAULT_GLUCOSE_FRESHNESS;
-use nocturne_alerts_core::model::ConditionKind;
+use nocturne_alerts_core::model::{CURRENT_SCHEMA, ConditionKind, SCHEMA_VERSION};
 use nocturne_alerts_core::next_change::RESOLUTION;
 use nocturne_alerts_core::replay::{
     ReplayError, ReplayEventKind, ReplayOptions, ReplayRuleState, ReplayTick, replay,
@@ -34,11 +34,17 @@ fn id(n: u128) -> Uuid {
     Uuid::from_u128(n)
 }
 
+/// `doc` as a stored tree's root, naming schema 2 (engine-semantics.md §1.2).
+fn rooted(mut doc: Value) -> Value {
+    doc[SCHEMA_VERSION] = json!(CURRENT_SCHEMA);
+    doc
+}
+
 fn rule(n: u128, kind: ConditionKind, params: Value) -> Rule {
     Rule {
         id: id(n),
         condition_type: kind,
-        condition_params: params,
+        condition_params: rooted(params),
         auto_resolve_enabled: false,
         auto_resolve_params: None,
         on_unknown: OnUnknown::Hold,
@@ -48,7 +54,7 @@ fn rule(n: u128, kind: ConditionKind, params: Value) -> Rule {
 }
 
 fn below(value: i32) -> Value {
-    json!({ "direction": "below", "value": value })
+    json!({ "operator": "<", "value": value })
 }
 
 fn firing_of(parent: u128) -> Value {
@@ -270,7 +276,9 @@ fn a_sample_evaluates_a_rule_that_reads_another_fact() {
 fn an_auto_resolve_true_on_the_opening_tick_fires_and_resolves_it_once_until_rearmed() {
     let mut r = rule(1, ConditionKind::Threshold, below(70));
     r.auto_resolve_enabled = true;
-    r.auto_resolve_params = Some(json!({ "type": "threshold", "threshold": below(100) }));
+    r.auto_resolve_params = Some(rooted(
+        json!({ "type": "threshold", "threshold": below(100) }),
+    ));
     let ticks = [
         reading(0, 60),
         reading(5, 60),  // still met: awaits re-arm
@@ -302,11 +310,11 @@ fn an_auto_resolve_true_on_the_opening_tick_fires_and_resolves_it_once_until_rea
 fn an_auto_resolved_rule_fires_again_when_its_resolve_tree_goes_false_while_its_body_holds() {
     let mut r = rule(1, ConditionKind::Threshold, below(70));
     r.auto_resolve_enabled = true;
-    r.auto_resolve_params = Some(json!({
+    r.auto_resolve_params = Some(rooted(json!({
         "type": "sustained",
         "sustained": { "minutes": 10, "child": {
-            "type": "threshold", "threshold": { "direction": "above", "value": 60 } } },
-    }));
+            "type": "threshold", "threshold": { "operator": ">", "value": 60 } } },
+    })));
     let ticks = [
         reading(0, 65),
         reading(5, 65),
@@ -330,11 +338,11 @@ fn an_auto_resolved_rule_fires_again_when_its_resolve_tree_goes_false_while_its_
 fn an_auto_resolve_that_keeps_holding_keeps_its_timer_and_never_fires_again() {
     let mut r = rule(1, ConditionKind::Threshold, below(70));
     r.auto_resolve_enabled = true;
-    r.auto_resolve_params = Some(json!({
+    r.auto_resolve_params = Some(rooted(json!({
         "type": "sustained",
         "sustained": { "minutes": 10, "child": {
-            "type": "threshold", "threshold": { "direction": "above", "value": 60 } } },
-    }));
+            "type": "threshold", "threshold": { "operator": ">", "value": 60 } } },
+    })));
     let ticks = (0..=24).map(|n| reading(n * 5, 65));
     let out = replay(&[r], ticks, with_ticks()).unwrap();
 
@@ -349,16 +357,21 @@ fn an_auto_resolve_that_keeps_holding_keeps_its_timer_and_never_fires_again() {
 
 #[test]
 fn an_unevaluable_body_is_skipped_on_every_tick() {
-    let rules = [rule(
+    let missing_operator = rule(
         1,
         ConditionKind::Threshold,
-        json!({ "direction": null, "value": 70 }),
-    )];
-    let out = replay(&rules, [reading(0, 60)], with_ticks()).unwrap();
+        json!({ "operator": null, "value": 70 }),
+    );
+    let mut unnamed = rule(1, ConditionKind::Threshold, below(70));
+    unnamed.condition_params = below(70);
+    for r in [missing_operator, unnamed] {
+        let out = replay(&[r], [reading(0, 60), reading(5, 60)], with_ticks()).unwrap();
 
-    assert!(out.events.is_empty());
-    assert!(out.leaf_transitions.is_empty());
-    assert_eq!(out.ticks.unwrap()[0].rules[0].state, None);
+        assert!(out.events.is_empty());
+        assert!(out.leaf_transitions.is_empty());
+        let ticks = out.ticks.unwrap();
+        assert!(ticks.iter().all(|t| t.rules[0].state.is_none()));
+    }
 }
 
 #[test]

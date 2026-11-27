@@ -31,7 +31,7 @@ public class AlertRulesControllerDisableTests
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid RuleId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
-    private const string Body = """{"direction":"below","value":70}""";
+    private const string Body = """{"schema_version":2,"operator":"<","value":70}""";
 
     private static async Task<(
         AlertRulesController Controller,

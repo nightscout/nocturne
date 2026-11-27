@@ -14,7 +14,7 @@ const stored = {
   isEnabled: true,
   severity: "warning",
   conditionType: "threshold",
-  conditionParams: { direction: "below", value: 70 },
+  conditionParams: { operator: "<", value: 70 },
   channels: [],
   onUnknown: "not_met",
   glucoseFreshnessMinutes: 20,

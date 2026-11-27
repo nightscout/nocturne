@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "time_since_last_bolus",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">",
         "minutes": 120
       },

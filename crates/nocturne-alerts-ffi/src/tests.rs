@@ -50,6 +50,17 @@ pub(crate) fn evaluate(request: &Value) -> Value {
     call_json(nocturne_alerts_evaluate, &request.to_string())
 }
 
+/// `tree` as a stored root, a rule body or a full node, naming schema 2.
+pub(crate) fn rooted(tree: Value) -> Value {
+    let Value::Object(fields) = tree else {
+        return tree;
+    };
+    let mut root = Map::new();
+    root.insert("schema_version".to_owned(), json!(2));
+    root.extend(fields);
+    Value::Object(root)
+}
+
 // ---------------------------------------------------------------------------
 // Version + free
 // ---------------------------------------------------------------------------
@@ -72,8 +83,8 @@ fn the_leaf_log_is_produced_only_when_asked_for() {
         "rule": {
             "id": "00000000-0000-0000-0000-000000000001",
             "condition_type": "composite",
-            "condition_params": { "operator": "and", "conditions": [
-                { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+            "condition_params": { "schema_version": 2, "operator": "and", "conditions": [
+                { "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
                 { "type": "sustained", "sustained": { "minutes": 5, "child":
                     { "type": "iob", "iob": { "operator": "<", "value": 1 } } } }
             ] }
@@ -106,7 +117,7 @@ fn signal_loss_with_no_reading_ever_measures_from_the_rule_enablement() {
             "rule": {
                 "id": "00000000-0000-0000-0000-000000000001",
                 "condition_type": "signal_loss",
-                "condition_params": { "timeout_minutes": 20 },
+                "condition_params": { "schema_version": 2, "timeout_minutes": 20 },
                 "enabled_at": enabled_at
             },
             "context": {},
@@ -157,7 +168,7 @@ fn evaluate_restarts_a_stored_hold_an_older_engine_wrote_over() {
         "rule": {
             "id": "00000000-0000-0000-0000-000000000001",
             "condition_type": "threshold",
-            "condition_params": { "direction": "below", "value": 70 }
+            "condition_params": { "schema_version": 2, "operator": "<", "value": 70 }
         },
         "context": {},
         "now": "2026-01-08T12:00:00Z",
@@ -186,7 +197,7 @@ fn evaluate_reports_the_next_change_and_omits_none() {
             "rule": {
                 "id": "00000000-0000-0000-0000-000000000001",
                 "condition_type": condition_type,
-                "condition_params": params
+                "condition_params": rooted(params)
             },
             "context": {
                 "latest_value": 120,
@@ -207,7 +218,7 @@ fn evaluate_reports_the_next_change_and_omits_none() {
 
     let reading_driven = evaluate(&request(
         "threshold",
-        json!({ "direction": "below", "value": 70 }),
+        json!({ "operator": "<", "value": 70 }),
     ));
     assert_eq!(reading_driven["ok"], json!(true), "{reading_driven}");
     assert_eq!(
@@ -457,8 +468,9 @@ fn state_threading_survives_serialisation() {
         "id": "00000000-0000-0000-0000-00000000abcd",
         "condition_type": "sustained",
         "condition_params": {
+            "schema_version": 2,
             "minutes": 10,
-            "child": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } }
+            "child": { "type": "threshold", "threshold": { "operator": "<", "value": 70 } }
         }
     });
     let context = json!({ "latest_value": 60, "latest_timestamp": "2026-01-05T12:00:00Z" });
@@ -502,7 +514,7 @@ fn hysteresis_request(now: &str, tracker: Value) -> Value {
         "rule": {
             "id": "00000000-0000-0000-0000-00000000abce",
             "condition_type": "threshold",
-            "condition_params": { "direction": "below", "value": 70 },
+            "condition_params": { "schema_version": 2, "operator": "<", "value": 70 },
         },
         "context": { "latest_value": 100, "latest_timestamp": now },
         "now": now,
@@ -574,11 +586,12 @@ fn evaluate_node_evaluates_a_tree_with_a_root_override() {
         "schema_version": 1,
         "rule_id": "00000000-0000-0000-0000-000000000001",
         "node": {
+            "schema_version": 2,
             "type": "composite",
             "composite": {
                 "operator": "and",
                 "conditions": [
-                    { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+                    { "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
                     { "type": "iob", "iob": { "operator": ">", "value": 1 } }
                 ]
             }
@@ -600,7 +613,7 @@ fn evaluate_node_reports_a_reading_dated_beyond_the_clock_tolerance() {
         json!({
             "schema_version": 1,
             "rule_id": "00000000-0000-0000-0000-000000000001",
-            "node": { "type": "signal_loss", "signal_loss": { "timeout_minutes": 20 } },
+            "node": { "schema_version": 2, "type": "signal_loss", "signal_loss": { "timeout_minutes": 20 } },
             "context": { "last_reading_at": reading },
             "now": "2026-01-05T12:00:00Z",
         })
@@ -624,7 +637,7 @@ fn evaluate_reports_a_reading_dated_ahead_and_holds_the_open_excursion() {
     let rule = json!({
         "id": "00000000-0000-0000-0000-000000000001",
         "condition_type": "signal_loss",
-        "condition_params": { "timeout_minutes": 20 },
+        "condition_params": { "schema_version": 2, "timeout_minutes": 20 },
     });
     let response = call_json(
         nocturne_alerts_evaluate,
@@ -658,10 +671,11 @@ fn evaluate_reports_a_reading_dated_ahead_and_holds_the_open_excursion() {
 fn evaluate_node_threads_sustained_timers_under_the_root_override() {
     let rule_id = "00000000-0000-0000-0000-000000000002";
     let node = json!({
+        "schema_version": 2,
         "type": "sustained",
         "sustained": {
             "minutes": 10,
-            "child": { "type": "threshold", "threshold": { "direction": "above", "value": 180 } }
+            "child": { "type": "threshold", "threshold": { "operator": ">", "value": 180 } }
         }
     });
     let context = json!({ "latest_value": 200, "latest_timestamp": "2026-01-05T12:00:00Z" });
@@ -707,10 +721,11 @@ fn evaluate_node_defaults_root_to_the_verbatim_type() {
         "schema_version": 1,
         "rule_id": "00000000-0000-0000-0000-000000000003",
         "node": {
+            "schema_version": 2,
             "type": "sustained",
             "sustained": {
                 "minutes": 5,
-                "child": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } }
+                "child": { "type": "threshold", "threshold": { "operator": "<", "value": 70 } }
             }
         },
         "context": { "latest_value": 60, "latest_timestamp": "2026-01-05T12:00:00Z" },
@@ -729,7 +744,7 @@ fn evaluate_node_rejects_an_unknown_kind() {
     let request = json!({
         "schema_version": 1,
         "rule_id": "00000000-0000-0000-0000-000000000004",
-        "node": { "type": "nope" },
+        "node": { "schema_version": 2, "type": "nope" },
         "root": "snooze",
         "context": {},
         "now": "2026-01-05T12:00:00Z",
@@ -839,7 +854,7 @@ fn evaluate_reads_a_rules_glucose_freshness_bound() {
             "rule": {
                 "id": "00000000-0000-0000-0000-000000000001",
                 "condition_type": "threshold",
-                "condition_params": { "direction": "above", "value": 180 },
+                "condition_params": { "schema_version": 2, "operator": ">", "value": 180 },
                 "glucose_freshness_minutes": minutes,
             },
             "context": {
@@ -871,7 +886,7 @@ fn evaluate_rejects_an_on_unknown_word_naming_no_choice() {
             "rule": {
                 "id": "00000000-0000-0000-0000-000000000001",
                 "condition_type": "threshold",
-                "condition_params": { "direction": "above", "value": 180 },
+                "condition_params": { "schema_version": 2, "operator": ">", "value": 180 },
                 "on_unknown": word,
             },
             "context": {},
@@ -889,7 +904,8 @@ fn evaluate_flags_an_unknown_root_and_leaf_beside_their_false_values() {
             "id": "00000000-0000-0000-0000-000000000001",
             "condition_type": "not",
             "condition_params": {
-                "child": { "type": "threshold", "threshold": { "direction": "above", "value": 180 } }
+                "schema_version": 2,
+                "child": { "type": "threshold", "threshold": { "operator": ">", "value": 180 } }
             },
         },
         "context": {},
@@ -914,7 +930,7 @@ fn evaluate_node_flags_an_unknown_value() {
             &json!({
                 "schema_version": 1,
                 "rule_id": "00000000-0000-0000-0000-000000000001",
-                "node": { "type": "threshold", "threshold": { "direction": "above", "value": 180 } },
+                "node": { "schema_version": 2, "type": "threshold", "threshold": { "operator": ">", "value": 180 } },
                 "context": context,
                 "now": "2026-01-05T12:00:00Z",
             })
@@ -950,7 +966,7 @@ fn evaluate_rejects_structurally_malformed_condition_params() {
         "rule": {
             "id": "00000000-0000-0000-0000-000000000001",
             "condition_type": "threshold",
-            "condition_params": { "direction": 5, "value": 70 }
+            "condition_params": { "schema_version": 2, "operator": 5, "value": 70 }
         },
         "context": {},
         "now": "2026-01-05T12:00:00Z",
@@ -968,7 +984,7 @@ fn evaluate_rejects_tracker_state_without_updated_at() {
         "rule": {
             "id": "00000000-0000-0000-0000-000000000001",
             "condition_type": "threshold",
-            "condition_params": { "direction": "below", "value": 70 }
+            "condition_params": { "schema_version": 2, "operator": "<", "value": 70 }
         },
         "context": {},
         "now": "2026-01-05T12:00:00Z",
@@ -983,7 +999,7 @@ fn threshold_request_at(now: &str) -> Value {
         "rule": {
             "id": "00000000-0000-0000-0000-000000000001",
             "condition_type": "threshold",
-            "condition_params": { "direction": "below", "value": 70 }
+            "condition_params": { "schema_version": 2, "operator": "<", "value": 70 }
         },
         "context": {},
         "now": now,
@@ -1024,7 +1040,7 @@ fn evaluate_node_rejects_now_outside_the_dotnet_range() {
     let request = json!({
         "schema_version": 1,
         "rule_id": "00000000-0000-0000-0000-000000000001",
-        "node": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+        "node": { "schema_version": 2, "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
         "context": {},
         "now": "0000-06-01T00:00:00Z",
     });
@@ -1048,6 +1064,7 @@ fn boundary_converts_panics_to_error_envelopes() {
 #[test]
 fn leaf_paths_enumerates_nodes_and_leaves() {
     let node = json!({
+        "schema_version": 2,
         "type": "composite",
         "composite": {
             "operator": "and",
@@ -1056,7 +1073,7 @@ fn leaf_paths_enumerates_nodes_and_leaves() {
                     "type": "sustained",
                     "sustained": {
                         "minutes": 10,
-                        "child": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } }
+                        "child": { "type": "threshold", "threshold": { "operator": "<", "value": 70 } }
                     }
                 },
                 { "type": "iob", "iob": { "operator": ">", "value": 1 } }
@@ -1089,10 +1106,11 @@ fn leaf_paths_honours_root_override() {
     let input = json!({
         "root": "auto_resolve",
         "node": {
+            "schema_version": 2,
             "type": "sustained",
             "sustained": {
                 "minutes": 5,
-                "child": { "type": "threshold", "threshold": { "direction": "above", "value": 180 } }
+                "child": { "type": "threshold", "threshold": { "operator": ">", "value": 180 } }
             }
         }
     });
@@ -1111,7 +1129,7 @@ fn leaf_paths_honours_root_override() {
 
 #[test]
 fn leaf_paths_rejects_a_node_that_cannot_be_evaluated() {
-    let node = json!({ "type": "sustained", "sustained": { "minutes": 10 } });
+    let node = json!({ "schema_version": 2, "type": "sustained", "sustained": { "minutes": 10 } });
     assert_error(
         &call_json(nocturne_alerts_leaf_paths, &node.to_string()),
         "malformed condition node: field_missing at 'sustained' (field 'child')",
@@ -1130,7 +1148,10 @@ fn leaf_paths_rejects_non_object() {
 fn leaf_paths_rejects_malformed_node() {
     // `type` must be a string (or null/absent).
     assert_error(
-        &call_json(nocturne_alerts_leaf_paths, r#"{ "type": 5 }"#),
+        &call_json(
+            nocturne_alerts_leaf_paths,
+            r#"{ "schema_version": 2, "type": 5 }"#,
+        ),
         "malformed condition node",
     );
 }
@@ -1147,7 +1168,7 @@ fn classify_scope(condition_type: &str, condition_params: Value) -> String {
     let response = classify(&json!({
         "schema_version": 1,
         "condition_type": condition_type,
-        "condition_params": condition_params,
+        "condition_params": rooted(condition_params),
     }));
     assert_eq!(response["schema_version"], json!(1));
     assert_eq!(
@@ -1165,7 +1186,7 @@ fn classify_scope(condition_type: &str, condition_params: Value) -> String {
 #[test]
 fn classify_threshold_below_is_low() {
     assert_eq!(
-        classify_scope("threshold", json!({ "direction": "below", "value": 70 })),
+        classify_scope("threshold", json!({ "operator": "<", "value": 70 })),
         "low"
     );
 }
@@ -1173,7 +1194,7 @@ fn classify_threshold_below_is_low() {
 #[test]
 fn classify_threshold_above_is_high() {
     assert_eq!(
-        classify_scope("threshold", json!({ "direction": "above", "value": 250 })),
+        classify_scope("threshold", json!({ "operator": ">", "value": 250 })),
         "high"
     );
 }
@@ -1185,8 +1206,8 @@ fn classify_composite_mixed_directions_is_composite() {
     let params = json!({
         "operator": "or",
         "conditions": [
-            { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
-            { "type": "threshold", "threshold": { "direction": "above", "value": 250 } }
+            { "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
+            { "type": "threshold", "threshold": { "operator": ">", "value": 250 } }
         ]
     });
     assert_eq!(classify_scope("composite", params), "composite");
@@ -1223,7 +1244,7 @@ fn wall_clock(condition_type: &str, condition_params: Value) -> Value {
         &json!({
             "schema_version": 1,
             "condition_type": condition_type,
-            "condition_params": condition_params,
+            "condition_params": rooted(condition_params),
         })
         .to_string(),
     )
@@ -1234,15 +1255,15 @@ fn references_wall_clock_selects_nested_wall_clock_leaves() {
     let nested = json!({
         "operator": "and",
         "conditions": [
-            { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
-            { "type": "staleness", "staleness": { "operator": ">", "value": 20 } },
+            { "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
+            { "type": "staleness", "staleness": { "operator": ">", "minutes": 20 } },
         ]
     });
     let response = wall_clock("composite", nested);
     assert_eq!(response["ok"], json!(true));
     assert_eq!(response["references_wall_clock"], json!(true));
     assert_eq!(
-        wall_clock("threshold", json!({ "direction": "below", "value": 70 }))["references_wall_clock"],
+        wall_clock("threshold", json!({ "operator": "<", "value": 70 }))["references_wall_clock"],
         json!(false)
     );
     assert_eq!(
@@ -1272,7 +1293,7 @@ fn references_wall_clock_reads_on_unknown_for_a_freshness_leaf() {
         let mut request = json!({
             "schema_version": 1,
             "condition_type": "threshold",
-            "condition_params": { "direction": "above", "value": 180 },
+            "condition_params": { "schema_version": 2, "operator": ">", "value": 180 },
         });
         if let Some(word) = on_unknown {
             request["on_unknown"] = word.into();
@@ -1295,9 +1316,9 @@ fn references_wall_clock_walks_an_enabled_auto_resolve_tree() {
         json!({
             "schema_version": 1,
             "condition_type": "threshold",
-            "condition_params": { "direction": "above", "value": 180 },
+            "condition_params": { "schema_version": 2, "operator": ">", "value": 180 },
             "auto_resolve_enabled": enabled,
-            "auto_resolve_params": { "type": "staleness", "staleness": { "operator": ">", "value": 30 } },
+            "auto_resolve_params": { "schema_version": 2, "type": "staleness", "staleness": { "operator": ">", "minutes": 30 } },
         })
         .to_string()
     };
@@ -1311,9 +1332,9 @@ fn high_rule_resolving_on_cob() -> Value {
     json!({
         "schema_version": 1,
         "condition_type": "threshold",
-        "condition_params": { "direction": "above", "value": 180 },
+        "condition_params": { "schema_version": 2, "operator": ">", "value": 180 },
         "auto_resolve_enabled": true,
-        "auto_resolve_params": { "type": "cob", "cob": { "operator": "==", "value": 0 } },
+        "auto_resolve_params": { "schema_version": 2, "type": "cob", "cob": { "operator": "==", "value": 0 } },
     })
 }
 
@@ -1389,7 +1410,7 @@ fn classify_rejects_wrong_schema_version() {
     let request = json!({
         "schema_version": 2,
         "condition_type": "threshold",
-        "condition_params": { "direction": "below", "value": 70 },
+        "condition_params": { "schema_version": 2, "operator": "<", "value": 70 },
     });
     assert_error(&classify(&request), "unsupported schema_version 2");
 }
@@ -1407,7 +1428,7 @@ fn describe_rule(condition_type: &str, condition_params: Value) -> Value {
     let response = describe(&json!({
         "schema_version": 1,
         "condition_type": condition_type,
-        "condition_params": condition_params,
+        "condition_params": rooted(condition_params),
     }));
     assert_eq!(response["schema_version"], json!(1));
     assert_eq!(
@@ -1421,11 +1442,11 @@ fn describe_rule(condition_type: &str, condition_params: Value) -> Value {
 
 #[test]
 fn describe_threshold_leaf_carries_kind_and_operands() {
-    let tree = describe_rule("threshold", json!({ "direction": "below", "value": 70 }));
+    let tree = describe_rule("threshold", json!({ "operator": "<", "value": 70 }));
     assert_eq!(tree["leaf_id"], json!(0));
     assert_eq!(tree["type"], json!("threshold"));
     assert_eq!(tree["kind"], json!("threshold"));
-    assert_eq!(tree["params"]["direction"], json!("below"));
+    assert_eq!(tree["params"]["operator"], json!("<"));
     // arbitrary_precision keeps the operand exact (no float round trip).
     assert_eq!(tree["params"]["value"], json!(70));
 }
@@ -1447,7 +1468,7 @@ fn describe_composite_preserves_structure_and_sustained_minutes() {
     let params = json!({
         "operator": "and",
         "conditions": [
-            { "type": "threshold", "threshold": { "direction": "below", "value": 80 } },
+            { "type": "threshold", "threshold": { "operator": "<", "value": 80 } },
             {
                 "type": "sustained",
                 "sustained": {
@@ -1487,7 +1508,7 @@ fn describe_emits_paths_that_match_timer_keys() {
     let params = json!({
         "operator": "and",
         "conditions": [
-            { "type": "threshold", "threshold": { "direction": "below", "value": 80 } },
+            { "type": "threshold", "threshold": { "operator": "<", "value": 80 } },
             {
                 "type": "sustained",
                 "sustained": {
@@ -1518,7 +1539,7 @@ fn describe_leaf_ids_align_with_evaluate_force_eval_log() {
     let condition_params = json!({
         "operator": "and",
         "conditions": [
-            { "type": "threshold", "threshold": { "direction": "below", "value": 80 } },
+            { "type": "threshold", "threshold": { "operator": "<", "value": 80 } },
             {
                 "type": "sustained",
                 "sustained": {
@@ -1543,7 +1564,7 @@ fn describe_leaf_ids_align_with_evaluate_force_eval_log() {
         "rule": {
             "id": "00000000-0000-0000-0000-0000000000aa",
             "condition_type": "composite",
-            "condition_params": condition_params,
+            "condition_params": rooted(condition_params),
         },
         "context": {},
         "now": "2026-01-05T12:00:00Z",
@@ -1577,7 +1598,7 @@ fn describe_signal_loss_is_a_leaf_with_its_timeout() {
 
 #[test]
 fn describe_a_body_that_cannot_be_evaluated_is_null() {
-    let low = json!({ "type": "threshold", "threshold": { "direction": "below", "value": 70 } });
+    let low = json!({ "type": "threshold", "threshold": { "operator": "<", "value": 70 } });
     for (kind, params) in [
         (
             "composite",
@@ -1590,7 +1611,7 @@ fn describe_a_body_that_cannot_be_evaluated_is_null() {
             json!({ "operator": "and", "conditions": "nope" }),
         ),
         ("pump_state", json!({ "mode": 5, "is_active": true })),
-        ("threshold", json!({ "direction": "below", "value": "70" })),
+        ("threshold", json!({ "operator": "<", "value": "70" })),
     ] {
         assert_eq!(describe_rule(kind, params), Value::Null, "{kind}");
     }
@@ -1601,7 +1622,7 @@ fn describe_without_auto_resolve_params_has_no_auto_resolve_tree() {
     let response = describe(&json!({
         "schema_version": 1,
         "condition_type": "threshold",
-        "condition_params": { "direction": "below", "value": 70 },
+        "condition_params": { "schema_version": 2, "operator": "<", "value": 70 },
     }));
     assert!(response.get("auto_resolve_tree").is_none());
 }
@@ -1611,13 +1632,14 @@ fn describe_auto_resolve_tree_is_rooted_at_auto_resolve() {
     let response = describe(&json!({
         "schema_version": 1,
         "condition_type": "threshold",
-        "condition_params": { "direction": "below", "value": 70 },
+        "condition_params": { "schema_version": 2, "operator": "<", "value": 70 },
         "auto_resolve_params": {
+            "schema_version": 2,
             "type": "composite",
             "composite": {
                 "operator": "and",
                 "conditions": [
-                    { "type": "threshold", "threshold": { "direction": "above", "value": 90 } },
+                    { "type": "threshold", "threshold": { "operator": ">", "value": 90 } },
                     { "type": "iob", "iob": { "operator": "<", "value": 1 } }
                 ]
             }
@@ -1636,12 +1658,13 @@ fn describe_auto_resolve_tree_is_rooted_at_auto_resolve() {
 fn describe_null_or_unevaluable_auto_resolve_tree_is_null() {
     for params in [
         Value::Null,
-        json!({ "type": "threshold", "threshold": { "value": 90 } }),
+        json!({ "schema_version": 2, "type": "threshold", "threshold": { "value": 90 } }),
+        json!({ "type": "threshold", "threshold": { "operator": ">", "value": 90 } }),
     ] {
         let response = describe(&json!({
             "schema_version": 1,
             "condition_type": "threshold",
-            "condition_params": { "direction": "below", "value": 70 },
+            "condition_params": { "schema_version": 2, "operator": "<", "value": 70 },
             "auto_resolve_params": params,
         }));
         assert_eq!(response["ok"], json!(true));
@@ -1682,7 +1705,7 @@ fn describe_rejects_null_pointer() {
 fn describe_not_unwraps_to_its_child() {
     let tree = describe_rule(
         "not",
-        json!({ "child": { "type": "threshold", "threshold": { "direction": "above", "value": 250 } } }),
+        json!({ "child": { "type": "threshold", "threshold": { "operator": ">", "value": 250 } } }),
     );
     assert_eq!(tree["type"], json!("not"));
     assert!(
@@ -1698,12 +1721,12 @@ fn describe_leaf_keeps_its_operands() {
     let params = json!({
         "operator": "or",
         "conditions": [
-            { "type": "rate_of_change", "rate_of_change": { "direction": "falling", "rate": 2 } }
+            { "type": "rate_of_change", "rate_of_change": { "operator": "<=", "value": -2 } }
         ]
     });
     let leaf = describe_rule("composite", params)["conditions"][0].clone();
-    assert_eq!(leaf["params"]["direction"], json!("falling"));
-    assert_eq!(leaf["params"]["rate"], json!(2));
+    assert_eq!(leaf["params"]["operator"], json!("<="));
+    assert_eq!(leaf["params"]["value"], json!(-2));
 }
 
 #[test]
@@ -1711,7 +1734,7 @@ fn describe_nested_composite_preorder_ids_align_with_evaluate() {
     let condition_params = json!({
         "operator": "and",
         "conditions": [
-            { "type": "threshold", "threshold": { "direction": "below", "value": 80 } },
+            { "type": "threshold", "threshold": { "operator": "<", "value": 80 } },
             {
                 "type": "composite",
                 "composite": {
@@ -1738,7 +1761,7 @@ fn describe_nested_composite_preorder_ids_align_with_evaluate() {
         "rule": {
             "id": "00000000-0000-0000-0000-0000000000bb",
             "condition_type": "composite",
-            "condition_params": condition_params,
+            "condition_params": rooted(condition_params),
         },
         "context": {},
         "now": "2026-01-05T12:00:00Z",
@@ -1861,7 +1884,7 @@ mod uniffi_surface {
         let request = json!({
             "schema_version": 1,
             "condition_type": "signal_loss",
-            "condition_params": { "timeout_minutes": 15 }
+            "condition_params": { "schema_version": 2, "timeout_minutes": 15 }
         })
         .to_string();
         let classified: Value =
@@ -1878,7 +1901,7 @@ mod uniffi_surface {
         let mut request = json!({
             "schema_version": 1,
             "condition_type": "signal_loss",
-            "condition_params": { "timeout_minutes": 15 },
+            "condition_params": { "schema_version": 2, "timeout_minutes": 15 },
             "facts": ["glucose"]
         });
         let reads: Value = serde_json::from_str(&uniffi_api::rule_reads(&request.to_string()))
@@ -1916,7 +1939,7 @@ mod uniffi_surface {
             json!({
                 "schema_version": 1,
                 "rule_id": "00000000-0000-0000-0000-000000000001",
-                "node": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+                "node": { "schema_version": 2, "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
                 "root": "snooze",
                 "context": { "latest_value": 60, "latest_timestamp": "2026-01-05T12:00:00Z" },
                 "now": "2026-01-05T12:00:00Z",
@@ -1934,7 +1957,7 @@ mod uniffi_surface {
         let response: Value = serde_json::from_str(&uniffi_api::leaf_paths(
             json!({
                 "root": "auto_resolve",
-                "node": { "type": "threshold", "threshold": { "direction": "above", "value": 180 } }
+                "node": { "schema_version": 2, "type": "threshold", "threshold": { "operator": ">", "value": 180 } }
             })
             .to_string()
             .as_str(),
@@ -1953,7 +1976,7 @@ mod uniffi_surface {
             json!({
                 "schema_version": 1,
                 "condition_type": "threshold",
-                "condition_params": { "direction": "below", "value": 70 }
+                "condition_params": { "schema_version": 2, "operator": "<", "value": 70 }
             })
             .to_string()
             .as_str(),
@@ -1962,6 +1985,27 @@ mod uniffi_surface {
         assert_eq!(response["ok"], Value::Bool(true));
         assert_eq!(response["tree"]["leaf_id"], json!(0));
         assert_eq!(response["tree"]["kind"], json!("threshold"));
+    }
+
+    #[test]
+    fn migrate_shares_the_envelope_contract() {
+        let response: Value = serde_json::from_str(&uniffi_api::migrate(
+            json!({
+                "schema_version": 1,
+                "root": "snooze",
+                "tree": { "type": "staleness", "staleness": { "operator": ">=", "value": 20 } }
+            })
+            .to_string()
+            .as_str(),
+        ))
+        .expect("valid JSON");
+        assert_eq!(response["ok"], Value::Bool(true));
+        assert_eq!(response["outcome"], json!("migrated"));
+        assert_eq!(
+            response["tree"],
+            json!({ "schema_version": 2, "type": "staleness",
+                "staleness": { "operator": ">=", "minutes": 20 } })
+        );
     }
 
     #[test]
@@ -1989,6 +2033,7 @@ fn override_held_since_eleven(state: Value) -> Value {
             "id": "00000000-0000-0000-0000-00000000abcd",
             "condition_type": "sustained",
             "condition_params": {
+                "schema_version": 2,
                 "minutes": 30,
                 "child": { "type": "override_active", "override_active": { "is_active": true } }
             },
@@ -2012,6 +2057,7 @@ fn not_true_round_trips_and_bounds_a_start() {
             "id": "00000000-0000-0000-0000-00000000abcd",
             "condition_type": "sustained",
             "condition_params": {
+                "schema_version": 2,
                 "minutes": 30,
                 "child": { "type": "override_active", "override_active": { "is_active": true } }
             },

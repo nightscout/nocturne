@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
+        "schema_version": 2,
         "direction": "sideways",
         "value": 70
       },

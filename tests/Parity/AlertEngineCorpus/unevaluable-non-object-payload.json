@@ -17,6 +17,7 @@
       "name": "rule-2",
       "condition_type": "not",
       "condition_params": {
+        "schema_version": 2,
         "child": {
           "type": "threshold",
           "threshold": "below 70"

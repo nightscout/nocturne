@@ -28,9 +28,9 @@ public class StaleRuleDecisionSeamTests
         Id = RuleId,
         Name = "low",
         ConditionType = AlertConditionType.Threshold,
-        ConditionParams = """{"direction":"below","value":70}""",
+        ConditionParams = """{"schema_version":2,"operator":"<","value":70}""",
         AutoResolveEnabled = true,
-        AutoResolveParams = """{"type":"threshold","threshold":{"direction":"below","value":90}}""",
+        AutoResolveParams = """{"schema_version":2,"type":"threshold","threshold":{"operator":"<","value":90}}""",
     };
 
     private static AlertRuleSnapshot Snapshot(AlertRule rule) => new(
@@ -47,7 +47,7 @@ public class StaleRuleDecisionSeamTests
     };
 
     private static void EditAutoResolve(AlertRule rule) =>
-        rule.AutoResolveParams = """{"type":"threshold","threshold":{"direction":"below","value":50}}""";
+        rule.AutoResolveParams = """{"schema_version":2,"type":"threshold","threshold":{"operator":"<","value":50}}""";
 
     private sealed record Fixture(
         IAlertEvaluationEngine Engine, InMemoryTrackerRepository Store, Guid ExcursionId);
@@ -180,7 +180,7 @@ public class StaleRuleDecisionSeamTests
     public async Task A_decision_on_a_row_edited_after_the_snapshot_is_written()
     {
         var rule = Rule();
-        rule.AutoResolveParams = """{"type":"threshold","threshold":{"direction":"below","value":50}}""";
+        rule.AutoResolveParams = """{"schema_version":2,"type":"threshold","threshold":{"operator":"<","value":50}}""";
         var preEdit = Snapshot(rule);
         var fixture = await BuildAsync(rule, _ => { });
         rule.AutoResolveParams = Rule().AutoResolveParams;
@@ -215,7 +215,7 @@ public class StaleRuleDecisionSeamTests
         Id = RuleId,
         Name = "loss",
         ConditionType = AlertConditionType.SignalLoss,
-        ConditionParams = """{"timeout_minutes":15}""",
+        ConditionParams = """{"schema_version":2,"timeout_minutes":15}""",
     };
 
     /// <summary>A reading five minutes before the evaluation, so signal loss is ten minutes off.</summary>
@@ -230,7 +230,7 @@ public class StaleRuleDecisionSeamTests
     {
         var rule = SignalLoss();
         var preEdit = Snapshot(rule);
-        var fixture = await BuildAsync(rule, r => r.ConditionParams = """{"timeout_minutes":30}""");
+        var fixture = await BuildAsync(rule, r => r.ConditionParams = """{"schema_version":2,"timeout_minutes":30}""");
 
         await fixture.Engine.EvaluateRuleAsync(preEdit, RecentReading(), AlertEngineOptions.Default, CancellationToken.None);
 
@@ -272,7 +272,7 @@ public class StaleRuleDecisionSeamTests
     public async Task A_tree_with_a_repeated_key_opens()
     {
         var rule = Rule();
-        rule.ConditionParams = """{"direction":"below","value":50,"value":70}""";
+        rule.ConditionParams = """{"schema_version":2,"operator":"<","value":50,"value":70}""";
         rule.AutoResolveEnabled = false;
         var time = new ManualTimeProvider();
         time.SetUtcNow(T0);

@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
   "name": "iob-op-gt",
-  "description": "iob with operator \u0027\u003E\u0027 at value below/at/above the 5 threshold, then with the fact absent",
+  "description": "iob with operator '>' at value below/at/above the 5 threshold, then with the fact absent",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "iob",
       "condition_params": {
-        "operator": "\u003E",
+        "schema_version": 2,
+        "operator": ">",
         "value": 5
       },
       "auto_resolve_enabled": false

@@ -45,7 +45,7 @@ internal sealed record AlertPass(Guid TenantId, IReadOnlyList<AlertRuleSnapshot>
 /// </summary>
 internal sealed class AlertFactEvaluationStack : IDisposable
 {
-    public const string SiteAgeOver72Hours = """{"operator":">","value":72}""";
+    public const string SiteAgeOver72Hours = """{"schema_version":2,"operator":">","minutes":4320}""";
 
     private readonly AlertFactEvaluationDatabase _database;
     private readonly System.Threading.Channels.Channel<AlertPass> _passes =
@@ -121,7 +121,7 @@ internal sealed class AlertFactEvaluationStack : IDisposable
     public async Task<(TenantContext Tenant, Guid Rule)> SeedTenantAsync(
         string name,
         AlertConditionType condition = AlertConditionType.Threshold,
-        string conditionParams = """{"direction":"below","value":70}""")
+        string conditionParams = """{"schema_version":2,"operator":"<","value":70}""")
     {
         var tenant = new TenantContext(Guid.NewGuid(), $"{name}-{Guid.NewGuid():N}", name, true, false);
         await using (var conn = new NpgsqlConnection(_database.MigratorConnectionString))

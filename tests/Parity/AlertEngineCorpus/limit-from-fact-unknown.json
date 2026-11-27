@@ -8,10 +8,11 @@
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
+        "schema_version": 2,
         "value_from": {
           "fact": "target_low"
-        }
+        },
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     },
@@ -20,6 +21,7 @@
       "name": "rule-2",
       "condition_type": "predicted",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "within_minutes": 30,
         "value_from": {
@@ -34,6 +36,7 @@
       "name": "rule-3",
       "condition_type": "eventual_glucose",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">",
         "value_from": {
           "fact": "target_high"

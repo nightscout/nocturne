@@ -32,11 +32,11 @@ namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
 public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPostgresTests.Database database)
     : IClassFixture<AlertRulesControllerRearmPostgresTests.Database>
 {
-    private const string Body = """{"direction":"below","value":70}""";
-    private const string EditedBody = """{"direction":"below","value":60}""";
-    private const string Resolve = """{"type":"threshold","threshold":{"direction":"above","value":80}}""";
-    private const string Sustained = """{"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"direction":"above","value":90}}}}""";
-    private const string Rising = """{"type":"threshold","threshold":{"direction":"above","value":120}}""";
+    private const string Body = """{"schema_version":2,"operator":"<","value":70}""";
+    private const string EditedBody = """{"schema_version":2,"operator":"<","value":60}""";
+    private const string Resolve = """{"schema_version":2,"type":"threshold","threshold":{"operator":">","value":80}}""";
+    private const string Sustained = """{"schema_version":2,"type":"sustained","sustained":{"minutes":5,"child":{"type":"threshold","threshold":{"operator":">","value":90}}}}""";
+    private const string Rising = """{"schema_version":2,"type":"threshold","threshold":{"operator":">","value":120}}""";
 
     public sealed class Database() : MigratedDatabase("alert_rule_rearm");
 
@@ -177,7 +177,7 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
         var (controller, tenant, rule, _) = await CreateAsync();
         var request = EditedConditions();
         request.ConditionParams = JsonSerializer.Deserialize<JsonElement>(
-            """{"direction":"below","value":60,"Value":70}""");
+            """{"schema_version":2,"operator":"<","value":60,"Value":70}""");
 
         await controller.UpdateRule(rule, request, CancellationToken.None);
 
@@ -266,7 +266,7 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
     }
 
     private const string CompositeBody =
-        """{"operator":"and","conditions":[{"type":"threshold","threshold":{"direction":"below","value":70}}]}""";
+        """{"schema_version":2,"operator":"and","conditions":[{"type":"threshold","threshold":{"operator":"<","value":70}}]}""";
 
     /// <summary>
     /// The editor sends back the stand-ins the rule was shown with, so the save changes nothing it

@@ -34,19 +34,19 @@ public class NextChangeProbeTests
     }
 
     /// <summary>
-    /// The hostile review's counterexample: a sensor age due in year 10240, which .NET cannot
+    /// The hostile review's counterexample: a sensor age due after the year 9999, which .NET cannot
     /// hold, parses as no next change rather than failing the rule's evaluation.
     /// </summary>
     [NativeFact]
     public void A_change_past_the_host_calendar_parses_as_none()
     {
-        var now = new DateTime(2026, 6, 10, 12, 0, 0, DateTimeKind.Utc);
+        var now = new DateTime(9000, 6, 10, 12, 0, 0, DateTimeKind.Utc);
         var response = RustAlertEngine.Evaluate(
             new RustAlertRule
             {
                 Id = Guid.Empty,
                 ConditionType = "sensor_age",
-                ConditionParams = JsonSerializer.SerializeToElement(new { @operator = ">", value = 3_000_000 }),
+                ConditionParams = JsonSerializer.SerializeToElement(new { schema_version = 2, @operator = ">", minutes = int.MaxValue }),
             },
             JsonSerializer.SerializeToElement(new { last_sensor_start_at = now.AddDays(-1) }),
             now);

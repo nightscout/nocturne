@@ -9,7 +9,14 @@ import {
 import { bg, bgLabel, time } from "#lib/utils/formatting.js";
 import { plural } from "#lib/utils/plural.js";
 import { ratePerMinuteText, summarizeCondition } from "../summarizeCondition.svelte";
-import { browserTimeZone, ensureCompositeRoot, nodeFromApi, type ConditionNode } from "../types";
+import {
+	browserTimeZone,
+	defaultPayload,
+	ensureCompositeRoot,
+	nodeFromApi,
+	type ConditionNode,
+	type RateOfChangeCondition,
+} from "../types";
 
 /**
  * The alert types the wizard has a name and a description for. The API's presets say which of
@@ -191,12 +198,11 @@ export function templateTrackers(
 	);
 }
 
-/** The age, in hours, a type alerts at when it reads no tracker. */
-function fallbackAgeHours(template: TemplateDef): number {
+/** The age, in minutes, a type alerts at when it reads no tracker. */
+function fallbackAgeMinutes(template: TemplateDef): number {
+	if (template.trackerOnlyAgeHours !== undefined) return template.trackerOnlyAgeHours * 60;
 	const leaf = template.build();
-	return (
-		template.trackerOnlyAgeHours ?? leaf?.site_age?.value ?? (leaf?.sensor_age?.value ?? 0) * 24
-	);
+	return leaf?.site_age?.minutes ?? leaf?.sensor_age?.minutes ?? 0;
 }
 
 /** The types to offer: a type that reads only a tracker needs one to exist. */
@@ -216,7 +222,7 @@ export function trackerLeaf(template: TemplateDef, tracker: TrackerDefinitionDto
 		tracker_age: {
 			tracker_definition_id: tracker.id ?? "",
 			operator: ">=",
-			minutes: (tracker.lifespanHours || fallbackAgeHours(template)) * 60,
+			minutes: tracker.lifespanHours ? tracker.lifespanHours * 60 : fallbackAgeMinutes(template),
 		},
 	};
 }
@@ -235,7 +241,7 @@ export function newDraft(
 		hours: { enabled: false, from: "22:00", to: "07:00" },
 		custom:
 			id === "custom"
-				? ensureCompositeRoot(nodeFromApi("threshold", { direction: "below", value: 70 })!)
+				? ensureCompositeRoot(defaultPayload("threshold"))
 				: null,
 	};
 }
@@ -283,7 +289,7 @@ export function draftIssue(draft: AlertDraft): string | null {
 	if (glucose !== undefined && !(glucose >= MIN_GLUCOSE_MGDL && glucose <= MAX_GLUCOSE_MGDL)) {
 		return `Enter a glucose level between ${bg(MIN_GLUCOSE_MGDL)} and ${bg(MAX_GLUCOSE_MGDL)} ${bgLabel()}.`;
 	}
-	if (leaf.rate_of_change && !((leaf.rate_of_change.rate ?? 0) > 0)) {
+	if (leaf.rate_of_change && !(rateMagnitude(leaf.rate_of_change) > 0)) {
 		return "Enter a rate above 0.";
 	}
 	const minutes =
@@ -294,8 +300,8 @@ export function draftIssue(draft: AlertDraft): string | null {
 		leaf.reservoir?.value ??
 		leaf.pump_battery?.value ??
 		leaf.uploader_battery?.value ??
-		leaf.site_age?.value ??
-		leaf.sensor_age?.value;
+		leaf.site_age?.minutes ??
+		leaf.sensor_age?.minutes;
 	if (amount !== undefined && !(amount > 0)) return "Enter a number above 0.";
 
 	if (leaf.tracker_age) {
@@ -344,9 +350,9 @@ function baseName(draft: AlertDraft): string {
 		case "high":
 			return `High: above ${bg(leaf?.threshold?.value ?? 0)} ${bgLabel()}`;
 		case "falling_fast":
-			return `Falling fast: ${ratePerMinuteText(leaf?.rate_of_change?.rate ?? 0)}`;
+			return `Falling fast: ${ratePerMinuteText(rateMagnitude(leaf?.rate_of_change))}`;
 		case "rising_fast":
-			return `Rising fast: ${ratePerMinuteText(leaf?.rate_of_change?.rate ?? 0)}`;
+			return `Rising fast: ${ratePerMinuteText(rateMagnitude(leaf?.rate_of_change))}`;
 		case "no_readings":
 			return `No readings for ${minutesText(leaf?.signal_loss?.timeout_minutes ?? 0)}`;
 		case "urgent_low_soon":
@@ -374,12 +380,25 @@ const MINUTES_PER_DAY = 24 * 60;
 
 /** The age a site or sensor type alerts at, in days, to two decimal places. */
 export function ageDays(leaf: ConditionNode | null): number {
-	const days = leaf?.tracker_age
-		? (leaf.tracker_age.minutes ?? 0) / MINUTES_PER_DAY
-		: leaf?.site_age
-			? (leaf.site_age.value ?? 0) / 24
-			: (leaf?.sensor_age?.value ?? 0);
-	return Math.round(days * 100) / 100;
+	const minutes =
+		leaf?.tracker_age?.minutes ?? leaf?.site_age?.minutes ?? leaf?.sensor_age?.minutes ?? 0;
+	return Math.round((minutes / MINUTES_PER_DAY) * 100) / 100;
+}
+
+/** Whether a rate condition bounds a fall: it holds at or below a limit. */
+export function isFallRate(p: RateOfChangeCondition | undefined): boolean {
+	return p?.operator === "<=" || p?.operator === "<";
+}
+
+/** How fast a rate condition's limit is, without its sign, in mg/dL per minute. */
+export function rateMagnitude(p: RateOfChangeCondition | undefined): number {
+	const value = p?.value ?? 0;
+	return isFallRate(p) ? -value : value;
+}
+
+/** A rate of `magnitude`, signed for the side `p` bounds. */
+export function signedRate(p: RateOfChangeCondition, magnitude: number): number {
+	return isFallRate(p) ? -magnitude : magnitude;
 }
 
 export function daysToMinutes(days: number): number {

@@ -53,7 +53,7 @@ anything serious straight away. See
 | | |
 |---|---|
 | **Top** | any of |
-| **Rows** | Glucose below 70 (3.9). **Or** a group, all of: Glucose below 100 (5.5) and Rate of change falling at least 2 (0.11) a minute |
+| **Rows** | Glucose below 70 (3.9). **Or** a group, all of: Glucose below 100 (5.5) and Rate of change at most -2 (-0.11) a minute |
 | **Severity** | Warning |
 
 Alerts on a low, and also earlier on a fast fall towards one, such as during
@@ -152,11 +152,11 @@ row first.
 
 | | |
 |---|---|
-| **Rows** | Site age ≥ 72 h |
+| **Rows** | Site age at least 3 days |
 | **Severity** | Info |
 
 Info alerts are sent once and marked as acknowledged straight away, so a
-reminder does not keep nagging. Use **Sensor age** in days for a sensor
+reminder does not keep nagging. Use **Sensor age**, for example at least 10 days, for a sensor
 reminder, or **Reservoir** ≤ 20 U for a refill reminder.
 
 ## Phone battery low

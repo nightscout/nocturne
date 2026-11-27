@@ -8,8 +8,9 @@
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     },
@@ -18,8 +19,9 @@
       "name": "rule-2",
       "condition_type": "rate_of_change",
       "condition_params": {
-        "direction": "falling",
-        "rate": 2
+        "schema_version": 2,
+        "operator": "<=",
+        "value": -2
       },
       "auto_resolve_enabled": false
     },
@@ -28,6 +30,7 @@
       "name": "rule-3",
       "condition_type": "trend",
       "condition_params": {
+        "schema_version": 2,
         "bucket": "falling_fast"
       },
       "auto_resolve_enabled": false
@@ -37,6 +40,7 @@
       "name": "rule-4",
       "condition_type": "glucose_bucket",
       "condition_params": {
+        "schema_version": 2,
         "buckets": [
           "low",
           "very_low"

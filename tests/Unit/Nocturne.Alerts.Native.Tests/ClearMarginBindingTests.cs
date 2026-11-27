@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.Alerts.Corpus;
 using Nocturne.Core.Alerts.Native;
@@ -21,7 +22,7 @@ public class ClearMarginBindingTests
             {
                 Id = Guid.Empty,
                 ConditionType = kind,
-                ConditionParams = JsonSerializer.SerializeToElement(conditionParams),
+                ConditionParams = Body(conditionParams),
             },
             JsonSerializer.SerializeToElement(new
             {
@@ -34,7 +35,15 @@ public class ClearMarginBindingTests
         return RustAlertEngine.GetRuleResult(response).Root;
     }
 
-    private static readonly object Low = new { direction = "below", value = 70, clear_margin = 5 };
+    /// <summary><paramref name="payload"/> as a stored rule body, naming its schema at its root.</summary>
+    private static JsonElement Body(object payload)
+    {
+        var body = JsonSerializer.SerializeToNode(payload)!.AsObject();
+        body.Insert(0, "schema_version", 2);
+        return JsonSerializer.SerializeToElement(body);
+    }
+
+    private static readonly object Low = new { @operator = "<", value = 70, clear_margin = 5 };
 
     private static readonly RustTrackerState Open = new()
     {
@@ -73,8 +82,8 @@ public class ClearMarginBindingTests
     [NativeFact]
     public void A_zero_margin_reads_as_none()
     {
-        var zero = new { direction = "below", value = 70, clear_margin = 0 };
-        var none = new { direction = "below", value = 70 };
+        var zero = new { @operator = "<", value = 70, clear_margin = 0 };
+        var none = new { @operator = "<", value = 70 };
         foreach (var glucose in new[] { 69m, 70m, 72m })
             RootAt(glucose, zero, Open).Should().Be(RootAt(glucose, none, Open));
     }
@@ -82,7 +91,7 @@ public class ClearMarginBindingTests
     [NativeFact]
     public void An_invalid_margin_is_an_unevaluable_body()
     {
-        var act = () => RootAt(72m, new { direction = "below", value = 70, clear_margin = -1 }, Open);
+        var act = () => RootAt(72m, new { @operator = "<", value = 70, clear_margin = -1 }, Open);
         act.Should().Throw<RustAlertEngineException>().WithMessage("*margin_negative*clear_margin*");
     }
 }

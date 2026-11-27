@@ -1,6 +1,6 @@
 [package]
 name = "nocturne-alerts-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Nocturne's alert condition engine: leaf and node evaluation, excursion tracking and replay, pinned by a golden corpus"
 license = "AGPL-3.0-only"

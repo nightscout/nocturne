@@ -84,12 +84,12 @@ public class GlucoseStatusClassifier : IGlucoseStatusClassifier
                 continue;
             }
 
-            // STJ materializes the record with a null Direction when the property is
-            // absent from the JSON; such a rule cannot be bucketed.
-            if (condition is null || string.IsNullOrEmpty(condition.Direction))
+            // An `==` threshold, or one whose operator is absent (STJ materializes the record
+            // with a null Operator), alerts on neither side and cannot be bucketed.
+            if (condition is null || ThresholdSide.Of(condition.Operator) is not { } direction)
             {
                 if (condition is not null)
-                    _logger.LogWarning("Threshold rule {RuleId} has no direction; skipped", rule.Id);
+                    _logger.LogWarning("Threshold rule {RuleId} alerts on neither side; skipped", rule.Id);
                 continue;
             }
 
@@ -97,7 +97,7 @@ public class GlucoseStatusClassifier : IGlucoseStatusClassifier
             if (condition.Value is not { } value)
                 continue;
 
-            yield return (condition.Direction, (double)value, rule.Severity);
+            yield return (direction, (double)value, rule.Severity);
         }
     }
 

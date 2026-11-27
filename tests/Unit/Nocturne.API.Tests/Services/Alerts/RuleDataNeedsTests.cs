@@ -21,7 +21,7 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void Threshold_needs_only_the_sensor_state()
     {
-        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""");
+        var rule = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -36,7 +36,7 @@ public class RuleDataNeedsTests
     public void A_limit_from_a_fact_needs_what_the_fact_reads()
     {
         RuleDataNeeds.Walk([MakeRule(AlertConditionType.Threshold,
-                """{"direction":"below","value_from":{"fact":"target_low","offset":-10}}""")])
+                """{"schema_version":2,"operator":"<","value_from":{"fact":"target_low","offset":-10}}""")])
             .Should().BeEquivalentTo(DataNeedsSet.None with
             {
                 NeedsSensorState = true,
@@ -44,7 +44,7 @@ public class RuleDataNeedsTests
                 NeedsTenantTimeZone = true,
             });
         RuleDataNeeds.Walk([MakeRule(AlertConditionType.EventualGlucose,
-                """{"operator":">","value_from":{"fact":"target_high"}}""")])
+                """{"schema_version":2,"operator":">","value_from":{"fact":"target_high"}}""")])
             .Should().BeEquivalentTo(DataNeedsSet.None with
             {
                 NeedsApsDetermination = true,
@@ -52,10 +52,10 @@ public class RuleDataNeedsTests
                 NeedsTenantTimeZone = true,
             });
         RuleDataNeeds.Walk([MakeRule(AlertConditionType.Predicted,
-                """{"operator":"<","within_minutes":30,"value_from":{"fact":"latest_glucose","offset":-30}}""")])
+                """{"schema_version":2,"operator":"<","within_minutes":30,"value_from":{"fact":"latest_glucose","offset":-30}}""")])
             .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsPredicted = true, NeedsSensorState = true });
         RuleDataNeeds.Walk([MakeRule(AlertConditionType.Predicted,
-                """{"operator":"<","within_minutes":30,"value":70}""")])
+                """{"schema_version":2,"operator":"<","within_minutes":30,"value":70}""")])
             .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsPredicted = true },
                 "a literal limit reads no fact");
     }
@@ -63,7 +63,7 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void Trend_leaf_needs_only_the_sensor_state()
     {
-        var rule = MakeRule(AlertConditionType.Trend, """{"bucket":"rising_fast"}""");
+        var rule = MakeRule(AlertConditionType.Trend, """{"schema_version":2,"bucket":"rising_fast"}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -73,9 +73,9 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void Signal_loss_and_the_sensor_state_leaf_need_what_they_read()
     {
-        RuleDataNeeds.Walk([MakeRule(AlertConditionType.SignalLoss, """{"timeout_minutes":15}""")])
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.SignalLoss, """{"schema_version":2,"timeout_minutes":15}""")])
             .Should().BeEquivalentTo(DataNeedsSet.None, "signal loss reads the base context alone");
-        RuleDataNeeds.Walk([MakeRule(AlertConditionType.SensorState, """{"states":["warming_up"]}""")])
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.SensorState, """{"schema_version":2,"states":["warming_up"]}""")])
             .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsSensorState = true });
     }
 
@@ -85,7 +85,7 @@ public class RuleDataNeedsTests
     [InlineData(AlertConditionType.CarbsRequired)]
     public void A_loop_leaf_needs_the_determination_alone(AlertConditionType type)
     {
-        RuleDataNeeds.Walk([MakeRule(type, """{"operator":">","value":10}""")])
+        RuleDataNeeds.Walk([MakeRule(type, """{"schema_version":2,"operator":">","value":10}""")])
             .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsApsDetermination = true });
     }
 
@@ -94,10 +94,10 @@ public class RuleDataNeedsTests
     /// reading through the sensor's state, and only them.
     /// </summary>
     [NativeTheory]
-    [InlineData(AlertConditionType.GlucoseChange, """{"operator":"<=","value":-30,"window_minutes":15}""")]
-    [InlineData(AlertConditionType.GlucoseExtreme, """{"of":"max","operator":">","value":250,"window_minutes":60}""")]
+    [InlineData(AlertConditionType.GlucoseChange, """{"schema_version":2,"operator":"<=","value":-30,"window_minutes":15}""")]
+    [InlineData(AlertConditionType.GlucoseExtreme, """{"schema_version":2,"of":"max","operator":">","value":250,"window_minutes":60}""")]
     [InlineData(AlertConditionType.GlucoseCount,
-        """{"reading":{"operator":"<","value":70},"window_minutes":60,"count":{"operator":">=","value":3}}""")]
+        """{"schema_version":2,"reading":{"operator":"<","value":70},"window_minutes":60,"count":{"operator":">=","value":3}}""")]
     public void A_windowed_leaf_needs_the_series_and_the_sensor_state(AlertConditionType type, string json)
     {
         RuleDataNeeds.Walk([MakeRule(type, json)])
@@ -106,7 +106,7 @@ public class RuleDataNeedsTests
 
     [NativeFact]
     public void A_rule_with_no_windowed_leaf_needs_no_series() =>
-        RuleDataNeeds.Walk([MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""")])
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""")])
             .NeedsGlucoseSeries.Should().BeFalse();
 
     [NativeFact]
@@ -114,6 +114,7 @@ public class RuleDataNeedsTests
     {
         var json = """
         {
+          "schema_version": 2,
           "operator": "and",
           "conditions": [
             { "type": "iob", "iob": { "operator": ">", "value": 2 } }
@@ -132,6 +133,7 @@ public class RuleDataNeedsTests
     {
         var json = """
         {
+          "schema_version": 2,
           "operator": "and",
           "conditions": [
             { "type": "iob", "iob": { "operator": ">", "value": 2 } },
@@ -160,6 +162,7 @@ public class RuleDataNeedsTests
     {
         var json = """
         {
+          "schema_version": 2,
           "minutes": 15,
           "child": { "type": "reservoir", "reservoir": { "operator": "<", "value": 20 } }
         }
@@ -176,7 +179,8 @@ public class RuleDataNeedsTests
     {
         var json = """
         {
-          "child": { "type": "site_age", "site_age": { "operator": ">", "value": 72 } }
+          "schema_version": 2,
+          "child": { "type": "site_age", "site_age": { "operator": ">", "minutes": 4320 } }
         }
         """;
         var rule = MakeRule(AlertConditionType.Not, json);
@@ -200,8 +204,8 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void Multiple_rules_are_unioned()
     {
-        var cobRule = MakeRule(AlertConditionType.Cob, """{"operator":">","value":10}""");
-        var iobRule = MakeRule(AlertConditionType.Iob, """{"operator":">","value":1}""");
+        var cobRule = MakeRule(AlertConditionType.Cob, """{"schema_version":2,"operator":">","value":10}""");
+        var iobRule = MakeRule(AlertConditionType.Iob, """{"schema_version":2,"operator":">","value":1}""");
 
         var result = RuleDataNeeds.Walk(new[] { cobRule, iobRule });
 
@@ -214,7 +218,7 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void LoopStale_rule_sets_LastApsCycle_only()
     {
-        var rule = MakeRule(AlertConditionType.LoopStale, """{"operator":">","minutes":15}""");
+        var rule = MakeRule(AlertConditionType.LoopStale, """{"schema_version":2,"operator":">","minutes":15}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -228,24 +232,21 @@ public class RuleDataNeedsTests
     }
 
     [NativeFact]
-    public void LoopEnactionStale_rule_sets_LastApsEnacted_and_LastApsCycle()
+    public void LoopEnactionStale_rule_sets_LastApsEnacted_only()
     {
-        // Co-fetch invariant: LoopEnactionStale's evaluator reads HasEverApsCycled (the
-        // shared cold-start guard, since there is no separate HasEverApsEnacted flag), so
-        // RuleDataNeeds must request both timestamps. Without LastApsCycle, a tenant whose
-        // only enabled looping rule is LoopEnactionStale would never fire on a healthy loop.
-        var rule = MakeRule(AlertConditionType.LoopEnactionStale, """{"operator":">","minutes":15}""");
+        // The engine reads only the enacted timestamp for it (engine-semantics.md §10, anomaly 7).
+        var rule = MakeRule(AlertConditionType.LoopEnactionStale, """{"schema_version":2,"operator":">","minutes":15}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
         result.NeedsLastApsEnacted.Should().BeTrue();
-        result.NeedsLastApsCycle.Should().BeTrue();
+        result.NeedsLastApsCycle.Should().BeFalse();
     }
 
     [NativeFact]
     public void PumpSuspended_rule_sets_PumpStatus_only()
     {
-        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"is_active":true}""");
+        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"schema_version":2,"is_active":true}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -256,7 +257,7 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void PumpBattery_rule_sets_PumpStatus_only()
     {
-        var rule = MakeRule(AlertConditionType.PumpBattery, """{"operator":"<","value":20}""");
+        var rule = MakeRule(AlertConditionType.PumpBattery, """{"schema_version":2,"operator":"<","value":20}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -267,7 +268,7 @@ public class RuleDataNeedsTests
     public void TempBasal_rule_sets_TempBasal_only()
     {
         var rule = MakeRule(AlertConditionType.TempBasal,
-            """{"metric":"rate","operator":">","value":1.5}""");
+            """{"schema_version":2,"metric":"rate","operator":">","value":1.5}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -278,7 +279,7 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void UploaderBattery_rule_sets_UploaderStatus_only()
     {
-        var rule = MakeRule(AlertConditionType.UploaderBattery, """{"operator":"<","value":20}""");
+        var rule = MakeRule(AlertConditionType.UploaderBattery, """{"schema_version":2,"operator":"<","value":20}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -289,7 +290,7 @@ public class RuleDataNeedsTests
     public void TransmitterBattery_rule_sets_TransmitterStatus_only()
     {
         var rule = MakeRule(AlertConditionType.TransmitterBattery,
-            """{"metric":"voltage_a","operator":"<","value":290}""");
+            """{"schema_version":2,"metric":"voltage_a","operator":"<","value":290}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -300,7 +301,7 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void OverrideActive_rule_sets_Override_only()
     {
-        var rule = MakeRule(AlertConditionType.OverrideActive, """{"is_active":true}""");
+        var rule = MakeRule(AlertConditionType.OverrideActive, """{"schema_version":2,"is_active":true}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -310,7 +311,7 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void SensitivityRatio_rule_sets_SensitivityRatio_only()
     {
-        var rule = MakeRule(AlertConditionType.SensitivityRatio, """{"operator":"<","value":0.8}""");
+        var rule = MakeRule(AlertConditionType.SensitivityRatio, """{"schema_version":2,"operator":"<","value":0.8}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -326,7 +327,7 @@ public class RuleDataNeedsTests
         // evaluator would silently fall back to UTC — firing at the wrong wall-clock hour
         // for non-UTC tenants.
         var rule = MakeRule(AlertConditionType.TimeOfDay,
-            """{"from":"10:00","to":"14:00","timezone":null}""");
+            """{"schema_version":2,"from":"10:00","to":"14:00","timezone":null}""");
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -338,6 +339,7 @@ public class RuleDataNeedsTests
     {
         var json = """
         {
+          "schema_version": 2,
           "operator": "and",
           "conditions": [
             {
@@ -363,15 +365,15 @@ public class RuleDataNeedsTests
     }
 
     [NativeTheory]
-    [InlineData("""{"operator":"and"}""")]
-    [InlineData("""{"operator":"and","conditions":[null]}""")]
-    [InlineData("""{"operator":"and","conditions":[{"iob":{"operator":">","value":2}}]}""")]
-    [InlineData("""{"operator":"and","conditions":[{"type":"not","not":{}}]}""")]
-    [InlineData("""{"operator":"and","conditions":[{"type":"composite","composite":{"operator":"or"}}]}""")]
+    [InlineData("""{"schema_version":2,"operator":"and"}""")]
+    [InlineData("""{"schema_version":2,"operator":"and","conditions":[null]}""")]
+    [InlineData("""{"schema_version":2,"operator":"and","conditions":[{"iob":{"operator":">","value":2}}]}""")]
+    [InlineData("""{"schema_version":2,"operator":"and","conditions":[{"type":"not","not":{}}]}""")]
+    [InlineData("""{"schema_version":2,"operator":"and","conditions":[{"type":"composite","composite":{"operator":"or"}}]}""")]
     public void Malformed_stored_composite_does_not_abort_the_batch(string json)
     {
         var bad = MakeRule(AlertConditionType.Composite, json);
-        var iob = MakeRule(AlertConditionType.Iob, """{"operator":">","value":2}""");
+        var iob = MakeRule(AlertConditionType.Iob, """{"schema_version":2,"operator":">","value":2}""");
 
         var result = RuleDataNeeds.Walk(new[] { bad, iob });
 
@@ -381,20 +383,20 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void Not_and_sustained_with_null_child_contribute_no_needs()
     {
-        var not = MakeRule(AlertConditionType.Not, """{}""");
-        var sustained = MakeRule(AlertConditionType.Sustained, """{"minutes":5}""");
+        var not = MakeRule(AlertConditionType.Not, """{"schema_version":2}""");
+        var sustained = MakeRule(AlertConditionType.Sustained, """{"schema_version":2,"minutes":5}""");
 
         var result = RuleDataNeeds.Walk(new[] { not, sustained });
 
         result.Should().BeEquivalentTo(DataNeedsSet.None);
     }
 
-    private const string CobZero = """{"type":"cob","cob":{"operator":"==","value":0}}""";
+    private const string CobZero = """{"schema_version":2,"type":"cob","cob":{"operator":"==","value":0}}""";
 
     [NativeFact]
     public void Enabled_auto_resolve_condition_sets_a_need_the_body_does_not()
     {
-        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""", true, CobZero);
+        var rule = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""", true, CobZero);
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -404,7 +406,7 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void Disabled_auto_resolve_condition_contributes_no_needs()
     {
-        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""", false, CobZero);
+        var rule = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""", false, CobZero);
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -417,6 +419,7 @@ public class RuleDataNeedsTests
         var trackerId = Guid.NewGuid();
         var autoResolve = $$"""
         {
+          "schema_version": 2,
           "type": "composite",
           "composite": {
             "operator": "and",
@@ -430,7 +433,7 @@ public class RuleDataNeedsTests
           }
         }
         """;
-        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""", true, autoResolve);
+        var rule = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""", true, autoResolve);
 
         var result = RuleDataNeeds.Walk(new[] { rule });
 
@@ -443,11 +446,11 @@ public class RuleDataNeedsTests
     [InlineData("")]
     [InlineData("null")]
     [InlineData("{not json")]
-    [InlineData("""{"type":"composite","composite":{"operator":"and"}}""")]
+    [InlineData("""{"schema_version":2,"type":"composite","composite":{"operator":"and"}}""")]
     public void Malformed_auto_resolve_does_not_abort_the_batch(string? autoResolve)
     {
-        var bad = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""", true, autoResolve);
-        var iob = MakeRule(AlertConditionType.Iob, """{"operator":">","value":2}""");
+        var bad = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""", true, autoResolve);
+        var iob = MakeRule(AlertConditionType.Iob, """{"schema_version":2,"operator":">","value":2}""");
 
         var result = RuleDataNeeds.Walk(new[] { bad, iob });
 
@@ -456,8 +459,8 @@ public class RuleDataNeedsTests
     }
 
     [NativeTheory]
-    [InlineData("""{"mode":"Suspended","is_active":true}""")]
-    [InlineData("""{"mode":"Automatic","is_active":false,"for_minutes":5}""")]
+    [InlineData("""{"schema_version":2,"mode":"Suspended","is_active":true}""")]
+    [InlineData("""{"schema_version":2,"mode":"Automatic","is_active":false,"for_minutes":5}""")]
     public void A_pump_state_leaf_needs_the_pump_modes(string conditionParams)
     {
         var rule = MakeRule(AlertConditionType.PumpState, conditionParams);
@@ -468,7 +471,7 @@ public class RuleDataNeedsTests
     [NativeFact]
     public void A_rule_without_a_pump_state_leaf_does_not_need_the_pump_modes()
     {
-        var rule = MakeRule(AlertConditionType.Iob, """{"operator":">","value":2}""");
+        var rule = MakeRule(AlertConditionType.Iob, """{"schema_version":2,"operator":">","value":2}""");
 
         RuleDataNeeds.Walk(new[] { rule }).NeedsPumpModes.Should().BeFalse();
     }

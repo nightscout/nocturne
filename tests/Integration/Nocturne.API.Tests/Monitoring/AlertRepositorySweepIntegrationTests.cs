@@ -87,9 +87,9 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         var reader = new AlertRepository(factory.AsNocturneFactory(tenant));
         static NewAlertRule Rule(string name, string? onUnknown) => new(
             onUnknown is null
-                ? new AlertRuleWrite(name, null, AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+                ? new AlertRuleWrite(name, null, AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""",
                     RuleScopeClass.Low, AlertRuleSeverity.Warning, true, 0, false, false, null, "{}")
-                : new AlertRuleWrite(name, null, AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+                : new AlertRuleWrite(name, null, AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""",
                     RuleScopeClass.Low, AlertRuleSeverity.Warning, true, 0, false, false, null, "{}",
                     OnUnknown: onUnknown),
             []);

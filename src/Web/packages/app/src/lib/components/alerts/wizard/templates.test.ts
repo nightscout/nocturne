@@ -106,7 +106,7 @@ describe("alert wizard templates", () => {
 	it("saves a type with no wait and no hours as its one condition", () => {
 		const body = bodyOf(newDraft("low"));
 		expect(body.conditionType).toBe("threshold");
-		expect(body.conditionParams).toEqual({ direction: "below", value: 70 });
+		expect(body.conditionParams).toEqual({ schema_version: 2, operator: "<", value: 70 });
 	});
 
 	it("holds the condition for the wait and limits it to the hours", () => {
@@ -124,7 +124,7 @@ describe("alert wizard templates", () => {
 					type: "sustained",
 					sustained: {
 						minutes: 30,
-						child: { type: "threshold", threshold: { direction: "above", value: 250 } },
+						child: { type: "threshold", threshold: { operator: ">", value: 250 } },
 					},
 				},
 				{ type: "time_of_day", time_of_day: { from: "22:00", to: "07:00" } },
@@ -139,6 +139,7 @@ describe("alert wizard templates", () => {
 
 		expect(body.conditionType).toBe("tracker_age");
 		expect(body.conditionParams).toEqual({
+			schema_version: 2,
 			tracker_definition_id: sensorTracker.id,
 			operator: ">=",
 			minutes: 252 * 60,
@@ -167,6 +168,30 @@ describe("alert wizard templates", () => {
 	it("reads the uploader's sensor start when there is no sensor tracker", () => {
 		const draft = newDraft("sensor_change_due", [appointment, podTracker]);
 		expect(bodyOf(draft).conditionType).toBe("sensor_age");
+		expect(bodyOf(draft).conditionParams).toEqual({ schema_version: 2, operator: ">=", minutes: 14400 });
+		expect(suggestName(draft)).toBe("Sensor change due: 10 days");
+	});
+
+	it("reads the site's age in minutes when there is no site tracker", () => {
+		const draft = newDraft("site_change_due");
+		expect(bodyOf(draft).conditionParams).toEqual({ schema_version: 2, operator: ">=", minutes: 4320 });
+		draft.leaf!.site_age!.minutes = 0;
+		expect(draftIssue(draft)).toBe("Enter a number above 0.");
+	});
+
+	it("refuses a rate that is 0 or on the wrong side for its type", () => {
+		const falling = newDraft("falling_fast");
+		expect(falling.leaf?.rate_of_change).toEqual({ operator: "<=", value: -3 });
+		expect(draftIssue(falling)).toBeNull();
+		falling.leaf!.rate_of_change!.value = 3;
+		expect(draftIssue(falling)).toBe("Enter a rate above 0.");
+		falling.leaf!.rate_of_change!.value = 0;
+		expect(draftIssue(falling)).toBe("Enter a rate above 0.");
+
+		const rising = newDraft("rising_fast");
+		expect(suggestName(rising)).toBe("Rising fast: 3 mg/dL per minute");
+		rising.leaf!.rate_of_change!.value = -1;
+		expect(draftIssue(rising)).toBe("Enter a rate above 0.");
 	});
 
 	it("gives a type that is not an age no tracker", () => {
@@ -194,7 +219,7 @@ describe("alert wizard templates", () => {
 
 	it("names a rate alert with the fraction of its rate in either unit", () => {
 		const draft = newDraft("falling_fast");
-		draft.leaf!.rate_of_change!.rate = 1.5;
+		draft.leaf!.rate_of_change!.value = -1.5;
 		expect(suggestName(draft)).toBe("Falling fast: 1.5 mg/dL per minute");
 
 		glucoseUnits.current = "mmol";
@@ -234,6 +259,7 @@ describe("alert wizard templates", () => {
 
 		const draft = newDraft("battery_change_due", definitions);
 		expect(bodyOf(draft).conditionParams).toEqual({
+			schema_version: 2,
 			tracker_definition_id: batteryTracker.id,
 			operator: ">=",
 			minutes: 504 * 60,

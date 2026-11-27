@@ -193,7 +193,7 @@ public class AlertReplayServicePagingTests
 
     private static AlertRuleSnapshot ThresholdBelow(Guid id, decimal value) =>
         new(id, Guid.NewGuid(), $"below-{value}", AlertConditionType.Threshold,
-            $$"""{"direction":"below","value":{{value}}}""", AlertRuleSeverity.Warning, "{}", 0,
+            $$"""{"schema_version":2,"operator":"<","value":{{value}}}""", AlertRuleSeverity.Warning, "{}", 0,
             AutoResolveEnabled: false, AutoResolveParams: null);
 
     private static (
@@ -403,7 +403,7 @@ public class AlertReplayServicePagingTests
         var sut = CreateSut(pageSize: 1000, maxWindow: TimeSpan.FromHours(2));
         var ruleOverride = new ReplayRuleOverride(
             Id: null, Name: "draft", ConditionType: AlertConditionType.Threshold,
-            ConditionParams: """{"direction":"below","value":70}""",
+            ConditionParams: """{"schema_version":2,"operator":"<","value":70}""",
             Severity: AlertRuleSeverity.Warning, AllowThroughDnd: false,
             AutoResolveEnabled: false, AutoResolveParams: null);
 
@@ -465,8 +465,8 @@ public class AlertReplayServicePagingTests
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
-                Rule(rateRule, AlertConditionType.RateOfChange, """{"direction":"falling","rate":3}"""),
-                Rule(trendRule, AlertConditionType.Trend, """{"bucket":"falling_fast"}"""),
+                Rule(rateRule, AlertConditionType.RateOfChange, """{"schema_version":2,"operator":"<=","value":-3}"""),
+                Rule(trendRule, AlertConditionType.Trend, """{"schema_version":2,"bucket":"falling_fast"}"""),
             });
         var series = Enumerable.Range(0, 21)
             .Select(i => Reading(_dayStart.AddHours(2).AddMinutes(i), i <= 10 ? 150 : 150 - 4 * (i - 10)))
@@ -507,7 +507,7 @@ public class AlertReplayServicePagingTests
         _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
-                Rule(rateRule, AlertConditionType.RateOfChange, """{"direction":"falling","rate":3}"""),
+                Rule(rateRule, AlertConditionType.RateOfChange, """{"schema_version":2,"operator":"<=","value":-3}"""),
                 ThresholdBelow(lowRule, 200m),
             });
         SetupSeries(
@@ -527,7 +527,7 @@ public class AlertReplayServicePagingTests
     }
 
     private static AlertRuleSnapshot FallingFasterThan(Guid id, int rate) =>
-        Rule(id, AlertConditionType.RateOfChange, $$"""{"direction":"falling","rate":{{rate}}}""");
+        Rule(id, AlertConditionType.RateOfChange, $$"""{"schema_version":2,"operator":"<=","value":-{{rate}}}""");
 
     private async Task<IReadOnlyList<DateTime>> FiredAtAsync(Guid ruleId, int pageSize = 1000)
     {

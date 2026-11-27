@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "override_active",
       "condition_params": {
+        "schema_version": 2,
         "is_active": true,
         "for_minutes": 60
       },
@@ -18,6 +19,7 @@
       "name": "rule-2",
       "condition_type": "override_active",
       "condition_params": {
+        "schema_version": 2,
         "is_active": false,
         "for_minutes": null
       },

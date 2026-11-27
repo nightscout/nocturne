@@ -51,8 +51,8 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
     : IClassFixture<RuleSaveEvaluationPostgresTests.Database>
 {
     private static readonly DateTime Stored = new(2026, 11, 24, 3, 0, 0, DateTimeKind.Utc);
-    private const string Below70 = """{"direction":"below","value":70}""";
-    private const string Below50 = """{"direction":"below","value":50}""";
+    private const string Below70 = """{"schema_version":2,"operator":"<","value":70}""";
+    private const string Below50 = """{"schema_version":2,"operator":"<","value":50}""";
     private const string TelegramUserId = "864203571";
 
     public sealed class Database() : MigratedDatabase("rule_save_evaluation");

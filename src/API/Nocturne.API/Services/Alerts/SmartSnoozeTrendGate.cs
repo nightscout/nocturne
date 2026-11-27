@@ -83,8 +83,8 @@ internal static class SmartSnoozeTrendGate
         string? direction;
         try
         {
-            direction = JsonSerializer.Deserialize<ThresholdCondition>(conditionParams, ConditionJson.Options)
-                ?.Direction;
+            direction = ThresholdSide.Of(
+                JsonSerializer.Deserialize<ThresholdCondition>(conditionParams, ConditionJson.Options)?.Operator);
         }
         catch (JsonException)
         {

@@ -1,15 +1,16 @@
 {
   "schema_version": 1,
   "name": "staleness-infinity-convention",
-  "description": "LastReadingAt null but LatestTimestamp set: elapsed is \u002Binfinity \u2014 \u003E and \u003E= true, \u003C, \u003C= and == false",
+  "description": "LastReadingAt null but LatestTimestamp set: elapsed is +infinity — > and >= true, <, <= and == false",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "staleness",
       "condition_params": {
-        "operator": "\u003E",
-        "value": 15
+        "schema_version": 2,
+        "operator": ">",
+        "minutes": 15
       },
       "auto_resolve_enabled": false
     },
@@ -18,8 +19,9 @@
       "name": "rule-2",
       "condition_type": "staleness",
       "condition_params": {
-        "operator": "\u003E=",
-        "value": 15
+        "schema_version": 2,
+        "operator": ">=",
+        "minutes": 15
       },
       "auto_resolve_enabled": false
     },
@@ -28,8 +30,9 @@
       "name": "rule-3",
       "condition_type": "staleness",
       "condition_params": {
-        "operator": "\u003C",
-        "value": 15
+        "schema_version": 2,
+        "operator": "<",
+        "minutes": 15
       },
       "auto_resolve_enabled": false
     },
@@ -38,8 +41,9 @@
       "name": "rule-4",
       "condition_type": "staleness",
       "condition_params": {
-        "operator": "\u003C=",
-        "value": 15
+        "schema_version": 2,
+        "operator": "<=",
+        "minutes": 15
       },
       "auto_resolve_enabled": false
     },
@@ -48,8 +52,9 @@
       "name": "rule-5",
       "condition_type": "staleness",
       "condition_params": {
+        "schema_version": 2,
         "operator": "==",
-        "value": 15
+        "minutes": 15
       },
       "auto_resolve_enabled": false
     }

@@ -8,12 +8,13 @@
       "name": "rule-1",
       "condition_type": "sustained",
       "condition_params": {
+        "schema_version": 2,
         "minutes": 0,
         "child": {
           "type": "threshold",
           "threshold": {
-            "direction": "below",
-            "value": 70
+            "value": 70,
+            "operator": "<"
           }
         }
       },
@@ -24,12 +25,13 @@
       "name": "rule-2",
       "condition_type": "sustained",
       "condition_params": {
+        "schema_version": 2,
         "minutes": -5,
         "child": {
           "type": "threshold",
           "threshold": {
-            "direction": "below",
-            "value": 70
+            "value": 70,
+            "operator": "<"
           }
         }
       },

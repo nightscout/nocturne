@@ -6,7 +6,7 @@ import type { ConditionNode } from "./types";
 
 const rateLeaf = (rate: number): ConditionNode => ({
   type: "rate_of_change",
-  rate_of_change: { direction: "falling", rate },
+  rate_of_change: { operator: "<=", value: -rate },
 });
 
 describe("leafFactBinding rate_of_change", () => {

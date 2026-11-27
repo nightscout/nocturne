@@ -39,7 +39,7 @@ has exactly one spelling for every property name and enum value. Anything else i
   `AlertComparisonOperator`: `>` `>=` `<` `<=` `==`; `ForecastCurve`: `default` | `iob` |
   `cob` | `uam` | `zt`; `AlertLimitFact`: `latest_glucose` | `target_low` | `target_high`; `AlertWindowExtreme`: `min` |
   `max`; the
-  composite operator, `direction` and `alert_state` `state` words)
+  composite operator and the `alert_state` `state` words)
 - `StateSpanCategory` and `PumpModeState` are domain enums the rest of the API also
   writes, as their **PascalCase member names** (`"Override"`, `"PumpConnectivity"`,
   `"Automatic"`, `"EaseOff"`, …); a condition uses the same names
@@ -58,6 +58,12 @@ payload, and optionally the rule editor's `_uid` key.
 - The full discriminator set is the
   `AlertConditionType` enum's `EnumMember` values.
 
+A stored tree names its schema at its root: `"schema_version": 2` on a rule body (the
+`condition_params` object), and on the root node of an `auto_resolve_params` or a snooze condition.
+No other node carries it, and on one it is an `unknown_field`. A root without it, or with anything
+other than the JSON integer `2`, is `unsupported_schema` (§1.4) and nothing else in it is read: the
+engine reads schema 2 only. A schema 1 tree is migrated to schema 2 once (§1.5).
+
 ### 1.3 Numerics
 
 Glucose, rate, IOB and the other measured values compare as exact decimals (`rust_decimal`,
@@ -65,18 +71,16 @@ the C# `decimal` semantics: 28-29 significant digits). Comparisons like `5.5 == 
 boundary cases (`>=` at exactly the threshold) are exact-decimal; binary floats are not
 acceptable.
 
-Elapsed-time leaves are mixed:
+Every duration in a condition is a whole number of minutes, and elapsed time is compared exactly:
+the duration from the anchor to `now`, to the nanosecond the two instants carry, against the bound's
+minutes × 60 seconds, by the leaf's operator. That holds for every elapsed-time leaf (`staleness`,
+`site_age`, `sensor_age`, `loop_stale`, `loop_enaction_stale`, `tracker_age`,
+`time_since_last_carb`, `time_since_last_bolus`, `signal_loss`), every `for_minutes` and
+`sustained`. No elapsed time passes through a binary float or a change of unit, so a bound is
+reached at exactly the anchor plus its minutes on every engine: `>=` holds there and `>` does not.
 
-- `staleness`, `loop_stale`, `loop_enaction_stale`, `site_age`, `sensor_age`,
-  `tracker_age` compute elapsed as `(decimal)(now - anchor).TotalMinutes/Hours/Days` —
-  i.e. **`double` arithmetic first, then cast to decimal**, then exact-decimal
-  comparison.
-- `alert_state` (`for_minutes`), `pump_suspended`, `override_active`, `do_not_disturb`,
-  `pump_state`, `state_span_active`, `sustained`, `time_since_last_carb/bolus` compare in
-  **`double`** (`.TotalMinutes >= forMinutes`).
-
-The corpus pins boundary behaviour: the *comparison operator and inclusivity*, elapsed-time
-math in f64, and the conversion to decimal only where the list above says.
+The corpus pins boundary behaviour: the comparison operator and its inclusivity at the exact
+bound.
 
 ### 1.4 Evaluability
 
@@ -96,21 +100,22 @@ this tick):
 | `unknown_field` | a node property other than `type`, `_uid` and its own kind's payload, or a payload property its kind does not read (names match exactly, §1.1), so a misspelt operand such as `timeoutMinutes` or `Value` is not silently dropped. No field is named: the property is the author's text |
 | `field_missing` | a required operand is absent or `null`: every operand except `for_minutes`, `timezone` and `state_span_active` `state`, and the `child` of a `not` or `sustained`. On `threshold`, `predicted` and `eventual_glucose` it is on `value` when neither `value` nor `value_from` is present, and on `fact` when a `value_from` has none (§3, a limit from a fact). On `glucose_count` it is on `count` when neither `count` nor `percent` is present |
 | `invalid_field` | a value of the wrong JSON kind, a number out of range, an enum operand that is not a string, or a `timezone` that is not exactly an IANA zone id (§4), a `glucose_count` `count` value that is negative or not whole, or a `percent` value outside 0 to 100 (the field is `count` or `percent`). A problem inside a `glucose_count` `reading`, `count` or `percent` object (an absent, invalid or unknown `operator` or `value`) is reported on that object's name |
-| `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `direction`, `alert_state` `state`, `trend` `bucket`, `temp_basal` or `transmitter_battery` `metric`, `pump_state` `mode`, `state_span_active` `category`, a `predicted` `curve`, a `value_from` `fact`, a `glucose_extreme` `of`, or a `glucose_bucket`, `day_of_week`, `sensor_state`, `min_of` or `max_of` list member |
+| `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `alert_state` `state`, `trend` `bucket`, `temp_basal` or `transmitter_battery` `metric`, `pump_state` `mode`, `state_span_active` `category`, a `predicted` `curve`, a `value_from` `fact`, a `glucose_extreme` `of`, or a `glucose_bucket`, `day_of_week`, `sensor_state`, `min_of` or `max_of` list member |
 | `list_empty` | a composite's `conditions`, a `glucose_bucket` `buckets`, a `day_of_week` `days` or a `sensor_state` `states` that is absent, `null` or empty, or a `predicted` `min_of` or `max_of` that is present and empty |
 | `minutes_not_positive` | a duration `<= 0` that leaves its node never true: `sustained` `minutes`, `signal_loss` `timeout_minutes`, `predicted` `within_minutes` (no prediction is at or before now) |
-| `minutes_negative` | a negative bound on an elapsed time: `staleness` `value`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`. Elapsed time is never negative and an absent anchor reads as infinite, so every operator would compare the same way on every tick. `tracker_age` is exempt: its elapsed time is negative before a scheduled event |
+| `minutes_negative` | a negative bound on an elapsed time: `minutes` on `staleness`, `site_age`, `sensor_age`, `loop_stale`, `loop_enaction_stale` and `time_since_*`. Elapsed time is never negative and an absent anchor reads as infinite, so every operator would compare the same way on every tick. `tracker_age` is exempt: its elapsed time is negative before a scheduled event |
 | `invalid_time` | a `time_of_day` `from` or `to` that is not exactly `HH:mm` (`"9:00"`, `"24:00"`) |
 | `empty_window` | a `time_of_day` whose `from` equals its `to`, a window that never opens |
 | `pump_mode_category` | a `state_span_active` on the `PumpMode` category; pump modes are `pump_state`'s |
 | `margin_negative` | a `clear_margin` below `0` (§3, clear margin) |
 | `margin_on_equality` | a `clear_margin` above `0` on an `==` comparison, which has no side to widen (§3, clear margin) |
-| `margin_past_zero` | a `rate_of_change` `clear_margin` above its `rate`, or a `glucose_change` one above the size of its `value`, which would carry the limit past zero (§3, clear margin) |
+| `margin_past_zero` | a `rate_of_change` or `glucose_change` `clear_margin` above the size of its `value`, which would carry the limit past zero (§3, clear margin) |
 | `margin_under_sustained` | a `clear_margin` above `0` on a leaf anywhere under a `sustained` (§3, clear margin) |
 | `selector_conflict` | a `predicted` with more than one of `curve`, `min_of` and `max_of` (§3, forecast curves), or a `glucose_count` with both `count` and `percent` (§3, windows); the field is the second present, in that order |
 | `limit_conflict` | a `threshold`, `predicted` or `eventual_glucose` with both `value` and `value_from` (§3, a limit from a fact); the field is `value_from` |
 | `offset_out_of_range` | a `value_from` `offset` more than 1000 either side of `0` (§3, a limit from a fact); the field is `offset` |
 | `window_out_of_range` | a `window_minutes` that is a whole number outside 5 to 180 (§3, windows); the field is `window_minutes` |
+| `unsupported_schema` | a tree whose root does not carry `"schema_version": 2` (§1.2); the field is `schema_version`, the path the root's, and it is the tree's only problem, unless the document nests too deep to be read at all (`too_deep`, §1.1) |
 | `self_reference` | a `threshold` whose `value_from` names `latest_glucose`, which compares the reading with itself plus a constant, so its answer never depends on the reading (§3, a limit from a fact); the field is `value_from` |
 
 `clear_margin` is an optional member added after the first release. An engine older than it
@@ -162,6 +167,45 @@ pre-order; `AlertRulesController` returns them as a 400, and a rule's stored pro
 shown in the rule editor. Each issue carries its scope (`condition`, `auto_resolve`,
 `snooze`), the node's condition path (§2.3; a null slot's path ends in `.`), the reason
 code and, where there is one, the field. Reason codes never carry payload values.
+
+### 1.5 Schema 1 and its migration
+
+Schema 1 is the shape trees were stored in before the schema was named. It differs from schema 2 in
+five kinds, and `migrate_v1_to_v2` rewrites each as below. A schema 1 root carries no
+`schema_version`.
+
+| Kind | Schema 1 | Schema 2 |
+|---|---|---|
+| `threshold` | `direction`: `below` \| `above` | `operator`: `<` \| `>` (any operator in schema 2) |
+| `rate_of_change` | `direction`: `falling` \| `rising`, `rate` | falling `r` ⇒ `operator: "<="`, `value: -r`; rising `r` ⇒ `operator: ">="`, `value: r` |
+| `staleness` | `value` (minutes) | `minutes` |
+| `site_age` | `value` (hours, a decimal) | `minutes`: `value` × 60 |
+| `sensor_age` | `value` (days, a decimal) | `minutes`: `value` × 1440 |
+
+Every other operand is copied as it is, `_uid` included, and `schema_version: 2` is added at the
+root. A tree that already names schema 2 is left alone, so the migration can run again. An age
+that is not a whole number of minutes is rounded so the leaf, read through the `not`s above it, is
+true at least wherever it was: down for `>`, `>=` and `==`, up for `<` and `<=`, the other way round
+under an odd number of `not`s. An auto-resolve tree or a snooze condition being true closes or holds
+back an alert, so there the leaf is true at most wherever it was: its root counts as one `not`. One past the 32-bit range is held at its end. Either is reported as
+rounded, and the host asks for the rule to be reviewed. A negative age is copied as negative minutes,
+which schema 2 refuses (`minutes_negative`).
+
+The migration fails, and the tree stays as it is (so `unsupported_schema`), where it cannot read
+what it has to rewrite or descend into: a node that is not an object, or has no `type` naming a
+kind or no payload object; a composite without its `conditions` array or with a `null` slot; a
+`not` or `sustained` without its `child`; a rewritten operand of the wrong JSON kind or naming no
+member; a `rate` without a `direction`; a negative `rate` with a `clear_margin`, which schema 1 read
+as `margin_past_zero`; an age between minutes without an `operator`; a payload
+that already has an operand's schema 2 name; or a root naming any schema but `2`. None of those
+trees could be evaluated as schema 1 either. An operand the migration rewrites that is absent stays
+absent, so the tree reports it as schema 1 did.
+
+A tree evaluates under schema 2 as it did under schema 1, except at an exact elapsed-time bound,
+where schema 1 compared in `double` and, for some leaves, cast to decimal (the retired anomaly 6,
+§10): `staleness`, `loop_stale`, `loop_enaction_stale`, `tracker_age`, `site_age` and `sensor_age`
+read `(decimal)(now − anchor).TotalMinutes` (or `TotalHours`, `TotalDays`), and `for_minutes`,
+`sustained` and `time_since_*` read `TotalMinutes` as a `double`.
 
 ---
 
@@ -276,21 +320,21 @@ as false or true.
 
 | Kind | Payload | Inputs | Semantics | Unknown, and absence that is an answer |
 |---|---|---|---|---|
-| `threshold` | `direction` (`above`\|`below`), `value` or `value_from` (a target only) | `LatestValue`, `SensorState`, and with `value_from` `TargetLow` or `TargetHigh` | below: `v < limit`; above: `v > limit` (**strict**) | the sensor not ok, `LatestValue` null, or the reading stale ⇒ **unknown**; a named target absent ⇒ **unknown** (`target_range`, `absent`) |
-| `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min, stored or derived, §4), `SensorState` | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | the sensor not ok, `TrendRate` null, or the reading stale ⇒ **unknown** |
-| `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, the rule's `enabled_at`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | no reading history ⇒ measured from `enabled_at`, and **unknown** without it (below); only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
+| `threshold` | `operator`, `value` or `value_from` (a target only) | `LatestValue`, `SensorState`, and with `value_from` `TargetLow` or `TargetHigh` | `Compare(v, op, limit)` | the sensor not ok, `LatestValue` null, or the reading stale ⇒ **unknown**; a named target absent ⇒ **unknown** (`target_range`, `absent`) |
+| `rate_of_change` | `operator`, `value` (mg/dL/min, signed: a fall is negative) | `TrendRate` (mg/dL/min, stored or derived, §4), `SensorState` | `Compare(TrendRate, op, value)` | the sensor not ok, `TrendRate` null, or the reading stale ⇒ **unknown** |
+| `staleness` | `operator`, `minutes` | `LastReadingAt`, `LatestTimestamp`, the rule's `enabled_at`, now | `Compare(now − last, op, minutes)` (§1.3) | no reading history ⇒ measured from `enabled_at`, and **unknown** without it (below); only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
 | `predicted` | `operator`, `value` or `value_from`, `within_minutes`, at most one of `curve`, `min_of`, `max_of` | `Predictions[]`, `PredictionCurves`, and what `value_from` names | true if **any** point of the selected series (below, forecast curves) with `OffsetMinutes <= within_minutes` satisfies `Compare(point.Mgdl, op, limit)`; points beyond horizon are skipped, not range-checked below. No selector reads `default`, which is `Predictions[]`, exactly as before selectors existed | a selected series that is empty or absent, any listed one for `min_of`/`max_of` ⇒ **unknown** (`predictions`, `absent`); with points present but none within the horizon or satisfying ⇒ false |
 | `trend` | `bucket` (wire string) | `TrendBucket` (of the rate, else of the arrow, §4), `SensorState` | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | the sensor not ok, `TrendBucket` null, a name the engine has no member for (§4), or the reading stale ⇒ **unknown** |
 | `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | Tz resolution: the per-rule tz when set; else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC; never unknown |
 | `iob` | `operator`, `value` (units) | `IobUnits` | `Compare` | null ⇒ **unknown** |
 | `cob` | `operator`, `value` (grams) | `CobGrams` | `Compare` | null ⇒ **unknown** |
 | `reservoir` | `operator`, `value` (units) | `ReservoirUnits`, `ReservoirIsLowerBound` | `Compare`; a lower-bound reading `b` ("50+") means the reservoir holds at least `b`, so it decides a comparison only where every amount from `b` up gives the same answer (table below) | null ⇒ **unknown**; a lower-bound reading that does not decide the comparison ⇒ **unknown** |
-| `site_age` | `operator`, `value` (**hours**) | `LastSiteChangeAt`, now | `Compare((decimal)(now-anchor).TotalHours, op, value)` | null ⇒ **unknown** |
-| `sensor_age` | `operator`, `value` (**days**) | `LastSensorStartAt`, now | `Compare((decimal)(now-anchor).TotalDays, op, value)` | null ⇒ **unknown** |
-| `alert_state` | `alert_id` (Guid), `state`, `for_minutes?` | `ActiveAlerts[alert_id]`, now | `firing`: snapshot.State == "firing" (ci). `unacknowledged`: State == "firing" **and** AcknowledgedAt null. `acknowledged`: AcknowledgedAt non-null (State irrelevant). Then if `for_minutes` set: elapsed since anchor `>= for_minutes` (double); anchor = AcknowledgedAt for `acknowledged`, TriggeredAt otherwise | no snapshot for id ⇒ false (the other alert is not firing) |
-| `loop_stale` | `operator`, `minutes` | `LastApsCycleAt`, `HasEverApsCycled`, now | `Compare((decimal)(now-cycle).TotalMinutes, op, minutes)` | `HasEverApsCycled` false ⇒ **unknown**; `LastApsCycleAt` null ⇒ **unknown** (no infinity convention here) |
-| `loop_enaction_stale` | `operator`, `minutes` | `LastApsEnactedAt`, `HasEverApsCycled` | same as `loop_stale` against the enacted timestamp | same guards (note: guard is `HasEverApsCycled`, not a separate enaction flag) |
-| `pump_suspended` | `is_active`, `for_minutes?` | `ActivePumpSuspension`, `HasEverPumpSnapshot`, now | `(suspension != null) == is_active`; then if `for_minutes` set **and** `is_active` true: `(now - StartedAt).TotalMinutes >= for_minutes` (double); `for_minutes` with `is_active:false` is a no-op (true) | `HasEverPumpSnapshot` false ⇒ **unknown**; with it true, as the semantics say |
+| `site_age` | `operator`, `minutes` | `LastSiteChangeAt`, now | `Compare(now − anchor, op, minutes)` | null ⇒ **unknown** |
+| `sensor_age` | `operator`, `minutes` | `LastSensorStartAt`, now | `Compare(now − anchor, op, minutes)` | null ⇒ **unknown** |
+| `alert_state` | `alert_id` (Guid), `state`, `for_minutes?` | `ActiveAlerts[alert_id]`, now | `firing`: snapshot.State == "firing" (ci). `unacknowledged`: State == "firing" **and** AcknowledgedAt null. `acknowledged`: AcknowledgedAt non-null (State irrelevant). Then if `for_minutes` set: elapsed since anchor `>= for_minutes`; anchor = AcknowledgedAt for `acknowledged`, TriggeredAt otherwise | no snapshot for id ⇒ false (the other alert is not firing) |
+| `loop_stale` | `operator`, `minutes` | `LastApsCycleAt`, `HasEverApsCycled`, now | `Compare(now − cycle, op, minutes)` | `HasEverApsCycled` false ⇒ **unknown**; `LastApsCycleAt` null ⇒ **unknown** (no infinity convention here) |
+| `loop_enaction_stale` | `operator`, `minutes` | `LastApsEnactedAt`, now | same as `loop_stale` against the enacted timestamp | `LastApsEnactedAt` null ⇒ **unknown**; no `HasEverApsCycled` guard, since the enacted timestamp is the last enactment ever, not one within a look-back |
+| `pump_suspended` | `is_active`, `for_minutes?` | `ActivePumpSuspension`, `HasEverPumpSnapshot`, now | `(suspension != null) == is_active`; then if `for_minutes` set **and** `is_active` true: `now − StartedAt >= for_minutes`; `for_minutes` with `is_active:false` is a no-op (true) | `HasEverPumpSnapshot` false ⇒ **unknown**; with it true, as the semantics say |
 | `pump_battery` | `operator`, `value` (%) | `PumpBatteryPercent`, `HasEverPumpSnapshot` | `Compare` | guard false ⇒ **unknown**; percent null ⇒ **unknown** |
 | `temp_basal` | `metric` (`rate`\|`percent_of_scheduled`), `operator`, `value` | `ActiveTempBasal` | `rate`: compare `Rate` (U/hr). `percent_of_scheduled`: compare `Rate / ScheduledRate * 100` (decimal division) | no active temp ⇒ false (**no** HasEver guard, by design: no temp is the state, for `rate` too); `percent_of_scheduled` with `ScheduledRate` null or 0, or a percentage that overflows ⇒ **unknown** |
 | `uploader_battery` | `operator`, `value` (%) | `UploaderBatteryPercent`, `HasEverUploaderSnapshot` | `Compare` | guard false ⇒ **unknown**; percent null ⇒ **unknown** |
@@ -299,18 +343,18 @@ as false or true.
 | `sensitivity_ratio` | `operator`, `value` | `SensitivityRatio`, `HasEverApsSensitivity` | `Compare` | guard false ⇒ **unknown**; ratio null ⇒ **unknown** |
 | `do_not_disturb` | `is_active`, `for_minutes?` | `ActiveDoNotDisturb`, now | same shape as `pump_suspended` (anchor `StartedAt`); `for_minutes` no-op on the inactive side | no guard; snapshot null = DND off: never unknown |
 | `glucose_bucket` | `buckets: [..]` | `GlucoseBucket`, `SensorState` | set membership | the sensor not ok, bucket null, a name the engine has no member for (§4), or the reading stale ⇒ **unknown** |
-| `time_since_last_carb` | `operator` (enum), `minutes` | `LastCarbAt`, now | elapsed minutes (double) compared via `AlertComparisonOperator`; **null anchor ⇒ elapsed = +∞** (so `>`/`>=` fire on cold start; intentional, opposite of loop_stale) | `==` against +∞ ⇒ false; never unknown |
+| `time_since_last_carb` | `operator` (enum), `minutes` | `LastCarbAt`, now | `Compare(now − anchor, op, minutes)`; **null anchor ⇒ elapsed = +∞** (so `>`/`>=` fire on cold start; intentional, opposite of loop_stale) | `==` against +∞ ⇒ false; never unknown |
 | `time_since_last_bolus` | same | `LastBolusAt` | same | same |
 | `day_of_week` | `days: [..]` (`AlertWeekday` names) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | tenant tz null/unknown ⇒ UTC; never unknown |
-| `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpModes` | `is_active:false`: true whenever no active span is of `mode` (**including no active span**). `is_active:true`: a span of `mode` must be active; `for_minutes` anchors at its `StartedAt` (double, `>=`) | no guard; no active span is an answer; with no span of `mode`, an active span whose mode is a name the engine has no member for (§4) is unknown wherever the answer depends on it (table below) |
+| `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpModes` | `is_active:false`: true whenever no active span is of `mode` (**including no active span**). `is_active:true`: a span of `mode` must be active; `for_minutes` anchors at its `StartedAt` (`>=`) | no guard; no active span is an answer; with no span of `mode`, an active span whose mode is a name the engine has no member for (§4) is unknown wherever the answer depends on it (table below) |
 | `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category": the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard: never unknown; a span of a category the engine has no member for (§4) is not in the lookup |
-| `sensor_state` | `states: [..]` (`SensorState` names), `for_minutes?` | `SensorState`, `LatestValue`, now | the state at `now` (§4: none once its `until` has passed) is one of `states`; then if `for_minutes` set: `(now - Since).TotalMinutes >= for_minutes` (double) | no state and `LatestValue` present: **false** when every listed state is `no_value` (a reading with a value is not `no_value`), else **unknown** (a state no source reported may hold); no state and no value ⇒ **unknown**; a name the engine has no member for ⇒ **unknown**; `for_minutes` set and `Since` null ⇒ **unknown**; a state not listed ⇒ false. Not gated by the sensor's state: it reads it |
+| `sensor_state` | `states: [..]` (`SensorState` names), `for_minutes?` | `SensorState`, `LatestValue`, now | the state at `now` (§4: none once its `until` has passed) is one of `states`; then if `for_minutes` set: `now − Since >= for_minutes` | no state and `LatestValue` present: **false** when every listed state is `no_value` (a reading with a value is not `no_value`), else **unknown** (a state no source reported may hold); no state and no value ⇒ **unknown**; a name the engine has no member for ⇒ **unknown**; `for_minutes` set and `Since` null ⇒ **unknown**; a state not listed ⇒ false. Not gated by the sensor's state: it reads it |
 | `eventual_glucose` | `operator`, `value` (mg/dL) or `value_from` | `ApsDetermination.EventualMgdl`, `ApsDetermination.At`, now, and what `value_from` names | `Compare` | no determination, or one without the value ⇒ **unknown** (`absent`); older than the rule's glucose freshness bound ⇒ **unknown** (`stale`, below) |
 | `carbs_required` | `operator`, `value` (grams) | `ApsDetermination.CarbsRequiredGrams`, `ApsDetermination.At`, now | `Compare` | as `eventual_glucose` |
 | `glucose_change` | `operator`, `value` (mg/dL, signed), `window_minutes` | `GlucoseSeries`, `LatestValue`, `LatestTimestamp`, `SensorState` | `Compare(newest − oldest in the window, op, value)` (below, windows) | as `threshold`, by `glucose` and `sensor_state`; then by `glucose_series`: no reading at `LatestTimestamp` in the series, or fewer than two in the window ⇒ **unknown** (`absent`); a window that starts late ⇒ **unknown** (`inexact`) |
 | `glucose_extreme` | `of` (`min`\|`max`), `operator`, `value` (mg/dL), `window_minutes` | as `glucose_change` | `Compare` of the lowest or highest reading in the window | as `glucose_change` for the reading and the series; a hole that could hide a reading that changes the answer ⇒ **unknown** (`glucose_series`, `inexact`) |
 | `glucose_count` | `reading` (`{operator, value}`, mg/dL), `window_minutes`, exactly one of `count` (`{operator, value}`, readings) and `percent` (`{operator, value}`, 0 to 100) | as `glucose_change` | `Compare` of how many readings in the window meet `reading`, or what percent of them do | as `glucose_extreme` |
-| `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, while a Duration start ahead of `now` follows §5.4, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back. A **Duration** start beyond the clock tolerance ahead ⇒ **unknown** (§5.4), held back or not: the clock rule comes first, since a threshold measured from a start that has not happened yet is not known to have held |
+| `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare(now − reference, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, while a Duration start ahead of `now` follows §5.4, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back. A **Duration** start beyond the clock tolerance ahead ⇒ **unknown** (§5.4), held back or not: the clock rule comes first, since a threshold measured from a start that has not happened yet is not known to have held |
 
 `sleep_session_active` (`is_active`; `SleepSessionActive`; true while the flag equals
 `is_active`) is never unknown: no session is the state.
@@ -558,7 +602,7 @@ the reservoir holds at least `b`.
     `sustained` child false. So does a rule whose stored state never opened and is held now,
     since a host that does not store `LastExcursion` restores every idle state with ordinal 0.
     Then go on as for a run;
-  - child true, a run ⇒ return `(now - start).TotalMinutes >= minutes` (double), with
+  - child true, a run ⇒ return `now − start >= minutes` (§1.3), with
     `start` ahead of `now` read by §5.4: within 5 minutes it is zero elapsed, beyond that the
     node is **unknown** and the run is kept. A run started on this evaluation from an
     instant long enough ago holds on this evaluation.
@@ -608,7 +652,7 @@ state that is not ok by `sensor_state`. Then:
 A windowed leaf reports no met point (above, met by). Its truth holds since `LatestTimestamp`, as
 `threshold`'s does (`sustained`, below).
 
-**Clear margin.** `threshold`, `rate_of_change` (on `rate`), `predicted`, `iob`, `cob`, `reservoir`,
+**Clear margin.** `threshold`, `rate_of_change`, `predicted`, `iob`, `cob`, `reservoir`,
 `pump_battery`, `uploader_battery`, `transmitter_battery`, `temp_basal`, `sensitivity_ratio`,
 `eventual_glucose`, `carbs_required`, `glucose_change` and `glucose_extreme` take an optional
 `clear_margin`: a decimal in the unit of the leaf's value (mg/dL for glucose,
@@ -619,8 +663,8 @@ none: an elapsed time only grows, so a margin there would be a second threshold,
 the property is an unknown field on them (§1.4). Absent or `0` is no margin, and the leaf
 evaluates exactly as without the member. A margin is read as `value` is: a JSON number in the
 decimal range (else `invalid_field`), never negative (`margin_negative`), never above `0` on an
-`==` comparison, which has no side to widen (`margin_on_equality`), never above a `rate_of_change`
-leaf's `rate`, nor above the size of a `glucose_change` leaf's `value`, whichever way the operator points, since
+`==` comparison, which has no side to widen (`margin_on_equality`), never above the size of a
+`rate_of_change` or `glucose_change` leaf's `value`, whichever way the operator points, since
 under a `not` the margin moves the limit the other way (`margin_past_zero`), and never above `0` on a leaf anywhere under a `sustained`
 (`margin_under_sustained`, below). `glucose_count` takes none: its tally is a count, not a value
 in the unit of a reading.
@@ -642,13 +686,13 @@ in the unit of a reading.
 - **Widened limit.** While the excursion is open, a leaf with a margin compares against its limit
   moved by the margin toward the side that keeps the **rule** true: the leaf's own true side under
   an even number of `not`s, its false side under an odd number. With the leaf's comparison written
-  `reading <op> limit` (`threshold` below `<`, above `>`; `rate_of_change` falling
-  `rate' <= -rate`, rising `rate' >= rate`), the true side of `>`/`>=` is down and of `<`/`<=` is
-  up. So `threshold below 70, clear_margin 5` is true below 70 while closed and below 75 while open,
-  and `not(threshold below 70, clear_margin 5)` is true at or above 70 while closed and at or above
-  65 while open. A rate's limit moves toward zero and at most to it: a margin equal to the `rate`
-  makes the open limit `0`, so a "falling" alert holds while glucose is not rising, and a larger one
-  is refused (`margin_past_zero`), since it would hold a "falling" alert open while glucose rises.
+  `reading <op> limit`, the true side of `>`/`>=` is down and of `<`/`<=` is
+  up. So `threshold < 70, clear_margin 5` is true below 70 while closed and below 75 while open,
+  and `not(threshold < 70, clear_margin 5)` is true at or above 70 while closed and at or above
+  65 while open. A rate's limit moves toward zero and at most to it: on `rate_of_change <= -2` a
+  margin of `2` makes the open limit `0`, so a "falling" alert holds while glucose is not rising, and
+  a larger one is refused (`margin_past_zero`), since it would hold a "falling" alert open while
+  glucose rises.
   The comparison keeps its strictness at the moved limit. A move that would leave the
   decimal range keeps the plain limit. While closed, every leaf compares against its plain limit.
   One helper (`CmpOp::widened`) moves every limit.
@@ -2029,8 +2073,8 @@ these, each by at most its 30 s sweep:
 | 3 | *(retired: an unknown child kind cannot be evaluated, so no `not` inverts one)* | §1.4 | resolved |
 | 4 | *(retired: `signal_loss` is an ordinary leaf evaluated on the wall clock)* | §5 | resolved |
 | 5 | *(retired: hysteresis expires against a persisted `HysteresisStartedAt`, in the tracker and the sweep)* | §6.1 | resolved |
-| 6 | Elapsed-time math mixes double→decimal casts (per-leaf, §1.3) | §1.3 | normative |
-| 7 | `loop_enaction_stale` cold-start guard is `HasEverApsCycled`, not an enaction-specific flag: a loop that has cycled but never enacted is unknown only by its null enacted timestamp | §3 | normative |
+| 6 | *(retired: elapsed time is compared exactly against whole minutes, §1.3; schema 1 mixed `double` arithmetic and casts to decimal, §1.5)* | §1.3 | resolved |
+| 7 | *(retired: `loop_enaction_stale` is unknown only by its null enacted timestamp; the `HasEverApsCycled` guard it had changed no result, since the enacted timestamp has no look-back)* | §3 | resolved |
 | 8 | `time_since_last_*` treats a missing anchor as +∞ (fires on cold start, never unknown), deliberately opposite to `loop_stale`, which is unknown without its anchor | §3 | normative |
 | 9 | *(retired: a `type` that is not exactly a wire string, such as a member name or ordinal, names no kind and cannot be evaluated)* | §1.2 | resolved |
 | 10 | *(retired: a missing input made its leaf false, so `not` over it was true and an open excursion closed when its fact went away; a missing input is now unknown, §2.4, and an unknown root holds, §6.4)* | §3 | resolved |

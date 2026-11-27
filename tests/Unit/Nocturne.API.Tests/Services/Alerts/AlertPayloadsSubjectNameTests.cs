@@ -12,7 +12,7 @@ public class AlertPayloadsSubjectNameTests
     private static readonly DateTime Now = new(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc);
 
     private static readonly AlertRuleSnapshot Rule = new(Guid.NewGuid(), Tenant, "low", AlertConditionType.Threshold,
-        """{"direction":"below","value":70}""", AlertRuleSeverity.Warning, "{}", 0,
+        """{"schema_version":2,"operator":"<","value":70}""", AlertRuleSeverity.Warning, "{}", 0,
         AutoResolveEnabled: false, AutoResolveParams: null);
 
     private static readonly SensorContext Sensor = new()

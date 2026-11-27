@@ -1053,10 +1053,10 @@ public class StatusServiceTests
         var dbName = $"nocturne_status_thresholds_{Guid.NewGuid()}";
         var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
         ctx.TenantId = SettableTenantAccessor.DefaultTenantId;
-        AddThresholdRule(ctx, "below", 60, AlertRuleSeverity.Critical);
-        AddThresholdRule(ctx, "below", 90, AlertRuleSeverity.Warning);
-        AddThresholdRule(ctx, "above", 170, AlertRuleSeverity.Warning);
-        AddThresholdRule(ctx, "above", 230, AlertRuleSeverity.Critical);
+        AddThresholdRule(ctx, "<", 60, AlertRuleSeverity.Critical);
+        AddThresholdRule(ctx, "<", 90, AlertRuleSeverity.Warning);
+        AddThresholdRule(ctx, ">", 170, AlertRuleSeverity.Warning);
+        AddThresholdRule(ctx, ">", 230, AlertRuleSeverity.Critical);
         await ctx.SaveChangesAsync();
 
         var service = CreateStatusService(
@@ -1078,7 +1078,7 @@ public class StatusServiceTests
         var dbName = $"nocturne_status_callers_{Guid.NewGuid()}";
         var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
         ctx.TenantId = SettableTenantAccessor.DefaultTenantId;
-        AddThresholdRule(ctx, "above", 170, AlertRuleSeverity.Warning);
+        AddThresholdRule(ctx, ">", 170, AlertRuleSeverity.Warning);
         await ctx.SaveChangesAsync();
         var share = new Mock<ICategoryReadContext>();
         share.SetupGet(c => c.IsShare).Returns(true);
@@ -1256,15 +1256,15 @@ public class StatusServiceTests
     private sealed class TestDbException : System.Data.Common.DbException;
 
     private static void AddThresholdRule(
-        NocturneDbContext ctx, string direction, int value, AlertRuleSeverity severity) =>
+        NocturneDbContext ctx, string @operator, int value, AlertRuleSeverity severity) =>
         ctx.AlertRules.Add(new AlertRuleEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = SettableTenantAccessor.DefaultTenantId,
-            Name = $"{direction}-{value}",
+            Name = $"{@operator}{value}",
             IsEnabled = true,
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = JsonSerializer.Serialize(new { direction, value }),
+            ConditionParams = JsonSerializer.Serialize(new { schema_version = ConditionSchema.Version, @operator, value }),
             Severity = severity,
         });
 

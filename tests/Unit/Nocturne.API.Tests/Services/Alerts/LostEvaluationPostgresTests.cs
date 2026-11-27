@@ -46,7 +46,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
     private static readonly TimeSpan PastGrace = AlertSweepJob.LostEvaluationGrace + TimeSpan.FromSeconds(1);
     private const string LostWarning = "No evaluation of the reading";
     private const string FirstRecord = "no evaluation was recorded for the tenant before";
-    private const string Low = """{"direction":"below","value":70}""";
+    private const string Low = """{"schema_version":2,"operator":"<","value":70}""";
 
     public sealed class Database() : MigratedDatabase("lost_evaluation");
 
@@ -581,7 +581,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
     public async Task A_trend_rate_corrected_at_the_same_timestamp_whose_evaluation_was_lost_is_evaluated_by_the_sweep()
     {
         var tenant = await SeedAsync(
-            condition: AlertConditionType.RateOfChange, conditionParams: """{"direction":"falling","rate":2}""");
+            condition: AlertConditionType.RateOfChange, conditionParams: """{"schema_version":2,"operator":"<=","value":-2}""");
         var reading = tenant.Store(mgdl: 100, trendRate: -0.5);
         var process = tenant.Process();
         await process.WriteEvaluationAsync();

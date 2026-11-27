@@ -7,7 +7,8 @@ use std::ffi::{CStr, CString, c_char};
 use serde_json::Value;
 
 use crate::{
-    envelope, envelope_string, error_json, replay_envelope, tracker_envelope, validate_envelope,
+    envelope, envelope_string, error_json, migrate_envelope, replay_envelope, tracker_envelope,
+    validate_envelope,
 };
 
 type Handler = fn(&str) -> Result<Value, String>;
@@ -182,6 +183,18 @@ pub unsafe extern "C" fn nocturne_alerts_describe(request_json: *const c_char) -
 pub unsafe extern "C" fn nocturne_alerts_validate(request_json: *const c_char) -> *mut c_char {
     // SAFETY: forwarded from this function's contract.
     unsafe { entry(request_json, "request", validate_envelope::validate) }
+}
+
+/// Rewrites one stored schema 1 condition tree as schema 2. Free the result
+/// with [`nocturne_alerts_free_string`].
+///
+/// # Safety
+/// `request_json` must be null or a NUL-terminated string valid for reads for
+/// the duration of the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nocturne_alerts_migrate(request_json: *const c_char) -> *mut c_char {
+    // SAFETY: forwarded from this function's contract.
+    unsafe { entry(request_json, "request", migrate_envelope::migrate) }
 }
 
 /// Advances one rule's excursion tracker for one evaluation, without

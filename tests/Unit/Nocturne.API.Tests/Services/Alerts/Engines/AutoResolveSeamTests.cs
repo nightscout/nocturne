@@ -23,9 +23,9 @@ public class AutoResolveSeamTests
         Id = RuleId,
         Name = "low",
         ConditionType = AlertConditionType.Threshold,
-        ConditionParams = """{"direction":"below","value":70}""",
+        ConditionParams = """{"schema_version":2,"operator":"<","value":70}""",
         AutoResolveEnabled = autoResolveEnabled,
-        AutoResolveParams = """{"type":"threshold","threshold":{"direction":"above","value":80}}""",
+        AutoResolveParams = """{"schema_version":2,"type":"threshold","threshold":{"operator":">","value":80}}""",
     };
 
     private static AlertRuleSnapshot Snapshot(AlertRule rule) => new(

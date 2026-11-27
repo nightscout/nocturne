@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "sustained",
       "condition_params": {
+        "schema_version": 2,
         "minutes": 30,
         "child": {
           "type": "override_active",

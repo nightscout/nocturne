@@ -8,7 +8,8 @@
       "name": "rule-1",
       "condition_type": "uploader_battery",
       "condition_params": {
-        "operator": "\u003C",
+        "schema_version": 2,
+        "operator": "<",
         "value": 20
       },
       "auto_resolve_enabled": false
@@ -18,8 +19,9 @@
       "name": "rule-2",
       "condition_type": "transmitter_battery",
       "condition_params": {
+        "schema_version": 2,
         "metric": "voltage_a",
-        "operator": "\u003C",
+        "operator": "<",
         "value": 290
       },
       "auto_resolve_enabled": false

@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "signal_loss",
       "condition_params": {
+        "schema_version": 2,
         "timeout_minutes": 0
       },
       "auto_resolve_enabled": false
@@ -17,6 +18,7 @@
       "name": "rule-2",
       "condition_type": "signal_loss",
       "condition_params": {
+        "schema_version": 2,
         "timeout_minutes": -5
       },
       "auto_resolve_enabled": false
@@ -25,7 +27,9 @@
       "id": "00000000-0000-0000-0000-000000000003",
       "name": "rule-3",
       "condition_type": "signal_loss",
-      "condition_params": {},
+      "condition_params": {
+        "schema_version": 2
+      },
       "auto_resolve_enabled": false
     }
   ],

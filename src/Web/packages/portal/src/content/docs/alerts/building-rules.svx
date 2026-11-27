@@ -329,7 +329,7 @@ The margin has no effect in auto-resolve and Smart snooze conditions, so the
 editor does not show it there. A margin of 0 is the same as no margin. A margin
 cannot be less than 0, and a condition that checks for an exact value cannot have
 one. On a rate of change, the margin cannot be more than the rate. With a margin
-equal to the rate, a "falling" alert stays open until glucose starts to rise. The rule summary shows the margin, for example "Glucose below 70 mg/dL, clear
+equal to the rate, an alert on a fall stays open until glucose starts to rise. The rule summary shows the margin, for example "Glucose below 70 mg/dL, clear
 margin 5 mg/dL".
 
 This section explains what the clear margin does. It does not say if a margin is
@@ -408,7 +408,7 @@ Two examples:
   condition "less than", **Latest glucose**, plus -30 mg/dL (about -1.7 mmol/L). Set
   it to look 30 minutes ahead. The summary shows "Predicted glucose &lt; latest glucose minus 30
   mg/dL in 30 minutes".
-- **Below the target low in your profile**: a glucose condition "below",
+- **Below the target low in your profile**: a glucose condition "less than",
   **Target low**, plus 0. If your profile has a different target at night, the
   condition uses the target that is in the profile at that time. The summary
   shows "Glucose below target low".

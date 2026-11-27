@@ -287,7 +287,7 @@ public partial class TenantOverviewServiceTests
                 TenantId = tenantId,
                 Severity = AlertRuleSeverity.Critical,
                 ConditionType = AlertConditionType.Threshold,
-                ConditionParams = """{"direction":"below","value":65}""",
+                ConditionParams = """{"schema_version":2,"operator":"<","value":65}""",
             };
             db.AlertRules.AddRange(warningRule, criticalRule);
             db.AlertExcursions.AddRange(
@@ -345,7 +345,7 @@ public partial class TenantOverviewServiceTests
 
         // Tenant B: an active critical excursion and a threshold rule that would move UrgentLow.
         SeedActiveExcursion(options, tenantB, AlertRuleSeverity.Critical,
-            conditionParams: """{"direction":"below","value":100}""");
+            conditionParams: """{"schema_version":2,"operator":"<","value":100}""");
 
         var latest = new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-2) };
         var fakes = new Fakes();
@@ -505,7 +505,7 @@ public partial class TenantOverviewServiceTests
                     TenantId = tenantId,
                     Severity = AlertRuleSeverity.Warning,
                     ConditionType = AlertConditionType.Threshold,
-                    ConditionParams = """{"value":90}""", // no direction
+                    ConditionParams = """{"schema_version":2,"value":90}""", // no direction
                 },
                 new AlertRuleEntity
                 {
@@ -513,7 +513,7 @@ public partial class TenantOverviewServiceTests
                     TenantId = tenantId,
                     Severity = AlertRuleSeverity.Critical,
                     ConditionType = AlertConditionType.Threshold,
-                    ConditionParams = """{"direction":"below","value":60}""",
+                    ConditionParams = """{"schema_version":2,"operator":"<","value":60}""",
                 });
             db.SaveChanges();
         }
@@ -890,8 +890,8 @@ public partial class TenantOverviewServiceTests
         var options = NewOptions();
         var withScope = SeedMembership(options, subjectId, "with", [Scope.GlucoseRead, Scope.AlertsRead]);
         var withoutScope = SeedMembership(options, subjectId, "without", [Scope.GlucoseRead]);
-        SeedActiveExcursion(options, withScope, AlertRuleSeverity.Critical, conditionParams: """{"direction":"above","value":400}""");
-        SeedActiveExcursion(options, withoutScope, AlertRuleSeverity.Critical, conditionParams: """{"direction":"above","value":400}""");
+        SeedActiveExcursion(options, withScope, AlertRuleSeverity.Critical, conditionParams: """{"schema_version":2,"operator":">","value":400}""");
+        SeedActiveExcursion(options, withoutScope, AlertRuleSeverity.Critical, conditionParams: """{"schema_version":2,"operator":">","value":400}""");
 
         var latest = new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-1) };
         var response = await NewService(options, latest)
@@ -937,7 +937,7 @@ public partial class TenantOverviewServiceTests
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
         var tenantId = SeedMembership(options, subjectId, "family", [Scope.GlucoseRead, Scope.AlertsRead]);
-        SeedActiveExcursion(options, tenantId, AlertRuleSeverity.Warning, conditionParams: """{"direction":"above","value":400}""");
+        SeedActiveExcursion(options, tenantId, AlertRuleSeverity.Warning, conditionParams: """{"schema_version":2,"operator":">","value":400}""");
         var fakes = new Fakes();
         fakes.Default = new TenantData
         {
@@ -1091,7 +1091,7 @@ public partial class TenantOverviewServiceTests
             TenantId = tenantId,
             Severity = severity,
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = conditionParams ?? """{"direction":"below","value":70}""",
+            ConditionParams = conditionParams ?? """{"schema_version":2,"operator":"<","value":70}""",
         };
         db.AlertRules.Add(rule);
         db.AlertExcursions.Add(new AlertExcursionEntity

@@ -38,8 +38,8 @@ public class AlertSweepJobSnoozeTests
     private static readonly Guid Tenant = Guid.NewGuid();
     private static readonly DateTime Lapsed = Now.AddMinutes(-1);
 
-    private const string LowRule = """{"direction":"below","value":70}""";
-    private const string HighRule = """{"direction":"above","value":180}""";
+    private const string LowRule = """{"schema_version":2,"operator":"<","value":70}""";
+    private const string HighRule = """{"schema_version":2,"operator":">","value":180}""";
 
     private readonly Mock<IAlertRepository> _repository = AlertSweepRuns.Repository(Tenant, () => Now.AddMinutes(-1));
     private readonly Mock<ICanonicalGlucoseService> _canonical = new();
@@ -311,7 +311,7 @@ public class AlertSweepJobSnoozeTests
     {
         FiveMinuteReadings(50, 60, 75);
         var instance = Instance(SmartOn, type: AlertConditionType.Composite,
-            conditionParams: """{"operator":"and","conditions":[]}""");
+            conditionParams: """{"schema_version":2,"operator":"and","conditions":[]}""");
 
         await SweepAsync(instance);
 
@@ -359,7 +359,7 @@ public class AlertSweepJobSnoozeTests
 
     private const string ExtendWhileAbove65 = """
         {"snooze":{"smartSnooze":true,"conditions":[
-          {"type":"threshold","threshold":{"direction":"above","value":65}}]}}
+          {"schema_version":2,"type":"threshold","threshold":{"operator":">","value":65}}]}}
         """;
 
     [NativeFact]
@@ -379,7 +379,7 @@ public class AlertSweepJobSnoozeTests
 
     private const string ExtendWhileTheLowestOf15MinutesIsBelow70 = """
         {"snooze":{"smartSnooze":true,"conditions":[
-          {"type":"glucose_extreme","glucose_extreme":{"of":"min","operator":"<","value":70,"window_minutes":15}}]}}
+          {"schema_version":2,"type":"glucose_extreme","glucose_extreme":{"of":"min","operator":"<","value":70,"window_minutes":15}}]}}
         """;
 
     /// <summary>
@@ -419,7 +419,7 @@ public class AlertSweepJobSnoozeTests
             .Setup(r => r.ReadEnabledRulesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new EnabledAlertRules([
                 new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "Signal loss", AlertConditionType.SignalLoss,
-                    """{"timeout_minutes": 15}""", AlertRuleSeverity.Warning, "{}", 0, false, null),
+                    """{"schema_version": 2, "timeout_minutes": 15}""", AlertRuleSeverity.Warning, "{}", 0, false, null),
             ], []));
         SensorContext? wallClock = null;
         _orchestrator
@@ -495,7 +495,7 @@ public class AlertSweepJobSnoozeTests
         _readings = [Reading(2, 72)];
         var instance = Instance("""
             {"snooze":{"smartSnooze":true,"conditions":[
-              {"type":"predicted","predicted":{"operator":">","value":70,"within_minutes":30}}]}}
+              {"schema_version":2,"type":"predicted","predicted":{"operator":">","value":70,"within_minutes":30}}]}}
             """);
 
         await SweepAsync(instance);
@@ -509,7 +509,7 @@ public class AlertSweepJobSnoozeTests
         _readings = [Reading(1, 0), Reading(6, 0), Reading(12, 90)];
         var instance = Instance("""
             {"snooze":{"smartSnooze":true,"conditions":[
-              {"type":"signal_loss","signal_loss":{"timeout_minutes":10}}]}}
+              {"schema_version":2,"type":"signal_loss","signal_loss":{"timeout_minutes":10}}]}}
             """);
 
         await SweepAsync(instance);

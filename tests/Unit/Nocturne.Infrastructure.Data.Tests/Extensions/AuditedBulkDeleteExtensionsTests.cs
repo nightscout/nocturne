@@ -374,7 +374,7 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
                 TenantId = _tenantId,
                 Name = "Legacy",
                 ConditionType = AlertConditionType.Threshold,
-                ConditionParams = """{"direction":"below","value":70}""",
+                ConditionParams = """{"schema_version":2,"operator":"<","value":70}""",
                 Severity = AlertRuleSeverity.Warning,
             });
             await seed.SaveChangesAsync();

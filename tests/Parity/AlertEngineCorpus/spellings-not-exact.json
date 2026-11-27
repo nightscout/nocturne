@@ -8,13 +8,14 @@
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "AND",
         "conditions": [
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           }
         ]
@@ -26,6 +27,7 @@
       "name": "rule-2",
       "condition_type": "threshold",
       "condition_params": {
+        "schema_version": 2,
         "direction": "BELOW",
         "value": 70
       },
@@ -36,6 +38,7 @@
       "name": "rule-3",
       "condition_type": "trend",
       "condition_params": {
+        "schema_version": 2,
         "bucket": "FALLING_FAST"
       },
       "auto_resolve_enabled": false
@@ -45,6 +48,7 @@
       "name": "rule-4",
       "condition_type": "day_of_week",
       "condition_params": {
+        "schema_version": 2,
         "days": [
           1
         ]
@@ -56,6 +60,7 @@
       "name": "rule-5",
       "condition_type": "day_of_week",
       "condition_params": {
+        "schema_version": 2,
         "days": [
           "Monday"
         ]
@@ -67,6 +72,7 @@
       "name": "rule-6",
       "condition_type": "glucose_bucket",
       "condition_params": {
+        "schema_version": 2,
         "buckets": [
           "LOW"
         ]
@@ -78,6 +84,7 @@
       "name": "rule-7",
       "condition_type": "pump_state",
       "condition_params": {
+        "schema_version": 2,
         "mode": "suspended",
         "is_active": true
       },
@@ -88,6 +95,7 @@
       "name": "rule-8",
       "condition_type": "state_span_active",
       "condition_params": {
+        "schema_version": 2,
         "category": 4,
         "is_active": true
       },
@@ -98,6 +106,7 @@
       "name": "rule-9",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": [
           {
@@ -116,8 +125,9 @@
       "name": "rule-10",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "Value": 70
+        "schema_version": 2,
+        "Value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     },
@@ -126,6 +136,7 @@
       "name": "rule-11",
       "condition_type": "time_of_day",
       "condition_params": {
+        "schema_version": 2,
         "from": "00:00",
         "to": "23:59",
         "timezone": "ETC/GMT-2"
@@ -137,6 +148,7 @@
       "name": "rule-12",
       "condition_type": "time_of_day",
       "condition_params": {
+        "schema_version": 2,
         "from": "00:00",
         "to": "23:59",
         "timezone": "AUS Eastern Standard Time"
@@ -148,13 +160,14 @@
       "name": "rule-13",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": [
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           }
         ]

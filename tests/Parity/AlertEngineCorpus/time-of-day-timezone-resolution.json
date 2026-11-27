@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "time_of_day",
       "condition_params": {
+        "schema_version": 2,
         "from": "22:00",
         "to": "23:59",
         "timezone": "Pacific/Auckland"
@@ -19,6 +20,7 @@
       "name": "rule-2",
       "condition_type": "time_of_day",
       "condition_params": {
+        "schema_version": 2,
         "from": "22:00",
         "to": "23:59",
         "timezone": null
@@ -30,6 +32,7 @@
       "name": "rule-3",
       "condition_type": "time_of_day",
       "condition_params": {
+        "schema_version": 2,
         "from": "12:00",
         "to": "13:00",
         "timezone": null

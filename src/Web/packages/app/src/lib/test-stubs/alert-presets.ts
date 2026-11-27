@@ -9,24 +9,24 @@ import {
 /** What `GET /api/v4/alert-rules/presets` answers, for a test that renders the alert wizard. */
 export const ALERT_PRESETS: AlertPresetResponse[] = [
 	preset("urgent_low", AlertPresetGroup.Common, AlertRuleSeverity.Critical, true, true, AlertConditionType.Threshold, {
-		direction: "below",
+		operator: "<",
 		value: 55,
 	}),
 	preset("low", AlertPresetGroup.Common, AlertRuleSeverity.Warning, true, true, AlertConditionType.Threshold, {
-		direction: "below",
+		operator: "<",
 		value: 70,
 	}),
 	preset("high", AlertPresetGroup.Common, AlertRuleSeverity.Warning, true, true, AlertConditionType.Threshold, {
-		direction: "above",
+		operator: ">",
 		value: 250,
 	}),
 	preset("falling_fast", AlertPresetGroup.Common, AlertRuleSeverity.Warning, true, false, AlertConditionType.RateOfChange, {
-		direction: "falling",
-		rate: 3,
+		operator: "<=",
+		value: -3,
 	}),
 	preset("rising_fast", AlertPresetGroup.Common, AlertRuleSeverity.Info, true, false, AlertConditionType.RateOfChange, {
-		direction: "rising",
-		rate: 3,
+		operator: ">=",
+		value: 3,
 	}),
 	preset("no_readings", AlertPresetGroup.Common, AlertRuleSeverity.Warning, false, false, AlertConditionType.SignalLoss, {
 		timeout_minutes: 20,
@@ -52,14 +52,14 @@ export const ALERT_PRESETS: AlertPresetResponse[] = [
 	{
 		...preset("site_change_due", AlertPresetGroup.More, AlertRuleSeverity.Info, false, true, AlertConditionType.SiteAge, {
 			operator: ">=",
-			value: 72,
+			minutes: 4320,
 		}),
 		trackerCategories: [TrackerCategory.Cannula, TrackerCategory.Pod],
 	},
 	{
 		...preset("sensor_change_due", AlertPresetGroup.More, AlertRuleSeverity.Info, false, true, AlertConditionType.SensorAge, {
 			operator: ">=",
-			value: 10,
+			minutes: 14400,
 		}),
 		trackerCategories: [TrackerCategory.Sensor],
 	},
@@ -82,5 +82,14 @@ function preset(
 	conditionType?: AlertConditionType,
 	conditionParams?: Record<string, unknown>,
 ): AlertPresetResponse {
-	return { id, group, severity, canWait, autoResolve, conditionType, conditionParams, trackerCategories: [] };
+	return {
+		id,
+		group,
+		severity,
+		canWait,
+		autoResolve,
+		conditionType,
+		conditionParams: conditionParams && { schema_version: 2, ...conditionParams },
+		trackerCategories: [],
+	};
 }

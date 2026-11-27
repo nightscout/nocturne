@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Nocturne.API.Services.Alerts.Conditions;
+using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -47,13 +48,20 @@ internal sealed record SmartSnoozeConfig(
     /// <inheritdoc cref="DefaultMaxCount"/>
     public const int DefaultExtendMinutes = 10;
 
-    /// <summary><paramref name="conditions"/> as the one node the sweep evaluates: <c>composite{and}</c>.</summary>
-    public static JsonElement ConditionTree(JsonElement conditions) =>
-        JsonSerializer.SerializeToElement(new JsonObject
+    /// <summary>
+    /// <paramref name="conditions"/> as the one node the sweep evaluates: <c>composite{and}</c>,
+    /// named as <see cref="AndBody"/> names its body.
+    /// </summary>
+    public static JsonElement ConditionTree(JsonElement conditions)
+    {
+        var (current, children) = Composed(conditions);
+        var node = new JsonObject
         {
             ["type"] = "composite",
-            ["composite"] = JsonNode.Parse(AndBody(conditions)),
-        });
+            ["composite"] = new JsonObject { ["operator"] = "and", ["conditions"] = children },
+        };
+        return JsonSerializer.SerializeToElement(current ? ConditionSchema.Stamp(node) : node);
+    }
 
     public static SmartSnoozeConfig Default { get; } =
         new(false, DefaultExtendMinutes, DefaultMaxCount, null);
@@ -92,13 +100,33 @@ internal sealed record SmartSnoozeConfig(
     public static bool SameConditions(JsonElement? stored, JsonElement? other) =>
         ConditionTreeEquality.Same(stored?.GetRawText(), other?.GetRawText());
 
-    /// <summary>The payload-only body of the <c>composite{and}</c> <paramref name="conditions"/> evaluate as.</summary>
-    public static string AndBody(JsonElement conditions) =>
-        new JsonObject
+    /// <summary>
+    /// The payload-only body of the <c>composite{and}</c> <paramref name="conditions"/> evaluate as.
+    /// Each stored condition names its <see cref="ConditionSchema"/> at its own root; the composite
+    /// names it when every one does, and its children drop the name, which no node below a root
+    /// carries. One that does not name it leaves the composite naming none, so the engine reads it
+    /// as <c>unsupported_schema</c>. The engine's own <c>validate::snooze_tree</c> composes them
+    /// the same way.
+    /// </summary>
+    public static string AndBody(JsonElement conditions)
+    {
+        var (current, children) = Composed(conditions);
+        var body = new JsonObject { ["operator"] = "and", ["conditions"] = children };
+        return (current ? ConditionSchema.Stamp(body) : body).ToJsonString();
+    }
+
+    private static (bool Current, JsonArray Children) Composed(JsonElement conditions)
+    {
+        var current = true;
+        var children = new JsonArray();
+        foreach (var condition in conditions.EnumerateArray())
         {
-            ["operator"] = "and",
-            ["conditions"] = JsonNode.Parse(conditions.GetRawText()),
-        }.ToJsonString();
+            current &= ConditionSchema.Names(condition);
+            var child = JsonNode.Parse(condition.GetRawText());
+            children.Add(child is JsonObject node ? ConditionSchema.Unstamp(node) : child);
+        }
+        return (current, children);
+    }
 
     private static JsonElement? Section(JsonElement root) =>
         root.ValueKind == JsonValueKind.Object

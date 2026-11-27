@@ -1,6 +1,6 @@
 [package]
 name = "nocturne-alerts-ffi"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "C ABI (JSON-in/JSON-out) wrapper around nocturne-alerts-core for .NET / Kotlin hosts"
 license = "AGPL-3.0-only"

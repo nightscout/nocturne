@@ -60,7 +60,7 @@ public class AlertReferenceServiceTests
             TenantId = _tenantId,
             Name = "Test",
             ConditionType = type,
-            ConditionParams = JsonSerializer.Serialize(conditionPayload, JsonOptions),
+            ConditionParams = ConditionSchema.Stamp(JsonSerializer.Serialize(conditionPayload, JsonOptions)),
             ClientConfiguration = "{}",
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
@@ -76,7 +76,7 @@ public class AlertReferenceServiceTests
     public async Task FindReferencing_DirectAlertStateReference_ReturnsReferencingId()
     {
         var target = await SeedRuleAsync(AlertConditionType.Threshold,
-            new ThresholdCondition("below", 70m));
+            new ThresholdCondition("<", 70m));
         var referencingId = await SeedRuleAsync(AlertConditionType.AlertState,
             new AlertStateCondition(target, "firing", null));
 
@@ -89,10 +89,10 @@ public class AlertReferenceServiceTests
     public async Task FindReferencing_NestedInComposite_ReturnsReferencingId()
     {
         var target = await SeedRuleAsync(AlertConditionType.Threshold,
-            new ThresholdCondition("below", 70m));
+            new ThresholdCondition("<", 70m));
         var nested = new CompositeCondition("and", new List<ConditionNode>
         {
-            new("threshold", Threshold: new ThresholdCondition("above", 250m)),
+            new("threshold", Threshold: new ThresholdCondition(">", 250m)),
             new("alert_state", AlertState: new AlertStateCondition(target, "firing", null)),
         });
         var referencingId = await SeedRuleAsync(AlertConditionType.Composite, nested);
@@ -106,8 +106,8 @@ public class AlertReferenceServiceTests
     public async Task FindReferencing_NoReferences_ReturnsEmpty()
     {
         var target = await SeedRuleAsync(AlertConditionType.Threshold,
-            new ThresholdCondition("below", 70m));
-        await SeedRuleAsync(AlertConditionType.Threshold, new ThresholdCondition("above", 200m));
+            new ThresholdCondition("<", 70m));
+        await SeedRuleAsync(AlertConditionType.Threshold, new ThresholdCondition(">", 200m));
 
         var refs = await _sut.FindReferencingRulesAsync(target, CancellationToken.None);
 
@@ -144,7 +144,7 @@ public class AlertReferenceServiceTests
         // ruleA -> ruleB -> ruleC (terminates)
         var ruleA = Guid.NewGuid();
         var ruleC = await SeedRuleAsync(AlertConditionType.Threshold,
-            new ThresholdCondition("below", 70m));
+            new ThresholdCondition("<", 70m));
         var ruleB = await SeedRuleAsync(AlertConditionType.AlertState,
             new AlertStateCondition(ruleC, "firing", null));
 

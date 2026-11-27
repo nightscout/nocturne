@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "state_span_active",
       "condition_params": {
+        "schema_version": 2,
         "category": "Illness",
         "state": null,
         "is_active": true
@@ -19,6 +20,7 @@
       "name": "rule-2",
       "condition_type": "state_span_active",
       "condition_params": {
+        "schema_version": 2,
         "category": "Illness",
         "state": null,
         "is_active": false
@@ -30,6 +32,7 @@
       "name": "rule-3",
       "condition_type": "state_span_active",
       "condition_params": {
+        "schema_version": 2,
         "category": "Travel",
         "state": null,
         "is_active": true
@@ -41,6 +44,7 @@
       "name": "rule-4",
       "condition_type": "state_span_active",
       "condition_params": {
+        "schema_version": 2,
         "category": "Travel",
         "state": null,
         "is_active": false

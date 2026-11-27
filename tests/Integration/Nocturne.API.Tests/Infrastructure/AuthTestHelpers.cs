@@ -589,7 +589,7 @@ public static class AuthTestHelpers
             TenantId = tenantId,
             Name = name,
             ConditionType = conditionType,
-            ConditionParams = """{"direction":"above","value":180}""",
+            ConditionParams = """{"schema_version":2,"operator":">","value":180}""",
             IsEnabled = isEnabled,
         };
         db.AlertRules.Add(rule);

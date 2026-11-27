@@ -8,7 +8,8 @@
       "name": "rule-1",
       "condition_type": "reservoir",
       "condition_params": {
-        "operator": "\u003C",
+        "schema_version": 2,
+        "operator": "<",
         "value": 60
       },
       "auto_resolve_enabled": false
@@ -18,7 +19,8 @@
       "name": "rule-2",
       "condition_type": "reservoir",
       "condition_params": {
-        "operator": "\u003C=",
+        "schema_version": 2,
+        "operator": "<=",
         "value": 60
       },
       "auto_resolve_enabled": false
@@ -28,6 +30,7 @@
       "name": "rule-3",
       "condition_type": "reservoir",
       "condition_params": {
+        "schema_version": 2,
         "operator": "==",
         "value": 50
       },
@@ -38,7 +41,8 @@
       "name": "rule-4",
       "condition_type": "reservoir",
       "condition_params": {
-        "operator": "\u003E",
+        "schema_version": 2,
+        "operator": ">",
         "value": 40
       },
       "auto_resolve_enabled": false
@@ -48,7 +52,8 @@
       "name": "rule-5",
       "condition_type": "reservoir",
       "condition_params": {
-        "operator": "\u003E=",
+        "schema_version": 2,
+        "operator": ">=",
         "value": 50
       },
       "auto_resolve_enabled": false
@@ -58,7 +63,8 @@
       "name": "rule-6",
       "condition_type": "reservoir",
       "condition_params": {
-        "operator": "\u003E",
+        "schema_version": 2,
+        "operator": ">",
         "value": 50
       },
       "auto_resolve_enabled": false
