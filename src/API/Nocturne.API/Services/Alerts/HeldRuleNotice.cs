@@ -1,5 +1,3 @@
-using System.Data.Common;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -100,8 +98,8 @@ internal sealed class HeldRuleNotice(
     }
 
     /// <summary>
-    /// Runs one rule's notice work, logging a data or provider failure so that it never stops the
-    /// other rules' notices; the next run tries it again.
+    /// Runs one rule's notice work, logging a data or provider failure (<see cref="ProviderFailure"/>)
+    /// so that it never stops the other rules' notices; the next run tries it again.
     /// </summary>
     private async Task IsolatedAsync(Guid ruleId, string what, Func<Task> work)
     {
@@ -109,19 +107,7 @@ internal sealed class HeldRuleNotice(
         {
             await work();
         }
-        catch (DbException ex)
-        {
-            Failed(ex, ruleId, what);
-        }
-        catch (DbUpdateException ex)
-        {
-            Failed(ex, ruleId, what);
-        }
-        catch (HttpRequestException ex)
-        {
-            Failed(ex, ruleId, what);
-        }
-        catch (TimeoutException ex)
+        catch (Exception ex) when (ProviderFailure.Is(ex))
         {
             Failed(ex, ruleId, what);
         }

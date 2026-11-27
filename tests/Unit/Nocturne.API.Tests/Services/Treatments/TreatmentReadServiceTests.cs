@@ -2,6 +2,7 @@ using Nocturne.API.Tests.TestDoubles;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Npgsql;
@@ -29,6 +30,7 @@ public class TreatmentReadServiceTests
     private readonly Mock<IDeviceEventRepository> _deviceEventRepo = new();
     private readonly Mock<IBolusCalculationRepository> _bolusCalcRepo = new();
     private readonly TreatmentReadService _service;
+    private readonly ListLogger<TreatmentReadService> _logs = new();
 
     public TreatmentReadServiceTests()
     {
@@ -47,7 +49,7 @@ public class TreatmentReadServiceTests
             _bolusCalcRepo.Object,
             new Mock<IProfileActivationRepository>().AnswersServedIdsPerKey<IProfileActivationRepository, ProfileActivation>().Object,
             Mock.Of<IStateSpanService>(),
-            NullLogger<TreatmentReadService>.Instance);
+            _logs);
     }
 
     [Fact]
@@ -294,15 +296,17 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_WhenDecompositionCanceled_StopsTheBatchCarryingWhatWasStored()
+    public async Task CreateAsync_WhenTheCallerCancelsDuringDecomposition_StopsTheBatchCarryingWhatWasStored()
     {
         var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
         var canceled = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
         var next = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
         DecomposeAll(writes: true);
-        FailOn(canceled, new OperationCanceledException());
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        FailOn(canceled, new OperationCanceledException(cts.Token));
 
-        var act = () => _service.CreateAsync([first, canceled, next], WriteOrigin.Live);
+        var act = () => _service.CreateAsync([first, canceled, next], WriteOrigin.Live, cts.Token);
 
         var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
         failed.InnerException.Should().BeOfType<OperationCanceledException>();
@@ -339,7 +343,7 @@ public class TreatmentReadServiceTests
         var failing = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
         DecomposeAll(writes: true);
         FailOn(refused, new TreatmentMappingException(new FormatException("bad date")));
-        FailOn(failing, new TimeoutException());
+        FailOn(failing, new NpgsqlException("connection broken"));
 
         var act = () => _service.CreateAsync([first, refused, failing], WriteOrigin.Live);
 
@@ -361,7 +365,7 @@ public class TreatmentReadServiceTests
                 var groups = treatments.Select(_ => Guid.CreateVersion7()).ToList();
                 into!.Begin(groups);
                 into.CreatedRecords.AddRange(groups.Select(g => new Note { Id = Guid.CreateVersion7(), CorrelationId = g }));
-                throw new TimeoutException("the span write timed out");
+                throw new NpgsqlException("the span write timed out");
             });
 
         var act = () => _service.CreateAsync(
@@ -376,8 +380,7 @@ public class TreatmentReadServiceTests
 
     public static TheoryData<Exception> TransientFailures() => new()
     {
-        new InvalidOperationException("connection broken"),
-        new TimeoutException(),
+        new NpgsqlException("connection broken"),
         new DbUpdateException("unique", new PostgresException("duplicate key", "ERROR", "ERROR", "23505")),
         new DbUpdateException("network", new InvalidOperationException("connection reset")),
         new DbUpdateException("our bug", new PostgresException("null value", "ERROR", "ERROR", "23502")),
@@ -529,7 +532,7 @@ public class TreatmentReadServiceTests
 
     public static TheoryData<Exception> ReadBackFailures => new()
     {
-        new TimeoutException(),
+        new NpgsqlException("connection broken"),
         new RetryLimitExceededException("retries exhausted", new NpgsqlException("connection refused")),
     };
 
@@ -581,7 +584,7 @@ public class TreatmentReadServiceTests
             .ReturnsAsync(spanResult);
         _projection
             .Setup(p => p.GetProjectedStateSpanTreatmentsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new TimeoutException());
+            .ThrowsAsync(new NpgsqlException("connection broken"));
         var stored = new List<StoredTreatment>();
 
         var act = () => _service.CreateAsync([first, span, last], WriteOrigin.Live, CancellationToken.None, stored);
@@ -611,18 +614,148 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_WhenACancellationIsNotTheCallers_EndsTheBatchAsFailed()
+    public async Task CreateAsync_WhenACancellationIsNotTheCallers_PropagatesIt()
     {
+        var canceled = new OperationCanceledException();
         _decomposer
             .Setup(d => d.DecomposeBatchAsync(
                 It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>(),
                 It.IsAny<TreatmentDecomposition>()))
-            .ThrowsAsync(new OperationCanceledException());
+            .ThrowsAsync(canceled);
 
         var act = () => _service.CreateAsync(
             [new Treatment { Id = "t1", Mills = 1000, EventType = "Note" }], WriteOrigin.Live);
 
-        await act.Should().ThrowAsync<TreatmentBatchFailedException>();
+        (await act.Should().ThrowAsync<OperationCanceledException>()).Which.Should().BeSameAs(canceled);
+    }
+
+    public static TheoryData<Exception> DefectsInABatch => new()
+    {
+        new InvalidOperationException("a second operation was started on this context"),
+        new ObjectDisposedException("NocturneDbContext"),
+        new TimeoutException("not the store's"),
+        new NullReferenceException(),
+    };
+
+    [Theory]
+    [MemberData(nameof(DefectsInABatch))]
+    public async Task CreateAsync_WhenAWriteHitsADefect_PropagatesItInsteadOfEndingTheBatch(Exception defect)
+    {
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var bad = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        var last = new Treatment { Id = "t3", Mills = 3000, EventType = "Note" };
+        DecomposeAll(writes: true);
+        FailOn(bad, defect);
+
+        var act = () => _service.CreateAsync([first, bad, last], WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
+        NeverDecomposed(last);
+    }
+
+    [Theory]
+    [MemberData(nameof(DefectsInABatch))]
+    public async Task CreateAsync_WhenTheReadBackHitsADefect_PropagatesItInsteadOfEndingTheBatch(Exception defect)
+    {
+        var span = new Treatment { Id = "t1", Mills = 1000, EventType = "Temporary Target" };
+        DecomposeAll();
+        var spanResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        spanResult.CreatedRecords.Add(new StateSpan { OriginalId = "t1", Category = StateSpanCategory.TemporaryTarget });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(span, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(spanResult);
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentAsync("t1", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _service.CreateAsync([span], WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Theory]
+    [MemberData(nameof(DefectsInABatch))]
+    public async Task CreateAsync_WhenReportingWhatCommittedHitsADefect_PropagatesTheBatchsDefectAndLogsBoth(Exception defect)
+    {
+        var span = new Treatment { Id = "t1", Mills = 1000, EventType = "Temporary Target" };
+        var bad = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        DecomposeAll();
+        var spanResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        spanResult.CreatedRecords.Add(new StateSpan { OriginalId = "t1", Category = StateSpanCategory.TemporaryTarget });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(span, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(spanResult);
+        var batchDefect = new NotSupportedException();
+        FailOn(bad, batchDefect);
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentAsync("t1", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var act = () => _service.CreateAsync([span, bad], WriteOrigin.Live, CancellationToken.None, []);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(batchDefect);
+        _logs.Entries.Where(e => e.Level == LogLevel.Error).Select(e => e.Exception)
+            .Should().Equal(batchDefect, defect);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenTheCallerCancelsTheReadBack_EndsTheBatchCarryingWhatWasStored()
+    {
+        var first = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var span = new Treatment { Id = "t2", Mills = 2000, EventType = "Temporary Target" };
+        DecomposeAll(writes: true);
+        var spanResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        spanResult.CreatedRecords.Add(new StateSpan { OriginalId = "t2", Category = StateSpanCategory.TemporaryTarget });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(span, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(spanResult);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentsAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.Is<CancellationToken>(t => t.IsCancellationRequested)))
+            .ThrowsAsync(new OperationCanceledException(cts.Token));
+
+        var act = () => _service.CreateAsync([first, span], WriteOrigin.Live, cts.Token);
+
+        var failed = (await act.Should().ThrowAsync<TreatmentBatchFailedException>()).Which;
+        failed.InnerException.Should().BeOfType<OperationCanceledException>();
+        failed.FailedIndex.Should().Be(1);
+        failed.Written.Select(t => t.Id).Should().Contain("t2");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenReportingWhatCommittedHitsAStoreFailure_ReportsTheTreatmentUnderItsSentId()
+    {
+        var span = new Treatment { Id = "t1", Mills = 1000, EventType = "Temporary Target" };
+        var bad = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+        DecomposeAll();
+        var spanResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        spanResult.CreatedRecords.Add(new StateSpan { OriginalId = "t1", Category = StateSpanCategory.TemporaryTarget });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(span, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(spanResult);
+        var unexpected = new NotSupportedException();
+        FailOn(bad, unexpected);
+        var failure = new NpgsqlException("connection broken");
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentAsync("t1", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        var stored = new List<StoredTreatment>();
+
+        var act = () => _service.CreateAsync([span, bad], WriteOrigin.Live, CancellationToken.None, stored);
+
+        (await act.Should().ThrowAsync<NotSupportedException>()).Which.Should().BeSameAs(unexpected);
+        stored.Should().ContainSingle().Which.Should().BeOfType<StoredTreatment.Unnamed>();
     }
 
     /// <param name="writes">Whether each treatment writes a record, so a batch that fails after it carries it as stored.</param>

@@ -141,7 +141,6 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
             var root = new ServiceCollection()
                 .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
                 .AddSingleton<TimeProvider>(Time)
-                .AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor())
                 .AddSingleton<INocturneDbContextFactory>(new SuppliedContextFactory(Context))
                 .AddSingleton<IAlertRepository>(repository ?? Repository())
                 .AddSingleton(Rules.Object)
@@ -161,12 +160,9 @@ public class OwedTransitionPostgresTests(OwedTransitionPostgresTests.Database da
                     Tracker(), new AlertRuleEvaluationGate(), Time, NullLogger<ExcursionTracker>.Instance,
                     new RustExcursionDecider(new AlertEngineErrors(new TestMeterFactory(), Time))))
                 .AddScoped<IAlertSnoozeService, AlertSnoozeService>()
-                .AddSingleton(Mock.Of<IUnevaluableRuleNotice>())
-                .AddSingleton(NoHeldRules.Notice())
-                .AddSingleton(Mock.Of<IClockAnomalyNotice>())
-                .AddSingleton(Mock.Of<IAlertChannelNotice>())
                 .AddSingleton(canonical.Object)
                 .AddSingleton(EnricherOf())
+                .AddSweepServices()
                 .BuildServiceProvider();
             return TenantJobScope.Open(root, new TenantContext(Id, "slug", "Slug", true, IsDemo: false), "test").ServiceProvider;
         }

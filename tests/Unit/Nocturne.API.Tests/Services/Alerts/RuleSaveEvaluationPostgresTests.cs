@@ -118,10 +118,7 @@ public class RuleSaveEvaluationPostgresTests(RuleSaveEvaluationPostgresTests.Dat
             services.AddSingleton(enricher.Object);
             services.AddSingleton(Mock.Of<IExcursionOpenedHandler>());
             services.AddSingleton(Mock.Of<IExcursionResolutionHandler>());
-            services.AddSingleton(Mock.Of<IUnevaluableRuleNotice>());
-            services.AddSingleton(Mock.Of<IClockAnomalyNotice>());
-            services.AddSingleton(Mock.Of<IAlertChannelNotice>());
-            services.AddSingleton(NoHeldRules.Notice());
+            services.AddSweepServices();
             services.AddSingleton<AlertEngineErrors>();
             services.AddSingleton<ConditionVersionLog>();
             services.AddSingleton<NotTrueRecordingFloor>();

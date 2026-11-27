@@ -544,6 +544,37 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
     }
 
     [Fact]
+    public async Task A_defect_sending_a_notice_is_not_swallowed()
+    {
+        var run = await SeedAsync();
+        var defect = new InvalidOperationException("a second operation was started on this context");
+        run.Delivery
+            .Setup(d => d.DispatchAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
+                It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var check = () => run.Process().CheckAsync(Enabled(run.Rule(Broken)), CancellationToken.None);
+
+        (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Fact]
+    public async Task A_defect_resolving_a_superseded_notice_is_not_swallowed()
+    {
+        var run = await SeedAsync();
+        await run.Process().CheckAsync(Enabled(run.Rule(Broken)), CancellationToken.None);
+        var first = (await run.StandingAsync()).Single();
+        var defect = new InvalidOperationException("a second operation was started on this context");
+        run.Resolution
+            .Setup(h => h.HandleClosedAsync(It.Is<ExcursionTransition>(t => t.ExcursionId == first), run.Tenant, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var check = () => run.Process().CheckAsync(Enabled(run.Rule(OtherBroken)), CancellationToken.None);
+
+        (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Fact]
     public async Task A_notice_recorded_as_a_disable_lands_is_resolved_by_the_next_run_and_told_again_on_enable()
     {
         var run = await SeedAsync();

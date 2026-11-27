@@ -63,7 +63,7 @@ public sealed class RejectedUploadRecorder(
             {
                 anyNew |= await store.UpsertAsync(upload, CancellationToken.None);
             }
-            catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException) { LogUnrecorded(ex); }
+            catch (Exception ex) when (StoreFailure.Is(ex)) { LogUnrecorded(ex); }
         }
 
         if (anyNew)
@@ -186,7 +186,7 @@ public sealed class RejectedUploadRecorder(
                 actions: [new NotificationActionDto { ActionId = "review", Label = "review", Icon = "eye", Variant = "default" }],
                 cancellationToken: CancellationToken.None);
         }
-        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException) { LogUnnotified(ex); }
+        catch (Exception ex) when (StoreFailure.Is(ex)) { LogUnnotified(ex); }
     }
 
     private void LogUnnotified(Exception ex) =>

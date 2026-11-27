@@ -336,7 +336,8 @@ public class AlertSweepJobWallClockTests
             Id = Guid.Parse("00000000-0000-0000-0003-0000000000b1"),
             Name = "Unwalkable",
             ConditionType = AlertConditionType.Composite,
-            ConditionParams = null!,
+            ConditionParams = """{"operator": "and", "conditions": []}""",
+            OnUnknown = "no such word",
         };
         var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15, unwalkable)
         {
@@ -1141,7 +1142,7 @@ public class AlertSweepJobWallClockTests
             var snapshots = otherRules
                 .Select(r => new AlertRuleSnapshot(
                     r.Id, Tenant, r.Name, r.ConditionType, r.ConditionParams,
-                    AlertRuleSeverity.Warning, "{}", 0, false, null))
+                    AlertRuleSeverity.Warning, "{}", 0, false, null) with { OnUnknown = r.OnUnknown })
                 .Prepend(snapshot)
                 .ToList();
 
@@ -1252,9 +1253,8 @@ public class AlertSweepJobWallClockTests
             services.AddScoped<IExcursionOpenedHandler, ExcursionOpenedHandler>();
             services.AddSingleton<ILogger<UnevaluableRuleNotice>>(new ListLogger<UnevaluableRuleNotice>());
             services.AddScoped<IUnevaluableRuleNotice, UnevaluableRuleNotice>();
-            services.AddSingleton(NoHeldRules.Notice());
             services.AddSingleton(ClockNotice.Object);
-            services.AddSingleton(Mock.Of<IAlertChannelNotice>());
+            services.AddSweepServices();
             services.AddSingleton<AlertRuleEvaluationGate>();
             services.AddSingleton<AlertRuleDecisions>();
             services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();

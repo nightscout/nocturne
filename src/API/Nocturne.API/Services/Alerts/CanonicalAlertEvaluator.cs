@@ -1,4 +1,3 @@
-using System.Data.Common;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
@@ -7,6 +6,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -127,19 +127,11 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
             if (report == ReadingReport.Here)
                 await _clockAnomalyNotice.ReportReadingIsolatedAsync(selection, now, _logger, ct);
         }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Alert evaluation against the canonical stream failed");
-        }
-        catch (TimeoutException ex)
-        {
-            _logger.LogWarning(ex, "Alert evaluation against the canonical stream failed");
-        }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             // The write is already stored, and the evaluation runs off its request: a fault here
             // must not stop the next one.
-            _logger.LogError(ex, "Alert evaluation against the canonical stream failed unexpectedly");
+            _logger.LogError(ex, "Alert evaluation against the canonical stream failed");
         }
 
         return ran;
@@ -210,15 +202,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
         {
             await _evaluatedReadings.RecordAsync(EvaluatedReading.Of(latest), ct);
         }
-        catch (DbException ex)
-        {
-            _logger.LogWarning(ex, "Could not record the reading at {ReadingTimestamp} as evaluated", latest.Timestamp);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Could not record the reading at {ReadingTimestamp} as evaluated", latest.Timestamp);
-        }
-        catch (TimeoutException ex)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             _logger.LogWarning(ex, "Could not record the reading at {ReadingTimestamp} as evaluated", latest.Timestamp);
         }

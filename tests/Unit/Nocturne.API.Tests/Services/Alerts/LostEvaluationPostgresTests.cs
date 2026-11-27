@@ -225,10 +225,7 @@ public class LostEvaluationPostgresTests(LostEvaluationPostgresTests.Database da
             services.AddSingleton(enricher.Object);
             services.AddSingleton(opened.Object);
             services.AddSingleton(Mock.Of<IExcursionResolutionHandler>());
-            services.AddSingleton(Mock.Of<IUnevaluableRuleNotice>());
-            services.AddSingleton(Mock.Of<IClockAnomalyNotice>());
-            services.AddSingleton(Mock.Of<IAlertChannelNotice>());
-            services.AddSingleton(NoHeldRules.Notice());
+            services.AddSweepServices();
             services.AddSingleton<AlertEngineErrors>();
             services.AddSingleton<ConditionVersionLog>();
             services.AddSingleton<NotTrueRecordingFloor>();
