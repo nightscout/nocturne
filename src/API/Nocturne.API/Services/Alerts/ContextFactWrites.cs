@@ -35,6 +35,7 @@ internal static class ContextFactWrites
     public const string SensorState = "sensor_state";
     public const string ApsDetermination = "aps_determination";
     public const string TargetRange = "target_range";
+    public const string GlucoseSeries = "glucose_series";
 
     /// <param name="EveryWriteAnnounces">
     /// Every write that moves the fact reaches the record-changed event. False where a store writes it
@@ -57,6 +58,10 @@ internal static class ContextFactWrites
     /// instant the engine reports as a next change, so it does not move with the clock either.
     /// <see cref="TargetRange"/> is the schedule entry in effect, which changes at a schedule boundary
     /// with no write; the engine knows no boundary, so a rule that names a target never waits.
+    /// <see cref="GlucoseSeries"/> is moved only by a reading write, including one that leaves the newest
+    /// reading as it was: a late reading inside the window fills a hole. Its window ends at the newest
+    /// reading, not at the clock, and the reading going stale is a next change the engine reports, as
+    /// for <see cref="Glucose"/>, so it does not move with the clock.
     /// </remarks>
     internal readonly record struct FactTrigger(bool EveryWriteAnnounces, bool MovesWithClock);
 
@@ -80,6 +85,7 @@ internal static class ContextFactWrites
         [SensorState] = new(EveryWriteAnnounces: true, MovesWithClock: false),
         [ApsDetermination] = new(EveryWriteAnnounces: true, MovesWithClock: false),
         [TargetRange] = new(EveryWriteAnnounces: true, MovesWithClock: true),
+        [GlucoseSeries] = new(EveryWriteAnnounces: true, MovesWithClock: false),
     };
 
     /// <summary>
@@ -89,7 +95,7 @@ internal static class ContextFactWrites
     /// </summary>
     public static readonly IReadOnlyDictionary<Type, string[]> MovedBy = new Dictionary<Type, string[]>
     {
-        [typeof(SensorGlucose)] = [Glucose, SensorState],
+        [typeof(SensorGlucose)] = [Glucose, SensorState, GlucoseSeries],
         [typeof(MeterGlucose)] = [],
         [typeof(Calibration)] = [],
         [typeof(BGCheck)] = [],
@@ -116,7 +122,8 @@ internal static class ContextFactWrites
     /// Whether the sweep may wait for the next change of a rule that reads <paramref name="fact"/>:
     /// every write that moves it evaluates the rule, and nothing else does (§5.3). Only
     /// <see cref="Glucose"/>, <see cref="Aps"/>, <see cref="Uploader"/>, <see cref="Transmitter"/>,
-    /// <see cref="SensorState"/>, <see cref="ApsDetermination"/> and <see cref="DeviceAges"/> qualify.
+    /// <see cref="SensorState"/>, <see cref="ApsDetermination"/>, <see cref="DeviceAges"/> and
+    /// <see cref="GlucoseSeries"/> qualify.
     /// An unknown fact does not.
     /// </summary>
     public static bool SweepMayWaitFor(string fact) =>

@@ -37,7 +37,8 @@ has exactly one spelling for every property name and enum value. Anything else i
   | `high` | `very_high`; `AlertWeekday`: `sunday` … `saturday`; `TrendBucket`; `SensorState`:
   `warming_up` | `ok` | `calibration_needed` | `error` | `expired` | `no_value`;
   `AlertComparisonOperator`: `>` `>=` `<` `<=` `==`; `ForecastCurve`: `default` | `iob` |
-  `cob` | `uam` | `zt`; `AlertLimitFact`: `latest_glucose` | `target_low` | `target_high`; the
+  `cob` | `uam` | `zt`; `AlertLimitFact`: `latest_glucose` | `target_low` | `target_high`; `AlertWindowExtreme`: `min` |
+  `max`; the
   composite operator, `direction` and `alert_state` `state` words)
 - `StateSpanCategory` and `PumpModeState` are domain enums the rest of the API also
   writes, as their **PascalCase member names** (`"Override"`, `"PumpConnectivity"`,
@@ -93,9 +94,9 @@ this tick):
 | `payload_missing` | a node with no payload for its `type`, or a rule body whose `condition_params` is JSON `null` |
 | `condition_missing` | a `null` slot in a composite's `conditions` |
 | `unknown_field` | a node property other than `type`, `_uid` and its own kind's payload, or a payload property its kind does not read (names match exactly, §1.1), so a misspelt operand such as `timeoutMinutes` or `Value` is not silently dropped. No field is named: the property is the author's text |
-| `field_missing` | a required operand is absent or `null`: every operand except `for_minutes`, `timezone` and `state_span_active` `state`, and the `child` of a `not` or `sustained`. On `threshold`, `predicted` and `eventual_glucose` it is on `value` when neither `value` nor `value_from` is present, and on `fact` when a `value_from` has none (§3, a limit from a fact) |
-| `invalid_field` | a value of the wrong JSON kind, a number out of range, an enum operand that is not a string, or a `timezone` that is not exactly an IANA zone id (§4) |
-| `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `direction`, `alert_state` `state`, `trend` `bucket`, `temp_basal` or `transmitter_battery` `metric`, `pump_state` `mode`, `state_span_active` `category`, a `predicted` `curve`, a `value_from` `fact`, or a `glucose_bucket`, `day_of_week`, `sensor_state`, `min_of` or `max_of` list member |
+| `field_missing` | a required operand is absent or `null`: every operand except `for_minutes`, `timezone` and `state_span_active` `state`, and the `child` of a `not` or `sustained`. On `threshold`, `predicted` and `eventual_glucose` it is on `value` when neither `value` nor `value_from` is present, and on `fact` when a `value_from` has none (§3, a limit from a fact). On `glucose_count` it is on `count` when neither `count` nor `percent` is present |
+| `invalid_field` | a value of the wrong JSON kind, a number out of range, an enum operand that is not a string, or a `timezone` that is not exactly an IANA zone id (§4), a `glucose_count` `count` value that is negative or not whole, or a `percent` value outside 0 to 100 (the field is `count` or `percent`). A problem inside a `glucose_count` `reading`, `count` or `percent` object (an absent, invalid or unknown `operator` or `value`) is reported on that object's name |
+| `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `direction`, `alert_state` `state`, `trend` `bucket`, `temp_basal` or `transmitter_battery` `metric`, `pump_state` `mode`, `state_span_active` `category`, a `predicted` `curve`, a `value_from` `fact`, a `glucose_extreme` `of`, or a `glucose_bucket`, `day_of_week`, `sensor_state`, `min_of` or `max_of` list member |
 | `list_empty` | a composite's `conditions`, a `glucose_bucket` `buckets`, a `day_of_week` `days` or a `sensor_state` `states` that is absent, `null` or empty, or a `predicted` `min_of` or `max_of` that is present and empty |
 | `minutes_not_positive` | a duration `<= 0` that leaves its node never true: `sustained` `minutes`, `signal_loss` `timeout_minutes`, `predicted` `within_minutes` (no prediction is at or before now) |
 | `minutes_negative` | a negative bound on an elapsed time: `staleness` `value`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`. Elapsed time is never negative and an absent anchor reads as infinite, so every operator would compare the same way on every tick. `tracker_age` is exempt: its elapsed time is negative before a scheduled event |
@@ -104,11 +105,12 @@ this tick):
 | `pump_mode_category` | a `state_span_active` on the `PumpMode` category; pump modes are `pump_state`'s |
 | `margin_negative` | a `clear_margin` below `0` (§3, clear margin) |
 | `margin_on_equality` | a `clear_margin` above `0` on an `==` comparison, which has no side to widen (§3, clear margin) |
-| `margin_past_zero` | a `rate_of_change` `clear_margin` above its `rate`, which would carry the limit past zero (§3, clear margin) |
+| `margin_past_zero` | a `rate_of_change` `clear_margin` above its `rate`, or a `glucose_change` one above the size of its `value`, which would carry the limit past zero (§3, clear margin) |
 | `margin_under_sustained` | a `clear_margin` above `0` on a leaf anywhere under a `sustained` (§3, clear margin) |
-| `selector_conflict` | a `predicted` with more than one of `curve`, `min_of` and `max_of` (§3, forecast curves); the field is the second present, in that order |
+| `selector_conflict` | a `predicted` with more than one of `curve`, `min_of` and `max_of` (§3, forecast curves), or a `glucose_count` with both `count` and `percent` (§3, windows); the field is the second present, in that order |
 | `limit_conflict` | a `threshold`, `predicted` or `eventual_glucose` with both `value` and `value_from` (§3, a limit from a fact); the field is `value_from` |
 | `offset_out_of_range` | a `value_from` `offset` more than 1000 either side of `0` (§3, a limit from a fact); the field is `offset` |
+| `window_out_of_range` | a `window_minutes` that is a whole number outside 5 to 180 (§3, windows); the field is `window_minutes` |
 | `self_reference` | a `threshold` whose `value_from` names `latest_glucose`, which compares the reading with itself plus a constant, so its answer never depends on the reading (§3, a limit from a fact); the field is `value_from` |
 
 `clear_margin` is an optional member added after the first release. An engine older than it
@@ -127,6 +129,10 @@ engine older than them: an `unknown_field`, so a rule that selects a curve is sk
 evaluated against `default`. `eventual_glucose` and `carbs_required` are kinds such an engine does
 not have: an `unknown_kind`, so a rule with either is skipped. A `predicted` with no selector reads
 on every engine as it always has.
+
+`glucose_change`, `glucose_count` and `glucose_extreme` (§3, windows) are kinds an engine older than
+them does not have: an `unknown_kind`, so a rule with one is skipped there. Such an engine ignores the
+context's `glucose_series` (§4).
 
 A tree that cannot be evaluated:
 
@@ -235,7 +241,8 @@ the set of (fact, reason) pairs it is unknown by.
   freshness bound, or a determination past the same bound, §3), `ahead_of_clock` (an anchor
   beyond the tolerance ahead of `now`, §5.4, named by the fact that holds it), `unrecognised`
   (a pump mode or a sensor state the engine has no member for, §3), `inexact` (a lower-bound
-  `reservoir` reading that does not decide the comparison) or `sensor_not_ok` (a judged glucose
+  `reservoir` reading that does not decide the comparison, or a window whose missing readings could
+  change the answer, §3, windows) or `sensor_not_ok` (a judged glucose
   leaf whose sensor reports a state other than ok, named by `sensor_state`, §3). A bucket name the engine has no member for reads as an
   absent bucket (§4), so it is `absent`. `pump_suspended` is unknown by `pump` when its guard
   is false and by `state_spans` when its span starts beyond the tolerance ahead.
@@ -300,6 +307,9 @@ as false or true.
 | `sensor_state` | `states: [..]` (`SensorState` names), `for_minutes?` | `SensorState`, `LatestValue`, now | the state at `now` (§4: none once its `until` has passed) is one of `states`; then if `for_minutes` set: `(now - Since).TotalMinutes >= for_minutes` (double) | no state and `LatestValue` present: **false** when every listed state is `no_value` (a reading with a value is not `no_value`), else **unknown** (a state no source reported may hold); no state and no value ⇒ **unknown**; a name the engine has no member for ⇒ **unknown**; `for_minutes` set and `Since` null ⇒ **unknown**; a state not listed ⇒ false. Not gated by the sensor's state: it reads it |
 | `eventual_glucose` | `operator`, `value` (mg/dL) or `value_from` | `ApsDetermination.EventualMgdl`, `ApsDetermination.At`, now, and what `value_from` names | `Compare` | no determination, or one without the value ⇒ **unknown** (`absent`); older than the rule's glucose freshness bound ⇒ **unknown** (`stale`, below) |
 | `carbs_required` | `operator`, `value` (grams) | `ApsDetermination.CarbsRequiredGrams`, `ApsDetermination.At`, now | `Compare` | as `eventual_glucose` |
+| `glucose_change` | `operator`, `value` (mg/dL, signed), `window_minutes` | `GlucoseSeries`, `LatestValue`, `LatestTimestamp`, `SensorState` | `Compare(newest − oldest in the window, op, value)` (below, windows) | as `threshold`, by `glucose` and `sensor_state`; then by `glucose_series`: no reading at `LatestTimestamp` in the series, or fewer than two in the window ⇒ **unknown** (`absent`); a window that starts late ⇒ **unknown** (`inexact`) |
+| `glucose_extreme` | `of` (`min`\|`max`), `operator`, `value` (mg/dL), `window_minutes` | as `glucose_change` | `Compare` of the lowest or highest reading in the window | as `glucose_change` for the reading and the series; a hole that could hide a reading that changes the answer ⇒ **unknown** (`glucose_series`, `inexact`) |
+| `glucose_count` | `reading` (`{operator, value}`, mg/dL), `window_minutes`, exactly one of `count` (`{operator, value}`, readings) and `percent` (`{operator, value}`, 0 to 100) | as `glucose_change` | `Compare` of how many readings in the window meet `reading`, or what percent of them do | as `glucose_extreme` |
 | `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)`; reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, while a Duration start ahead of `now` follows §5.4, so negative `minutes` with `>=` means "within N minutes before the event". For a **Duration** instance, a threshold that already held when the instance was recorded is **false** for that instance: with `>=` when `reference + minutes <= RecordedAt`, with `>` when `reference + minutes < RecordedAt`. So a run entered after the fact does not alert for what it has passed, and a later threshold fires as usual | no active instance for the definition ⇒ **false**, never unknown: a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity). `RecordedAt` null, an **Event** instance (`Scheduled`), or `<`/`<=`/`==` ⇒ nothing is held back. A **Duration** start beyond the clock tolerance ahead ⇒ **unknown** (§5.4), held back or not: the clock rule comes first, since a threshold measured from a start that has not happened yet is not known to have held |
 
 `sleep_session_active` (`is_active`; `SleepSessionActive`; true while the flag equals
@@ -417,14 +427,14 @@ that instant). The empty set is the "no active state" rows.
 | no `X`, an unrecognised mode (with or without other known modes) | true | unknown | false | unknown |
 | no `X`, an unrecognised mode (with or without other known modes) | false | unknown | unknown | unknown |
 
-**Glucose freshness.** `threshold`, `rate_of_change`, `trend` and `glucose_bucket` read their
-glucose fact only while the reading it came from is fresh. A reading's age runs from its
+**Glucose freshness.** `threshold`, `rate_of_change`, `trend`, `glucose_bucket` and the windowed
+leaves (below, windows) read their glucose fact only while the reading it came from is fresh. A reading's age runs from its
 **arrival**, `LatestReceivedAt` (§4), or from `LatestTimestamp` when the context has no
 arrival. The reading is **stale** at `now` when `now - arrival > bound`, compared as exact
 durations: a reading exactly `bound` old is fresh, and one a tick older is stale. So a reading
 that arrives late, from a connector that delivers readings 20 minutes after they were taken, is
 fresh when it arrives and goes stale one bound later, and a real outage reads unknown one bound
-after the last arrival. A stale reading's facts are unknown to these four leaves, as an absent
+after the last arrival. A stale reading's facts are unknown to these leaves, as an absent
 one is. `bound` is the rule's `glucose_freshness_minutes`, a whole number of minutes from 1 to
 1440, or **11 minutes** when the rule has none; any other value is an error in the `evaluate`
 and `replay` envelopes. An evaluation with no rule (`evaluate_node`, the snooze) uses 11
@@ -564,9 +574,44 @@ the reservoir holds at least `b`.
     evaluation. An image that does not know not-true instants evaluates without recording
     them at all; the host's raise of §7 covers its evaluations.
 
+**Windows.** `glucose_change`, `glucose_count` and `glucose_extreme` read the recent readings
+(`GlucoseSeries`, §4) in a window of `window_minutes` (a whole number from 5 to 180) that **ends at
+the newest reading**: the readings from `LatestTimestamp − window_minutes` to `LatestTimestamp`,
+both ends included, compared as exact durations. The window does not move between readings, so these
+leaves are not wall-clock (§5.1). Each is judged as `threshold` is: the sensor's state first, then the
+newest reading's value and its freshness, so an absent or stale reading is unknown by `glucose` and a
+state that is not ok by `sensor_state`. Then:
+
+- The series must hold a reading at exactly `LatestTimestamp`. A series without one (another stream's
+  readings, or none) is unknown by `glucose_series`, `absent`.
+- A **hole** is a stretch of the window with no reading that is longer than the rule's glucose
+  freshness bound (above): from the window's opening to its oldest reading (the window **starts
+  late**), or between two readings in a row. A stretch exactly the bound long is not a hole.
+- `glucose_change` compares the newest reading less the oldest reading in the window, in mg/dL,
+  signed: `{operator: "<=", value: -30, window_minutes: 15}` is a fall of at least 30 in 15 minutes.
+  Fewer than two readings in the window is unknown by `glucose_series`, `absent`. A window that
+  starts late would measure a shorter time than the rule names, so it is unknown by `glucose_series`,
+  `inexact`, whatever the readings. A hole between readings does not change the answer.
+- `glucose_extreme` compares the lowest (`of: min`) or highest (`of: max`) reading in the window.
+  With a hole, a missing reading could be lower than the lowest read or higher than the highest, so
+  the extreme read is a bound: the leaf is true or false only where every value past it gives the
+  same answer (`max > 250` with a 260 read is true; `max < 250` with a 240 read is unknown), and
+  otherwise unknown by `glucose_series`, `inexact`.
+- `glucose_count` counts the readings in the window that meet `reading` (`{operator, value}`,
+  mg/dL), and compares the count with `count` (`{operator, value}`, a whole number from 0), or the
+  percent of the window's readings that meet it with `percent` (`{operator, value}`, 0 to 100).
+  Exactly one of `count` and `percent` is present. With a hole, any number of readings of either kind
+  could be missing: the count read is a lower bound, decided as `glucose_extreme`'s highest reading
+  is, and the percent could be any from 0 to 100, so it is known only where every percent gives the
+  same answer. Otherwise it is unknown by `glucose_series`, `inexact`.
+
+A windowed leaf reports no met point (above, met by). Its truth holds since `LatestTimestamp`, as
+`threshold`'s does (`sustained`, below).
+
 **Clear margin.** `threshold`, `rate_of_change` (on `rate`), `predicted`, `iob`, `cob`, `reservoir`,
 `pump_battery`, `uploader_battery`, `transmitter_battery`, `temp_basal`, `sensitivity_ratio`,
-`eventual_glucose` and `carbs_required` take an optional `clear_margin`: a decimal in the unit of the leaf's value (mg/dL for glucose,
+`eventual_glucose`, `carbs_required`, `glucose_change` and `glucose_extreme` take an optional
+`clear_margin`: a decimal in the unit of the leaf's value (mg/dL for glucose,
 mg/dL per minute for a rate). It stops an alert chattering at its limit: open below 70, clear only
 at 75. The elapsed-time leaves (`staleness`, `site_age`, `sensor_age`, `loop_stale`,
 `loop_enaction_stale`, `tracker_age`, `time_since_last_*`, `signal_loss`, any `for_minutes`) take
@@ -575,8 +620,10 @@ the property is an unknown field on them (§1.4). Absent or `0` is no margin, an
 evaluates exactly as without the member. A margin is read as `value` is: a JSON number in the
 decimal range (else `invalid_field`), never negative (`margin_negative`), never above `0` on an
 `==` comparison, which has no side to widen (`margin_on_equality`), never above a `rate_of_change`
-leaf's `rate` (`margin_past_zero`), and never above `0` on a leaf anywhere under a `sustained`
-(`margin_under_sustained`, below).
+leaf's `rate`, nor above the size of a `glucose_change` leaf's `value`, whichever way the operator points, since
+under a `not` the margin moves the limit the other way (`margin_past_zero`), and never above `0` on a leaf anywhere under a `sustained`
+(`margin_under_sustained`, below). `glucose_count` takes none: its tally is a count, not a value
+in the unit of a reading.
 
 - **Open.** A rule's excursion is **open** when its tracker state (§6) is `active` or `hysteresis`
   with an excursion: firing, or open and in its wait. Idle, idle awaiting re-arm (§6.3), a rule
@@ -653,7 +700,7 @@ starts the run later, never earlier.
 | `staleness`, `signal_loss`, `site_age`, `sensor_age`, `tracker_age`, `loop_stale`, `loop_enaction_stale`, `time_since_last_carb`, `time_since_last_bolus` with `>=` or `>` (`signal_loss` is `>=`) | the first instant the elapsed time since the anchor met the bound, found by the comparison evaluation makes (§1.3, §5.3), on or after the anchor and rounded up to the 100 ns tick; the anchor itself when the comparison already held there |
 | the same kinds with `<`, `<=` or `==` | nothing: they hold before a bound, not from one |
 | `threshold` against `target_low` or `target_high`, and `predicted` against either | nothing: the target can move at a schedule boundary after the reading |
-| `threshold`, `rate_of_change`, `trend`, `glucose_bucket`, `predicted` otherwise | `LatestTimestamp`, the newest reading's time, read as the leaf reads its reading (§3 glucose freshness, §4 selection); nothing without one. `predicted` reports it too, although its points are not facts of the reading (§3) |
+| `threshold`, `rate_of_change`, `trend`, `glucose_bucket`, `predicted` otherwise, `glucose_change`, `glucose_count`, `glucose_extreme` | `LatestTimestamp`, the newest reading's time, read as the leaf reads its reading (§3 glucose freshness, §4 selection); nothing without one. `predicted` reports it too, although its points are not facts of the reading (§3) |
 | `alert_state`, with or without `for_minutes` | nothing: the other alert's trigger and acknowledgement are its excursion's, not a run of the facts this rule reads |
 | `iob`, `cob`, `reservoir`, `pump_battery`, `uploader_battery`, `transmitter_battery`, `sensitivity_ratio`, `eventual_glucose`, `carbs_required`, `time_of_day`, `day_of_week`, `sleep_session_active` | nothing |
 | `composite` `and` | the latest of its children's instants when every child reports one, else nothing |
@@ -803,6 +850,17 @@ in §3 plus:
   `default` is never extended, so it stays as it has always been sent. A single `curve`
   gives the same truth and the same met point either way: every held point equals the last kept
   one, which comes first.
+- **Recent readings.** `GlucoseSeries` (wire `glucose_series`, an array of `{at, mgdl}`) is what the
+  windowed leaves read (§3, windows). The backend fills it only for a rule that reads it: every
+  reading with a glucose value of the newest reading's stream and uploader, chosen as `TrendRate`
+  chooses its earlier reading (above): a copy deduplication hides and a reading of a bucket its
+  stream lost to another stream are in it, since with two apps uploading one CGM the uploader's own
+  copy is often the hidden one, and a copy in the newest reading's own duplicate group is not. It
+  runs from 180 minutes before the newest reading (the longest window) up to and including the
+  newest reading itself. A reading the
+  selection tolerance leaves out of the context (above) is not in the series. Replay fills it per
+  tick from the readings it loads, by the same rule. The engine reads the points in any order and
+  ignores one outside a window; two at one instant are one point, the last listed.
 - **`TargetLow` and `TargetHigh`** (wire `target_low`, `target_high`, mg/dL decimals) are the ends of
   the profile's target range in effect at `now`, which a limit can name (§3, a limit from a fact). The
   backend fills them only for a rule that names one, from the same lookup that places
@@ -942,8 +1000,8 @@ past it they read unknown, as they would on any evaluation then.
 
 A rule whose `on_unknown` is `met` or `not_met` (§6.4) is wall-clock as well when its root kind,
 a node of its condition tree or, while auto-resolve is enabled, a node of its auto-resolve tree
-is `threshold`, `rate_of_change`, `trend`, `glucose_bucket`, `eventual_glucose` or
-`carbs_required`: such a leaf turns unknown when its reading or determination goes stale, with only `now` advancing, and the rule reads that as a known value that
+is `threshold`, `rate_of_change`, `trend`, `glucose_bucket`, `eventual_glucose`,
+`carbs_required`, `glucose_change`, `glucose_count` or `glucose_extreme`: such a leaf turns unknown when its reading or determination goes stale, with only `now` advancing, and the rule reads that as a known value that
 moves the tracker. `references_wall_clock` reads the rule's `on_unknown` for this.
 
 Under `hold` a rule needs no evaluation at that instant, unless another of its nodes changes
@@ -989,8 +1047,8 @@ reads a rule's kinds the same way.
 
 | Fact | `SensorContext` fields | Kinds that read it |
 |---|---|---|
-| `glucose` | `LatestValue`, `LatestTimestamp`, `LatestReceivedAt`, `LastReadingAt`, `TrendRate`, `TrendBucket`, `GlucoseBucket` | `threshold`, `rate_of_change`, `signal_loss`, `staleness`, `trend`, `glucose_bucket` |
-| `sensor_state` | `SensorState` | `threshold`, `rate_of_change`, `trend`, `glucose_bucket`, `sensor_state` |
+| `glucose` | `LatestValue`, `LatestTimestamp`, `LatestReceivedAt`, `LastReadingAt`, `TrendRate`, `TrendBucket`, `GlucoseBucket` | `threshold`, `rate_of_change`, `signal_loss`, `staleness`, `trend`, `glucose_bucket`, `glucose_change`, `glucose_count`, `glucose_extreme` |
+| `sensor_state` | `SensorState` | `threshold`, `rate_of_change`, `trend`, `glucose_bucket`, `sensor_state`, `glucose_change`, `glucose_count`, `glucose_extreme` |
 | `predictions` | `Predictions`, `PredictionCurves` | `predicted` |
 | `insulin` | `IobUnits`, `LastBolusAt`, `ActiveTempBasal` | `iob`, `temp_basal`, `time_since_last_bolus` |
 | `carbs` | `CobGrams`, `LastCarbAt` | `cob`, `time_since_last_carb` |
@@ -1006,6 +1064,7 @@ reads a rule's kinds the same way.
 | `do_not_disturb` | `ActiveDoNotDisturb` | `do_not_disturb` |
 | `time_zone` | `TenantTimeZoneId` | `time_of_day`, `day_of_week`, `glucose_bucket` |
 | `aps_determination` | `ApsDetermination` | `eventual_glucose`, `carbs_required` |
+| `glucose_series` | `GlucoseSeries` | `glucose_change`, `glucose_count`, `glucose_extreme` |
 | `target_range` | `TargetLow`, `TargetHigh` | a `threshold`, `predicted` or `eventual_glucose` whose `value_from` names `target_low` or `target_high` |
 
 The containers `composite`, `not` and `sustained` read no fact; a `sustained` timer is
@@ -1178,7 +1237,7 @@ even when the root does not. Containers contribute only through their children, 
 | `signal_loss`, `staleness`, `site_age`, `sensor_age`, `tracker_age`, `loop_stale`, `loop_enaction_stale`, `time_since_last_carb`, `time_since_last_bolus` | The first instant the elapsed time since the anchor, computed exactly as evaluation computes it (§1.3), changes the comparison: where it reaches the bound for `<` and `>=`, where it passes it for `<=` and `>`, both for `==`. |
 | `alert_state`, `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active`, `sensor_state` with `for_minutes` | On the active side, with the span or alert present (for `sensor_state`, a listed state with a `since`), the first instant it has held for `for_minutes`; for `pump_state` over an unrecognised mode that is where the leaf turns from false to unknown. |
 | `sustained` with a run (including one started by this evaluation) | The first instant `minutes` have passed since the run's start, whatever its child returned. The start can be before the evaluation that set it (§3), so this can be well before `now + minutes`; once passed it contributes nothing. Without a run, only what its child contributes. |
-| `threshold`, `rate_of_change`, `trend`, `glucose_bucket` with their fact present, the sensor not reported other than ok, and the reading fresh (§3) | The instant the reading goes stale: where the time since its arrival passes the rule's freshness bound, so arrival `+ bound` on the tick grid, and the next tick when that is `now`. |
+| `threshold`, `rate_of_change`, `trend`, `glucose_bucket`, `glucose_change`, `glucose_count`, `glucose_extreme` with their fact present (the newest reading's value for a windowed leaf), the sensor not reported other than ok, and the reading fresh (§3) | The instant the reading goes stale: where the time since its arrival passes the rule's freshness bound, so arrival `+ bound` on the tick grid, and the next tick when that is `now`. |
 | `predicted`, `eventual_glucose` whose limit names `latest_glucose`, with the reading present, the sensor not reported other than ok, and the reading fresh | The instant the reading goes stale, as for `threshold`. |
 | `eventual_glucose`, `carbs_required` with the determination and its value present, and the determination fresh (§3) | The instant it goes stale: `At + bound` on the tick grid, as for a reading. |
 | `time_of_day` | The next instant the wall clock in the resolved zone (§4) reads `from` or `to`. An edge inside a DST gap is the instant the gap ends; an edge inside a fold is both instants it is read and the fold itself, where the wall clock steps back over it. |

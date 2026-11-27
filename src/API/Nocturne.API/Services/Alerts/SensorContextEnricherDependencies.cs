@@ -46,4 +46,5 @@ internal sealed record SensorContextEnricherDependencies(
     ITrackerRepository Trackers,
     IReservoirEstimationService Reservoir,
     ISensorStateReportRepository SensorStates,
+    ICanonicalGlucoseService CanonicalGlucose,
     IOptions<AlertEvaluationOptions> Options);

@@ -91,6 +91,7 @@ public class AlertReplayServiceLeafLogTests
             new Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository>().Object,
             new Mock<Nocturne.API.Services.Devices.IReservoirEstimationService>().Object,
             Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(),
+            Mock.Of<Nocturne.Core.Contracts.Glucose.ICanonicalGlucoseService>(),
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             enricherDeps,

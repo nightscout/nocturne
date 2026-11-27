@@ -77,6 +77,13 @@ public class AlertSweepJobSnoozeTests
             .ReturnsAsync((SensorGlucose reading, DateTime since, CancellationToken _) => _readings
                 .Where(r => r.Timestamp < reading.Timestamp && r.Timestamp >= since)
                 .MaxBy(r => r.Timestamp));
+        _canonical
+            .Setup(c => c.GetStreamSeriesAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SensorGlucose newest, DateTime since, CancellationToken _) => _readings
+                .Where(r => r.Timestamp <= newest.Timestamp && r.Timestamp >= since)
+                .OrderBy(r => r.Timestamp)
+                .Select(r => (r, (Guid?)null))
+                .ToList());
     }
 
     private static SnoozedInstanceSnapshot Instance(
@@ -115,7 +122,10 @@ public class AlertSweepJobSnoozeTests
                 It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
             .Callback<SensorContext, IEnumerable<AlertRuleSnapshot>, CancellationToken>(
                 (ctx, _, _) => _enricherInputs.Add(ctx))
-            .ReturnsAsync((SensorContext ctx, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) => ctx);
+            .Returns(async (SensorContext ctx, IEnumerable<AlertRuleSnapshot> _, CancellationToken ct) =>
+                RecentReadings.NewestOf(ctx) is { } newest
+                    ? ctx with { GlucoseSeries = await RecentReadings.ReadAsync(newest, _canonical.Object, ct) }
+                    : ctx);
 
         var clock = new FakeTimeProvider(new DateTimeOffset(Now));
         var services = new ServiceCollection();
@@ -365,6 +375,27 @@ public class AlertSweepJobSnoozeTests
         context.LatestValue.Should().Be(72m);
         context.LatestTimestamp.Should().Be(Now.AddMinutes(-2));
         context.TrendRate.Should().Be(1.5m);
+    }
+
+    private const string ExtendWhileTheLowestOf15MinutesIsBelow70 = """
+        {"snooze":{"smartSnooze":true,"conditions":[
+          {"type":"glucose_extreme","glucose_extreme":{"of":"min","operator":"<","value":70,"window_minutes":15}}]}}
+        """;
+
+    /// <summary>
+    /// The snooze context names its fresh reading, so a windowed condition reads that reading's
+    /// recent readings rather than none, which it would read as unknown and clear the snooze on.
+    /// </summary>
+    [NativeFact]
+    public async Task AWindowedCondition_ReadsTheRecentReadingsOfTheFreshReading()
+    {
+        _readings = [Reading(12, 64), Reading(7, 72), Reading(2, 75)];
+        var instance = Instance(ExtendWhileTheLowestOf15MinutesIsBelow70);
+
+        await SweepAsync(instance);
+
+        ShouldBeExtended(instance);
+        _enricherInputs.Should().ContainSingle().Which.LatestSource.Should().Be(ReadingSource.Of(_readings[2]));
     }
 
     [NativeFact]

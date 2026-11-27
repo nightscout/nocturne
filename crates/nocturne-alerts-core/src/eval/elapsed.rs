@@ -304,7 +304,10 @@ pub(crate) fn clock_leaf(
         | Payload::SensitivityRatio(_)
         | Payload::GlucoseBucket(_)
         | Payload::DayOfWeek(_)
-        | Payload::SleepSessionActive(_) => return None,
+        | Payload::SleepSessionActive(_)
+        | Payload::GlucoseChange(_)
+        | Payload::GlucoseCount(_)
+        | Payload::GlucoseExtreme(_) => return None,
     };
     Some(leaf)
 }

@@ -13,7 +13,7 @@ describe("valueStep", () => {
   });
 
   it("steps a glucose threshold by 1 mg/dL and 0.1 mmol/L", () => {
-    for (const kind of ["threshold", "predicted", "eventual_glucose"]) {
+    for (const kind of ["threshold", "predicted", "eventual_glucose", "glucose_change", "glucose_extreme", "glucose_count"]) {
       expect(valueStep(kind, "mg/dl")).toBe(1);
       expect(valueStep(kind, "mmol")).toBe(0.1);
     }

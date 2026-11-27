@@ -86,6 +86,15 @@ describe("conditionIssuesMessage", () => {
 			["list_empty", "min_of"],
 			["list_empty", "max_of"],
 			["unknown_value", "curve"],
+			["unknown_value", "of"],
+			["selector_conflict", "percent"],
+			["field_missing", "count"],
+			["field_missing", "reading"],
+			["invalid_field", "count"],
+			["invalid_field", "percent"],
+			["window_out_of_range", "window_minutes"],
+			["field_missing", "window_minutes"],
+			["invalid_field", "window_minutes"],
 		] as const) {
 			expect(
 				conditionIssuesMessage(rejected(400, [issue(reason, field)])),
@@ -103,7 +112,7 @@ describe("conditionIssuesMessage", () => {
 		).toBe("A clear margin must be a number, 0 or more.");
 		expect(
 			conditionIssuesMessage(rejected(400, [issue("margin_past_zero", "clear_margin")]))
-		).toBe("A clear margin on a rate of change cannot be more than the rate.");
+		).toBe("A clear margin on a rate of change or a glucose change cannot be more than the rate or the change.");
 		expect(
 			conditionIssuesMessage(rejected(400, [issue("margin_under_sustained", "clear_margin")]))
 		).toBe(
@@ -119,6 +128,27 @@ describe("conditionIssuesMessage", () => {
 		);
 		expect(conditionIssuesMessage(rejected(400, [issue("list_empty", "min_of")]))).toBe(
 			"A “lowest of” forecast needs at least one curve chosen."
+		);
+	});
+
+	it("says what is wrong with a condition on a time window", () => {
+		expect(conditionIssuesMessage(rejected(400, [issue("window_out_of_range", "window_minutes")]))).toBe(
+			"A time window must be from 5 to 180 minutes."
+		);
+		expect(conditionIssuesMessage(rejected(400, [issue("selector_conflict", "percent")]))).toBe(
+			"A reading count condition can compare a number of readings or a percent of readings, not both."
+		);
+		expect(conditionIssuesMessage(rejected(400, [issue("field_missing", "count")]))).toBe(
+			"A reading count condition needs a number of readings or a percent of readings, with a comparison and a value."
+		);
+		expect(conditionIssuesMessage(rejected(400, [issue("invalid_field", "count")]))).toBe(
+			"A number of readings needs a comparison and a whole number, 0 or more."
+		);
+		expect(conditionIssuesMessage(rejected(400, [issue("invalid_field", "percent")]))).toBe(
+			"A percent of readings needs a comparison and a number from 0 to 100."
+		);
+		expect(conditionIssuesMessage(rejected(400, [issue("unknown_value", "reading")]))).toBe(
+			"A reading count condition needs a comparison and a glucose level for each reading."
 		);
 	});
 

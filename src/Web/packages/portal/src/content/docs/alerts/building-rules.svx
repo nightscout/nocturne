@@ -224,7 +224,8 @@ When a rule with **Wait** cannot know its condition, the rules list and the rule
 page show **Waiting** and the time the wait started. They also show each data
 source that has no usable data, and the cause. The cause is one of these:
 missing, too old, has a time in the future, has a value that Nocturne does not
-know, not exact (for example a pump that reports "50+" units), or not OK. Not OK is for the sensor state (see
+know, not exact (for example a pump that reports "50+" units, or a gap in the
+readings of a [time window](#time-windows)), or not OK. Not OK is for the sensor state (see
 [When the sensor is not OK](#when-the-sensor-is-not-ok)). An open alert that waits
 shows the same in the alert banner.
 
@@ -251,8 +252,8 @@ same device and source.
 When the sensor reports warm-up, a necessary calibration, an error or the end of
 its life, Nocturne does not use the glucose value. Nocturne also does not use a
 glucose value when the newest reading arrives with no value, from any source. The
-conditions on the glucose value, rate of change, trend and glucose range then
-cannot know if they are true.
+conditions on the glucose value, rate of change, trend, glucose range and time
+windows then cannot know if they are true.
 
 - A rule with **Wait** waits and shows **Waiting**, with the cause "Sensor state:
   not OK". It does not open an alert on a value from the warm-up, and it does not
@@ -274,8 +275,10 @@ tells you when readings arrive with no glucose value for 30 minutes.
 
 The rule counts a glucose reading as missing when Nocturne received it more than this
 number of minutes ago. This applies to conditions on the glucose value, rate of
-change, trend and glucose range. It does not apply to signal loss, data age,
-predicted glucose or Smart snooze conditions.
+change, trend, glucose range and time windows. It does not apply to signal loss,
+data age, predicted glucose or Smart snooze conditions. In a time window, a gap in
+the readings that is longer than this can make the condition unknown (see
+[Time windows](#time-windows)).
 
 The same number of minutes applies to the newest result of your loop, for the
 **Eventual glucose** and **Carbs needed** conditions. Nocturne counts the result as
@@ -295,8 +298,10 @@ condition's actions menu and select **Add a clear margin**. A condition can have
 a margin when it compares a value with a number, or with a target or the current
 glucose (see [Compare with a target or the latest glucose](#compare-with-a-target-or-the-latest-glucose)). These are glucose, rate of
 change, predicted glucose, insulin on board, carbs on board and reservoir. Pump
-battery, uploader battery, transmitter, temp basal, sensitivity, eventual glucose
-and carbs needed can also have one. Conditions about time, such as signal loss or site age, cannot have one.
+battery, uploader battery, transmitter, temp basal, sensitivity, eventual glucose,
+carbs needed, glucose change and lowest or highest glucose can also have one.
+Conditions about time, such as signal loss or site age, cannot have one. A reading
+count cannot have one, because it compares a number of readings, not a value.
 
 For example, a condition "glucose below 70 mg/dL" with a clear margin of 5 mg/dL:
 
@@ -427,6 +432,53 @@ added.
 
 This section explains what each choice does. It does not say which target, amount
 or condition is right for you. Work these out with your diabetes care team.
+
+### Time windows
+
+The **Glucose change**, **Lowest or highest glucose** and **Reading count**
+conditions read the recent CGM readings in a time window. You set the length of
+the window in minutes, from 5 to 180.
+
+- The window ends at the newest reading, not at the current time. A window of 15
+  minutes holds the readings from 15 minutes before the newest reading up to the
+  newest reading. It includes the readings at the two ends.
+- The newest reading must be usable, as for the **Glucose** condition. If it is
+  missing or too old, or the sensor is not OK, the condition does not know if it
+  is true (see [When the sensor is not OK](#when-the-sensor-is-not-ok)).
+- A gap is a time in the window with no reading that is longer than the
+  [minutes until a glucose reading counts as missing](#minutes-until-a-glucose-reading-counts-as-missing).
+  The time from the start of the window to its first reading is also a gap when
+  it is that long. The time after the newest reading is not part of the window,
+  so it is not a gap.
+
+A gap makes the condition unknown only when the missing readings can change the
+answer:
+
+- **Glucose change** uses the oldest reading in the window. If the first reading
+  comes late in the window, the change is over a shorter time than the rule
+  shows. Then the condition does not know if it is true. A gap between two
+  readings does not change the answer. With fewer than two readings in the
+  window, the condition does not know if it is true.
+- **Lowest or highest glucose**: a missing reading can be lower than the lowest
+  reading or higher than the highest. For example, "highest more than 250" with a
+  reading of 260 is true, because no missing reading can make it false. "Highest
+  less than 250" with a highest reading of 240 is not known.
+- **Reading count**: each missing reading can meet the comparison or not. The
+  condition is known only when all possible counts give the same answer. For
+  example, "3 or more readings below 70" with 3 readings below 70 is true. A
+  percent with a gap is known only when all percents from 0 to 100 give the
+  same answer.
+
+When the condition does not know if it is true, a rule with **Wait** waits and
+shows "Recent glucose readings: not exact" for a gap. It shows "Recent glucose
+readings: missing" when the window has too few readings. The limit of 24 hours
+applies (see [While a rule waits](#while-a-rule-waits)).
+
+When one of these conditions starts an alert, the alert does not show the
+readings that made it true.
+
+This section explains what a time window does. It does not say which window or
+condition is right for you. Work these out with your diabetes care team.
 
 ## Testing a rule
 

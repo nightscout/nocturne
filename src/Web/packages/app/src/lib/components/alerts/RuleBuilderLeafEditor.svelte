@@ -29,6 +29,7 @@
     tempBasalMetricLabel,
     transmitterBatteryMetricLabel,
     trendBucketLabel,
+    windowExtremeLabel,
   } from "./alert-labels.svelte";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import { untrack } from "svelte";
@@ -59,6 +60,11 @@
     isLimitSource,
     limitSource,
     setLimitSource,
+    AlertWindowExtreme,
+    WINDOW_MINUTES_SHOWN,
+    windowTally,
+    setWindowTally,
+    type WindowTally,
   } from "./types";
   import { AlertComparisonOperator } from "@nocturne/api-client";
 
@@ -96,6 +102,8 @@
       case "threshold":
       case "predicted":
       case "eventual_glucose":
+      case "glucose_change":
+      case "glucose_extreme":
         return bg(mgdl);
       case "rate_of_change":
         return convertRateToDisplayUnits(mgdl, glucoseUnits.current);
@@ -110,6 +118,8 @@
       case "threshold":
       case "predicted":
       case "eventual_glucose":
+      case "glucose_change":
+      case "glucose_extreme":
         return convertFromDisplayUnits(entered, glucoseUnits.current);
       case "rate_of_change":
         return convertRateFromDisplayUnits(entered, glucoseUnits.current);
@@ -160,6 +170,19 @@
     AlertLimitFact.TargetHigh,
     AlertLimitFact.LatestGlucose,
   ];
+
+  function windowTallyLabel(tally: WindowTally): string {
+    switch (tally) {
+      case "count":
+        return "Number";
+      case "percent":
+        return "Percent";
+    }
+  }
+
+  function isWindowTally(value: string): value is WindowTally {
+    return value === "count" || value === "percent";
+  }
 
   function isCurveChoice(value: string): value is CurveChoice {
     return value === "curve" || value === "min_of" || value === "max_of";
@@ -296,6 +319,64 @@
       If your profile has no target range, this condition does not know if it is true.
     </span>
   {/if}
+{/snippet}
+
+{#snippet comparison(p: { operator?: string }, label: string)}
+  <Select.Root
+    type="single"
+    value={p.operator ?? ">="}
+    onValueChange={(v) => {
+      p.operator = v;
+    }}
+  >
+    <Select.Trigger size="sm" class="w-28" aria-label={label}>
+      {operatorLabel(p.operator ?? ">=")}
+    </Select.Trigger>
+    <Select.Content>
+      {#each OPERATORS as op (op)}
+        <Select.Item value={op} label={operatorLabel(op)} />
+      {/each}
+    </Select.Content>
+  </Select.Root>
+{/snippet}
+
+{#snippet glucoseValue(p: { value?: number }, label: string)}
+  <Input
+    type="number"
+    aria-label={label}
+    step={valueStep(node.type)}
+    size="sm"
+    class="w-20 text-right tabular-nums"
+    value={bg(p.value ?? 0)}
+    oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+      p.value = convertFromDisplayUnits(
+        parseNumber(e.currentTarget.value, bg(p.value ?? 0)),
+        glucoseUnits.current,
+      );
+    }}
+  />
+{/snippet}
+
+{#snippet windowMinutes(p: { window_minutes?: number })}
+  <span class="text-xs text-muted-foreground">in</span>
+  <Input
+    type="number"
+    aria-label="Window minutes"
+    min="5"
+    max="180"
+    step="1"
+    size="sm"
+    class="w-16 text-right tabular-nums"
+    value={p.window_minutes ?? WINDOW_MINUTES_SHOWN}
+    oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+      p.window_minutes = parseNumber(e.currentTarget.value, p.window_minutes ?? WINDOW_MINUTES_SHOWN);
+    }}
+  />
+  <span class="text-xs text-muted-foreground">min</span>
+{/snippet}
+
+{#snippet windowNote()}
+  <span class="w-full text-xs text-muted-foreground">The time window ends at the newest reading.</span>
 {/snippet}
 
 <div class="flex flex-wrap items-center gap-1.5">
@@ -475,6 +556,86 @@
       }}
     />
     <span class="text-xs text-muted-foreground">{bgLabel()}/min</span>
+  {:else if node.type === "glucose_change" && node.glucose_change}
+    {@const change = node.glucose_change}
+    {@render comparison(change, "Comparison")}
+    {@render glucoseValue(change, "Value")}
+    <span class="text-xs text-muted-foreground">{bgLabel()}</span>
+    {@render windowMinutes(change)}
+    <span class="w-full text-xs text-muted-foreground">
+      The time window ends at the newest reading. The change is the newest reading minus the oldest
+      reading in the window. A fall is a negative number.
+    </span>
+  {:else if node.type === "glucose_extreme" && node.glucose_extreme}
+    {@const extreme = node.glucose_extreme}
+    <Select.Root
+      type="single"
+      value={extreme.of ?? AlertWindowExtreme.Min}
+      onValueChange={(v) => {
+        if (isStringEnumMember(AlertWindowExtreme, v)) extreme.of = v;
+      }}
+    >
+      <Select.Trigger size="sm" class="w-24" aria-label="Lowest or highest">
+        {windowExtremeLabel(extreme.of ?? AlertWindowExtreme.Min)}
+      </Select.Trigger>
+      <Select.Content>
+        {#each Object.values(AlertWindowExtreme) as of (of)}
+          <Select.Item value={of} label={windowExtremeLabel(of)} />
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <span class="text-xs text-muted-foreground">glucose</span>
+    {@render windowMinutes(extreme)}
+    {@render comparison(extreme, "Comparison")}
+    {@render glucoseValue(extreme, "Value")}
+    <span class="text-xs text-muted-foreground">{bgLabel()}</span>
+    {@render windowNote()}
+  {:else if node.type === "glucose_count" && node.glucose_count}
+    {@const count = node.glucose_count}
+    {@const tally = windowTally(count)}
+    {@const compared = tally === "percent" ? count.percent : count.count}
+    <Select.Root
+      type="single"
+      value={tally}
+      onValueChange={(v) => {
+        if (isWindowTally(v)) setWindowTally(count, v);
+      }}
+    >
+      <Select.Trigger size="sm" class="w-28" aria-label="Number or percent">
+        {windowTallyLabel(tally)}
+      </Select.Trigger>
+      <Select.Content>
+        {#each ["count", "percent"] as const as option (option)}
+          <Select.Item value={option} label={windowTallyLabel(option)} />
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <span class="text-xs text-muted-foreground">of readings</span>
+    {#if count.reading}
+      {@render comparison(count.reading, "Reading comparison")}
+      {@render glucoseValue(count.reading, "Reading value")}
+      <span class="text-xs text-muted-foreground">{bgLabel()}</span>
+    {/if}
+    {@render windowMinutes(count)}
+    {#if compared}
+      <span class="text-xs text-muted-foreground">is</span>
+      {@render comparison(compared, "Comparison")}
+      <Input
+        type="number"
+        aria-label={tally === "percent" ? "Percent" : "Number of readings"}
+        min="0"
+        max={tally === "percent" ? "100" : undefined}
+        step="1"
+        size="sm"
+        class="w-16 text-right tabular-nums"
+        value={compared.value ?? 0}
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+          compared.value = parseNumber(e.currentTarget.value, compared.value ?? 0);
+        }}
+      />
+      <span class="text-xs text-muted-foreground">{tally === "percent" ? "%" : "readings"}</span>
+    {/if}
+    {@render windowNote()}
   {:else if node.type === "trend" && node.trend}
     <Select.Root
       type="single"
@@ -1125,7 +1286,11 @@
     <span class="text-xs text-muted-foreground">
       {node.type === "rate_of_change"
         ? `${bgLabel()}/min`
-        : node.type === "threshold" || node.type === "predicted" || node.type === "eventual_glucose"
+        : node.type === "threshold" ||
+            node.type === "predicted" ||
+            node.type === "eventual_glucose" ||
+            node.type === "glucose_change" ||
+            node.type === "glucose_extreme"
           ? bgLabel()
           : leafSuffix(node.type)}
     </span>

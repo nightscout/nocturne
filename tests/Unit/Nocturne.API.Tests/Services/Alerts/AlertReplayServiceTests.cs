@@ -96,6 +96,7 @@ public class AlertReplayServiceTests
             new Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository>().Object,
             _reservoirEstimation.Object,
             Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(),
+            Mock.Of<Nocturne.Core.Contracts.Glucose.ICanonicalGlucoseService>(),
             Options.Create(new AlertEvaluationOptions()));
         _enricher = new SensorContextEnricher(
             enricherDeps,
@@ -213,6 +214,137 @@ public class AlertReplayServiceTests
         imported.LatestReceivedAt.Should().BeNull("imported history was not received by live as it came");
         engine.Input.Ticks.Single(t => t.At == windowStart.AddMinutes(23.5)).Context.LatestReceivedAt
             .Should().Be(windowStart.AddMinutes(23.5));
+    }
+
+    /// <summary>
+    /// Each tick carries the recent readings of its newest reading, selected as live selects them
+    /// from the readings replay walks: its stream and uploader with a value, back 180 minutes from it,
+    /// those before the window included, and only those that had arrived by the tick
+    /// (docs/alerts/engine-semantics.md §4, recent readings).
+    /// </summary>
+    [NativeFact]
+    public async Task Each_tick_carries_the_recent_readings_that_had_arrived_by_it()
+    {
+        var windowStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new AlertRuleSnapshot(Guid.NewGuid(), Guid.NewGuid(), "fall", AlertConditionType.GlucoseChange,
+                    """{"operator":"<=","value":-30,"window_minutes":15}""", AlertRuleSeverity.Warning, "{}", 0,
+                    AutoResolveEnabled: false, AutoResolveParams: null),
+            });
+        var otherUploader = Reading(windowStart.AddMinutes(3), 300);
+        otherUploader.DataSource = "xdrip";
+        SetupReadings(
+            Reading(windowStart.AddMinutes(-171), 155),
+            Reading(windowStart.AddMinutes(-170), 150),
+            Reading(windowStart.AddMinutes(2), 0),
+            otherUploader,
+            Reading(windowStart.AddMinutes(5), 120),
+            Arriving(windowStart.AddMinutes(8), 115, TimeSpan.FromMinutes(12)),
+            Reading(windowStart.AddMinutes(10), 100));
+        var engine = new CapturingReplayEngine();
+        var sut = new AlertReplayService(
+            _alertRepository.Object, _dndWindows.Object, _glucoseRepository.Object, _enricher,
+            _tenantAccessor, Options.Create(new AlertEvaluationOptions()), engine,
+            new ImportedHistory(_glucoseRepository.Object, new Mock<Nocturne.Core.Contracts.Auth.IOAuthGrantRepository>().Object, TestTenantCache.Create()), TimeProvider.System);
+
+        await sut.ReplayAsync(null, null, windowStart, windowStart.AddMinutes(25), CancellationToken.None);
+
+        IEnumerable<(double, decimal)> SeriesAt(double minutes) => engine.Input!.Ticks
+            .Single(t => t.At == windowStart.AddMinutes(minutes)).Context.GlucoseSeries
+            .Select(p => ((p.At - windowStart).TotalMinutes, p.Mgdl));
+        SeriesAt(5).Should().Equal((-171d, 155m), (-170d, 150m), (5d, 120m));
+        SeriesAt(10).Should().Equal((-170d, 150m), (5d, 120m), (10d, 100m));
+        SeriesAt(20).Should().Equal((-170d, 150m), (5d, 120m), (8d, 115m), (10d, 100m));
+        _glucoseRepository.Verify(r => r.GetAsync(
+            windowStart.AddMinutes(-180), windowStart.AddMinutes(25), null, null, It.IsAny<int>(), It.IsAny<int>(), false,
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, GlucoseStreams.Canonical));
+    }
+
+    private static SensorGlucose From(string dataSource, SensorGlucose reading)
+    {
+        reading.DataSource = dataSource;
+        return reading;
+    }
+
+    /// <summary>
+    /// Two apps upload one CGM and the primary of each duplicate group is whichever copy came first,
+    /// so it alternates between them. An uploader's recent readings hold its own copies the canonical
+    /// read hides, a 65 behind the other app's 66 among them, and a reading of a bucket its stream
+    /// lost to another stream, but not a copy in its newest reading's own duplicate group, nor a
+    /// hidden copy before it arrived. A reading it sent twice is one point, its group's primary
+    /// (docs/alerts/engine-semantics.md §4, recent readings).
+    /// </summary>
+    [NativeFact]
+    public async Task A_ticks_recent_readings_hold_the_uploaders_own_hidden_copies()
+    {
+        var windowStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new AlertRuleSnapshot(Guid.NewGuid(), Guid.NewGuid(), "lowest", AlertConditionType.GlucoseExtreme,
+                    """{"of":"min","operator":"<","value":70,"window_minutes":30}""", AlertRuleSeverity.Warning, "{}", 0,
+                    AutoResolveEnabled: false, AutoResolveParams: null),
+            });
+        const string Dexcom = "dexcom-connector";
+        const string Xdrip = "xdrip";
+        var d0 = From(Dexcom, Reading(windowStart, 66));
+        var x5 = From(Xdrip, Reading(windowStart.AddMinutes(5), 90));
+        var d10 = From(Dexcom, Reading(windowStart.AddMinutes(10), 95));
+        var x15 = From(Xdrip, Reading(windowStart.AddMinutes(15), 100));
+        SetupReadings(d0, x5, d10, x15);
+        _glucoseRepository
+            .Setup(r => r.GetHiddenAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new (SensorGlucose, Guid?)[]
+            {
+                (From(Xdrip, Reading(windowStart.AddMinutes(-30), 120)), null),
+                (From(Xdrip, Reading(windowStart, 65)), d0.Id),
+                (From(Dexcom, Reading(windowStart.AddMinutes(5), 90)), x5.Id),
+                (From(Xdrip, Reading(windowStart.AddMinutes(5).AddSeconds(5), 91)), x5.Id),
+                (From(Xdrip, Reading(windowStart.AddMinutes(10), 95)), d10.Id),
+                (From(Xdrip, Arriving(windowStart.AddMinutes(12), 97, TimeSpan.FromMinutes(18))), null),
+                (From(Xdrip, Reading(windowStart.AddMinutes(15), 101)), x15.Id),
+            });
+        var engine = new CapturingReplayEngine();
+        var sut = new AlertReplayService(
+            _alertRepository.Object, _dndWindows.Object, _glucoseRepository.Object, _enricher,
+            _tenantAccessor, Options.Create(new AlertEvaluationOptions()), engine,
+            new ImportedHistory(_glucoseRepository.Object, new Mock<Nocturne.Core.Contracts.Auth.IOAuthGrantRepository>().Object, TestTenantCache.Create()), TimeProvider.System);
+
+        await sut.ReplayAsync(null, null, windowStart, windowStart.AddMinutes(35), CancellationToken.None);
+
+        IEnumerable<(double, decimal)> SeriesAt(double minutes) => engine.Input!.Ticks
+            .Single(t => t.At == windowStart.AddMinutes(minutes)).Context.GlucoseSeries
+            .Select(p => ((p.At - windowStart).TotalMinutes, p.Mgdl));
+        SeriesAt(15).Should().Equal((-30d, 120m), (0d, 65m), (5d, 90m), (10d, 95m), (15d, 100m));
+        SeriesAt(30).Should().Equal((-30d, 120m), (0d, 65m), (5d, 90m), (10d, 95m), (12d, 97m), (15d, 100m));
+        _glucoseRepository.Verify(r => r.GetHiddenAsync(
+            windowStart.AddMinutes(-180), windowStart.AddMinutes(35), It.IsAny<int>(),
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()));
+    }
+
+    /// <summary>A replay with no rule that reads the recent readings sends none and reads none before the trend's gap.</summary>
+    [NativeFact]
+    public async Task A_replay_with_no_windowed_rule_carries_no_recent_readings()
+    {
+        var windowStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { ThresholdRule(Guid.NewGuid(), "below", 70m) });
+        SetupReadings(Reading(windowStart.AddMinutes(-10), 150), Reading(windowStart.AddMinutes(5), 120));
+        var engine = new CapturingReplayEngine();
+        var sut = new AlertReplayService(
+            _alertRepository.Object, _dndWindows.Object, _glucoseRepository.Object, _enricher,
+            _tenantAccessor, Options.Create(new AlertEvaluationOptions()), engine,
+            new ImportedHistory(_glucoseRepository.Object, new Mock<Nocturne.Core.Contracts.Auth.IOAuthGrantRepository>().Object, TestTenantCache.Create()), TimeProvider.System);
+
+        await sut.ReplayAsync(null, null, windowStart, windowStart.AddMinutes(10), CancellationToken.None);
+
+        engine.Input!.Ticks.Should().OnlyContain(t => t.Context.GlucoseSeries.Count == 0);
+        _glucoseRepository.Verify(r => r.GetAsync(
+            windowStart - ReadingTrend.MaxGap, windowStart.AddMinutes(10), null, null, It.IsAny<int>(), It.IsAny<int>(), false,
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), null, GlucoseStreams.Canonical));
     }
 
     /// <summary>

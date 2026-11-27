@@ -92,7 +92,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
         TrendRate = trend.Rate,
         TrendBucket = trend.Bucket,
         LastReadingAt = latest.Timestamp,
-        LatestSource = new ReadingSource(latest.DataSource, latest.Device),
+        LatestSource = ReadingSource.Of(latest),
     };
 
     /// <summary>
@@ -111,7 +111,7 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
         TrendRate = null,
         LastReadingAt = back.At,
         SensorState = new SensorStateSnapshot(SensorState.NoValue, back.ValuelessSince),
-        LatestSource = new ReadingSource(newest.DataSource, newest.Device),
+        LatestSource = ReadingSource.Of(newest),
     };
 
     /// <inheritdoc />

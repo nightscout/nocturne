@@ -40,6 +40,9 @@ pub(crate) fn judges_freshness(kind: ConditionKind) -> bool {
             | ConditionKind::RateOfChange
             | ConditionKind::Trend
             | ConditionKind::GlucoseBucket
+            | ConditionKind::GlucoseChange
+            | ConditionKind::GlucoseCount
+            | ConditionKind::GlucoseExtreme
     )
 }
 
@@ -87,7 +90,7 @@ fn sensor_gate(ctx: &SensorContext, now: DateTime<Utc>) -> Option<UnknownReason>
 
 /// A judged glucose fact: the fresh value, or the unknown it leaves. A
 /// sensor that is not ok leaves it unknown before the reading is read.
-fn judged_value<T>(fact: Option<T>, env: &mut Env) -> Result<T, Held> {
+pub(super) fn judged_value<T>(fact: Option<T>, env: &mut Env) -> Result<T, Held> {
     if let Some(reason) = sensor_gate(env.ctx, env.now) {
         return Err(Held::unknown(ContextFact::SensorState, reason));
     }
@@ -190,6 +193,9 @@ pub(crate) fn freshness_expiry(
         Payload::RateOfChange(_) => ctx.trend_rate.is_some(),
         Payload::Trend(_) => ctx.trend_bucket.is_some(),
         Payload::GlucoseBucket(_) => ctx.glucose_bucket.is_some(),
+        Payload::GlucoseChange(_) | Payload::GlucoseCount(_) | Payload::GlucoseExtreme(_) => {
+            ctx.latest_value.is_some()
+        }
         _ => false,
     } || (payload.limit_fact() == Some(LimitFact::LatestGlucose)
         && ctx.latest_value.is_some());

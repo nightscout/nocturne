@@ -106,6 +106,17 @@ fn predictions() -> BoxedStrategy<Value> {
     .boxed()
 }
 
+/// Recent readings at reading ages, so one is now and then the newest
+/// reading itself.
+pub(crate) fn glucose_series() -> BoxedStrategy<Value> {
+    vec(
+        (reading_at(), quantity()).prop_map(|(at, mgdl)| json!({ "at": at, "mgdl": mgdl })),
+        0..=4,
+    )
+    .prop_map(Value::from)
+    .boxed()
+}
+
 pub(crate) const UNRECOGNISED_CURVE: &str = "ar2";
 
 /// Named curves, each present about half the time, now and then one under
@@ -339,6 +350,7 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
         half_present(prediction_curves()),
         half_present(aps_determination()),
         (half_present(quantity()), half_present(quantity())),
+        half_present(glucose_series()),
     )
         .prop_map(
             |(
@@ -353,6 +365,7 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
                 curves,
                 determination,
                 (target_low, target_high),
+                series,
             )| {
                 object(vec![
                     ("latest_value", value),
@@ -370,6 +383,7 @@ pub(crate) fn full_context() -> BoxedStrategy<Value> {
                     ("predictions", predictions),
                     ("prediction_curves", curves),
                     ("aps_determination", determination),
+                    ("glucose_series", series),
                     ("active_alerts", alerts),
                     ("last_aps_cycle_at", cycle),
                     ("last_aps_enacted_at", enacted),

@@ -1,4 +1,4 @@
-import { AlertLimitFact, ForecastCurve, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TempBasalMetric, TransmitterBatteryMetric } from "@nocturne/api-client";
+import { AlertLimitFact, AlertWindowExtreme, ForecastCurve, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TempBasalMetric, TransmitterBatteryMetric } from "@nocturne/api-client";
 import { isTrendBucket } from "./types";
 
 const RATE_DIRECTIONS = ["falling", "rising"] as const;
@@ -45,6 +45,18 @@ export function forecastCurveLabel(curve: ForecastCurve): string {
 			return "Zero temp forecast";
 		default:
 			return unknownValue(curve);
+	}
+}
+
+/** Which reading of a window a condition compares, as the editor's choice names it. */
+export function windowExtremeLabel(of: AlertWindowExtreme): string {
+	switch (of) {
+		case AlertWindowExtreme.Min:
+			return "Lowest";
+		case AlertWindowExtreme.Max:
+			return "Highest";
+		default:
+			return unknownValue(of);
 	}
 }
 

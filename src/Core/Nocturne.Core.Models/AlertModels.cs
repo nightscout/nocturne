@@ -104,6 +104,13 @@ public record SensorContext
     public ApsDetermination? ApsDetermination { get; init; }
 
     /// <summary>
+    /// The recent readings the <c>glucose_change</c>, <c>glucose_count</c> and <c>glucose_extreme</c>
+    /// conditions read, oldest first (docs/alerts/engine-semantics.md §4, recent readings). Empty
+    /// unless a rule reads them.
+    /// </summary>
+    public IReadOnlyList<GlucoseSeriesPoint> GlucoseSeries { get; init; } = [];
+
+    /// <summary>
     /// Live state of other alerts for this tenant, keyed by alert (rule) id. Used by the alert-state condition.
     /// </summary>
     public IReadOnlyDictionary<Guid, ActiveAlertSnapshot> ActiveAlerts { get; init; } =
@@ -301,8 +308,19 @@ public record SensorContext
     public SpansRead? OverridesRead { get; init; }
 }
 
-/// <summary>The device and data source a reading was written under.</summary>
-public sealed record ReadingSource(string? DataSource, string? Device);
+/// <summary>
+/// The device and data source a reading was written under, and the registered device it is
+/// attributed to, which with them names its stream (<see cref="V4.CanonicalGlucoseStream.StreamKey"/>).
+/// <paramref name="ReadingId"/> is the reading itself, whose duplicate copies its recent readings
+/// leave out.
+/// </summary>
+public sealed record ReadingSource(
+    string? DataSource, string? Device, Guid? PatientDeviceId = null, Guid? ReadingId = null)
+{
+    /// <summary>Where <paramref name="reading"/> came from.</summary>
+    public static ReadingSource Of(V4.SensorGlucose reading) =>
+        new(reading.DataSource, reading.Device, reading.PatientDeviceId, reading.Id);
+}
 
 /// <summary>What a live pass saw of the stored spans of one context fact.</summary>
 /// <param name="At">The instant the pass chose the spans to send at, which the host judges them against.</param>
@@ -327,6 +345,11 @@ public sealed record ActiveTrackerReference(DateTime ReferenceAt, DateTime? Reco
 /// <param name="OffsetMinutes">Minutes ahead of the most recent reading.</param>
 /// <param name="Mgdl">Predicted glucose in mg/dL.</param>
 public record PredictedGlucosePoint(int OffsetMinutes, decimal Mgdl);
+
+/// <summary>A reading of <see cref="SensorContext.GlucoseSeries"/>.</summary>
+/// <param name="At">When the reading was taken.</param>
+/// <param name="Mgdl">Its glucose value in mg/dL.</param>
+public sealed record GlucoseSeriesPoint(DateTime At, decimal Mgdl);
 
 /// <summary>
 /// Coarse trend bucket of the rate of change, or of the reading's arrow when no rate is known.
@@ -460,6 +483,58 @@ public record CarbsRequiredCondition(
     string Operator,
     decimal Value,
     [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
+
+/// <summary>
+/// The newest reading less the oldest reading in the window that ends at it, in mg/dL, signed
+/// (docs/alerts/engine-semantics.md §3, windows): <c>&lt;= -30</c> over 15 minutes is a fall of at
+/// least 30 in 15 minutes.
+/// </summary>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
+/// <param name="Value">The change in mg/dL to compare against; negative for a fall.</param>
+/// <param name="WindowMinutes">How far back from the newest reading the window reaches, 5 to 180.</param>
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+public record GlucoseChangeCondition(
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("window_minutes")] int WindowMinutes,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
+
+/// <summary>
+/// The lowest or highest reading in the window that ends at the newest reading, in mg/dL
+/// (docs/alerts/engine-semantics.md §3, windows).
+/// </summary>
+/// <param name="Of">Which end of the window's readings is compared.</param>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
+/// <param name="Value">Glucose value in mg/dL to compare against.</param>
+/// <param name="WindowMinutes">As <see cref="GlucoseChangeCondition.WindowMinutes"/>.</param>
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>.</param>
+public record GlucoseExtremeCondition(
+    AlertWindowExtreme Of,
+    string Operator,
+    decimal Value,
+    [property: JsonPropertyName("window_minutes")] int WindowMinutes,
+    [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
+
+/// <summary>
+/// How many readings in the window that ends at the newest reading meet <paramref name="Reading"/>,
+/// compared with <paramref name="Count"/>, or what percent of them do, compared with
+/// <paramref name="Percent"/>; exactly one of the two (docs/alerts/engine-semantics.md §3, windows).
+/// It takes no clear margin: its tally is not a value in the unit of a reading.
+/// </summary>
+/// <param name="Reading">The comparison a reading meets, in mg/dL.</param>
+/// <param name="WindowMinutes">As <see cref="GlucoseChangeCondition.WindowMinutes"/>.</param>
+/// <param name="Count">The comparison of the number of readings that meet it, a whole number from 0.</param>
+/// <param name="Percent">The comparison of the percent of readings that meet it, 0 to 100.</param>
+public record GlucoseCountCondition(
+    WindowComparison Reading,
+    [property: JsonPropertyName("window_minutes")] int WindowMinutes,
+    WindowComparison? Count = null,
+    WindowComparison? Percent = null);
+
+/// <summary>A comparison inside a <see cref="GlucoseCountCondition"/>.</summary>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
+/// <param name="Value">The value compared against.</param>
+public record WindowComparison(string Operator, decimal Value);
 
 /// <summary>
 /// Trend condition matching a coarse direction bucket.
@@ -696,7 +771,7 @@ public enum TransmitterBatteryMetric
 /// <summary>
 /// A polymorphic condition node in the alert rule condition tree.
 /// <paramref name="Type"/> is the discriminator: one of
-/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio | do_not_disturb | transmitter_battery | sensor_state | eventual_glucose | carbs_required</c>.
+/// <c>threshold | rate_of_change | signal_loss | composite | not | sustained | staleness | predicted | trend | time_of_day | iob | cob | reservoir | site_age | sensor_age | alert_state | loop_stale | loop_enaction_stale | pump_suspended | pump_battery | temp_basal | uploader_battery | override_active | sensitivity_ratio | do_not_disturb | transmitter_battery | sensor_state | eventual_glucose | carbs_required | glucose_change | glucose_count | glucose_extreme</c>.
 /// Exactly one of the optional payload parameters is populated based on <paramref name="Type"/>.
 /// </summary>
 public record ConditionNode(
@@ -737,7 +812,10 @@ public record ConditionNode(
     [property: JsonPropertyName("transmitter_battery")] TransmitterBatteryCondition? TransmitterBattery = null,
     [property: JsonPropertyName("sensor_state")] SensorStateCondition? SensorState = null,
     [property: JsonPropertyName("eventual_glucose")] EventualGlucoseCondition? EventualGlucose = null,
-    [property: JsonPropertyName("carbs_required")] CarbsRequiredCondition? CarbsRequired = null
+    [property: JsonPropertyName("carbs_required")] CarbsRequiredCondition? CarbsRequired = null,
+    [property: JsonPropertyName("glucose_change")] GlucoseChangeCondition? GlucoseChange = null,
+    [property: JsonPropertyName("glucose_count")] GlucoseCountCondition? GlucoseCount = null,
+    [property: JsonPropertyName("glucose_extreme")] GlucoseExtremeCondition? GlucoseExtreme = null
 );
 
 /// <summary>

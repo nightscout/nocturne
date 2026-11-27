@@ -153,6 +153,7 @@ public sealed record ScenarioContext
     /// <summary>Named curves by wire name; a name the host has no member for is not read.</summary>
     [JsonPropertyName("prediction_curves")] public Dictionary<string, List<ScenarioPrediction>>? PredictionCurves { get; init; }
     [JsonPropertyName("aps_determination")] public ScenarioApsDetermination? ApsDetermination { get; init; }
+    [JsonPropertyName("glucose_series")] public List<ScenarioSeriesPoint>? GlucoseSeries { get; init; }
     [JsonPropertyName("active_alerts")] public List<ScenarioActiveAlert>? ActiveAlerts { get; init; }
     [JsonPropertyName("last_aps_cycle_at")] public DateTime? LastApsCycleAt { get; init; }
     [JsonPropertyName("last_aps_enacted_at")] public DateTime? LastApsEnactedAt { get; init; }
@@ -200,6 +201,10 @@ public sealed record ScenarioApsDetermination(
     [property: JsonPropertyName("at")] DateTime At,
     [property: JsonPropertyName("eventual_mgdl")] decimal? EventualMgdl,
     [property: JsonPropertyName("carbs_required_grams")] decimal? CarbsRequiredGrams);
+
+public sealed record ScenarioSeriesPoint(
+    [property: JsonPropertyName("at")] DateTime At,
+    [property: JsonPropertyName("mgdl")] decimal Mgdl);
 
 public sealed record ScenarioPrediction(
     [property: JsonPropertyName("offset_minutes")] int OffsetMinutes,

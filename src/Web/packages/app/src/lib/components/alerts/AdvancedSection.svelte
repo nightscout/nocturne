@@ -144,9 +144,10 @@
         <Label for="alert-glucose-freshness">Minutes until a glucose reading counts as missing</Label>
         <p id="alert-glucose-freshness-help" class="text-sm text-muted-foreground">
           The rule counts a glucose reading as missing when Nocturne received it more than this number of
-          minutes ago. This applies to conditions on the glucose value, rate of change, trend and
-          glucose range. It does not apply to signal loss, data age, predicted glucose or Smart
-          snooze conditions.
+          minutes ago. This applies to conditions on the glucose value, rate of change, trend,
+          glucose range and time windows. It does not apply to signal loss, data age, predicted
+          glucose or Smart snooze conditions. In a time window, a gap in the readings that is
+          longer than this can leave the condition unknown.
           {#if defaultBound !== undefined}
             The default is {defaultBound} minutes. Leave the field empty to use the default.
           {/if}

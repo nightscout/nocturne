@@ -156,4 +156,16 @@ public enum AlertConditionType
 
     [EnumMember(Value = "carbs_required"), JsonStringEnumMemberName("carbs_required")]
     CarbsRequired,
+
+    /// <summary>The newest reading less the oldest one in a window of recent readings.</summary>
+    [EnumMember(Value = "glucose_change"), JsonStringEnumMemberName("glucose_change")]
+    GlucoseChange,
+
+    /// <summary>How many of a window's recent readings meet a comparison, or what percent of them do.</summary>
+    [EnumMember(Value = "glucose_count"), JsonStringEnumMemberName("glucose_count")]
+    GlucoseCount,
+
+    /// <summary>The lowest or highest of a window's recent readings.</summary>
+    [EnumMember(Value = "glucose_extreme"), JsonStringEnumMemberName("glucose_extreme")]
+    GlucoseExtreme,
 }

@@ -420,6 +420,33 @@ public class AlertSnoozeServiceTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>
+    /// The re-notification's context names its fresh reading, as the sweep's snooze context does, so a
+    /// windowed rule reads that reading's recent readings; a stale reading is named by neither.
+    /// </summary>
+    [Theory]
+    [InlineData(2, true)]
+    [InlineData(30, false)]
+    public async Task Resume_names_the_fresh_reading_its_recent_readings_are_read_from(double minutesAgo, bool named)
+    {
+        var seeded = await SeedAsync(lapsed: true);
+        var reading = new SensorGlucose
+        {
+            Id = Guid.NewGuid(), Timestamp = Now.AddMinutes(-minutesAgo), Mgdl = 61,
+            DataSource = "xdrip", Device = "g7", PatientDeviceId = Guid.NewGuid(),
+        };
+        _canonical.Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>())).ReturnsAsync(reading);
+        var contexts = new List<SensorContext>();
+        _enricher
+            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
+            .Callback<SensorContext, IEnumerable<AlertRuleSnapshot>, CancellationToken>((ctx, _, _) => contexts.Add(ctx))
+            .ReturnsAsync((SensorContext ctx, IEnumerable<AlertRuleSnapshot> _, CancellationToken _) => ctx);
+
+        (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
+
+        contexts.Should().ContainSingle().Which.LatestSource.Should().Be(named ? ReadingSource.Of(reading) : null);
+    }
+
     [Fact]
     public async Task Resume_carries_no_reading_when_the_newest_one_is_stale()
     {

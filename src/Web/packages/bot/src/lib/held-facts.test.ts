@@ -9,6 +9,11 @@ describe("heldFactName and heldReason", () => {
     expect(heldReason("warp_core")).toBe("warp_core");
   });
 
+  it("name the recent readings a window condition waits for", () => {
+    expect(heldFactName("glucose_series")).toBe("Recent glucose readings");
+    expect(heldReason("inexact")).toBe("Not exact");
+  });
+
   it("do not read the object prototype", () => {
     expect(heldFactName("constructor")).toBe("constructor");
     expect(heldFactName("toString")).toBe("toString");

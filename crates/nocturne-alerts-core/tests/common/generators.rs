@@ -14,7 +14,7 @@ use nocturne_alerts_core::engine::OnUnknown;
 use nocturne_alerts_core::enums::{
     AlertStateKind, CmpOp, CompositeOp, DayOfWeek, ForecastCurve, GlucoseBucket, PumpMode,
     RateDirection, SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection,
-    TransmitterBatteryMetric, TrendBucket, WireEnum,
+    TransmitterBatteryMetric, TrendBucket, WindowExtreme, WireEnum,
 };
 use nocturne_alerts_core::model::{ConditionKind, Payload};
 
@@ -430,6 +430,41 @@ pub(crate) fn payload(kind: ConditionKind, child: &BoxedStrategy<Value>) -> Boxe
         | K::SensitivityRatio
         | K::EventualGlucose
         | K::CarbsRequired => compare(),
+        K::GlucoseChange => (word_value::<CmpOp>(), number(), minutes(5..=180))
+            .prop_map(|(operator, value, window)| {
+                json!({ "operator": operator, "value": value, "window_minutes": window })
+            })
+            .boxed(),
+        K::GlucoseExtreme => (
+            word_value::<WindowExtreme>(),
+            word_value::<CmpOp>(),
+            number(),
+            minutes(5..=180),
+        )
+            .prop_map(|(of, operator, value, window)| {
+                json!({ "of": of, "operator": operator, "value": value, "window_minutes": window })
+            })
+            .boxed(),
+        K::GlucoseCount => (
+            word_value::<CmpOp>(),
+            number(),
+            minutes(5..=180),
+            prop_oneof![
+                (word_value::<CmpOp>(), 0..=6i32)
+                    .prop_map(|(operator, n)| ("count", json!({ "operator": operator, "value": n }))),
+                (word_value::<CmpOp>(), 0..=100i32)
+                    .prop_map(|(operator, p)| ("percent", json!({ "operator": operator, "value": p }))),
+            ],
+        )
+            .prop_map(|(operator, value, window, (field, tally))| {
+                let mut payload = json!({
+                    "reading": { "operator": operator, "value": value },
+                    "window_minutes": window,
+                });
+                payload[field] = tally;
+                payload
+            })
+            .boxed(),
         K::AlertState => (uuid_text(), word_value::<AlertStateKind>(), for_minutes())
             .prop_map(|(alert_id, state, for_minutes)| {
                 object(vec![

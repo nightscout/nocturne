@@ -228,6 +228,15 @@ wire_enum! {
 }
 
 wire_enum! {
+    /// `AlertWindowExtreme`: the end of a window's readings a
+    /// `glucose_extreme` leaf reads (engine-semantics.md §3, windows).
+    pub enum WindowExtreme {
+        Min = "min",
+        Max = "max",
+    }
+}
+
+wire_enum! {
     /// `threshold.direction`.
     pub enum ThresholdDirection {
         Above = "above",
@@ -304,6 +313,7 @@ mod tests {
             ("SensorState", names::<SensorState>()),
             ("ForecastCurve", names::<ForecastCurve>()),
             ("AlertLimitFact", names::<LimitFact>()),
+            ("AlertWindowExtreme", names::<WindowExtreme>()),
             ("AlertConditionType", names::<ConditionKind>()),
         ];
         for (enum_name, ours) in tables {

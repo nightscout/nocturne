@@ -111,11 +111,25 @@ internal static class AutoResolveSuggestion
             case "eventual_glucose":
             case "carbs_required":
             case "tracker_age":
+            case "glucose_change":
+            case "glucose_extreme":
             {
                 if (payload is null || OppositeOperator(TextOf(payload["operator"])) is not { } turned)
                     return null;
                 var opposite = (JsonObject)payload.DeepClone();
                 opposite["operator"] = turned;
+                return Node(type, opposite);
+            }
+
+            // The tally is turned round, not the comparison each reading meets.
+            case "glucose_count":
+            {
+                var tally = payload?["count"] is JsonObject ? "count" : "percent";
+                if (payload?[tally] is not JsonObject comparison
+                    || OppositeOperator(TextOf(comparison["operator"])) is not { } turned)
+                    return null;
+                var opposite = (JsonObject)payload.DeepClone();
+                opposite[tally]!["operator"] = turned;
                 return Node(type, opposite);
             }
 

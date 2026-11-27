@@ -563,6 +563,42 @@ public class CanonicalAlertEvaluatorTests
         EvaluatedRules().Should().Equal(LoopRule);
     }
 
+    /// <summary>
+    /// A reading stored late inside a window leaves the newest reading as it was, so the watermark
+    /// skips it as a reading, but it can fill a hole in the recent readings: the rules that read them
+    /// are evaluated again.
+    /// </summary>
+    [NativeFact]
+    public async Task EvaluateAsync_ALateReadingInsideTheWindowEvaluatesTheRulesThatReadTheRecentReadings()
+    {
+        var fallRule = Rule(AlertConditionType.GlucoseChange, """{"operator":"<=","value":-30,"window_minutes":15}""");
+        LatestIs(Latest(Reading));
+        RulesAre(ReservoirRule, fallRule);
+        var evaluator = Evaluator(Tenant);
+        await evaluator.EvaluateAsync(GlucoseMoved);
+        _orchestrator.Invocations.Clear();
+
+        await evaluator.EvaluateAsync(ContextFactWrites.MovedIn(RecordsChanged.Written([typeof(SensorGlucose)])));
+
+        EvaluatedRules().Should().Equal(fallRule);
+    }
+
+    /// <summary>
+    /// The context names the newest reading and its stream, which its recent readings are read from
+    /// leaving out the reading's own duplicate copies.
+    /// </summary>
+    [Fact]
+    public void ContextFor_NamesTheNewestReadingAndItsStream()
+    {
+        var latest = Latest(Reading);
+        latest.DataSource = "carelink-connector";
+        latest.Device = "CareLink MiniMed 780G";
+        latest.PatientDeviceId = Guid.NewGuid();
+
+        CanonicalAlertEvaluator.ContextFor(latest, default).LatestSource.Should().Be(
+            new ReadingSource("carelink-connector", "CareLink MiniMed 780G", latest.PatientDeviceId, latest.Id));
+    }
+
     [NativeFact]
     public async Task EvaluateAsync_AWriteNoRuleReadsEvaluatesNothing()
     {

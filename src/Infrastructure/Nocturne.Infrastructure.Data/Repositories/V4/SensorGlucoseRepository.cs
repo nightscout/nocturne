@@ -475,22 +475,69 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
+    /// <remarks>Read as <see cref="StreamReadingsOf"/> selects.</remarks>
+    public async Task<SensorGlucose?> GetStreamPredecessorAsync(
+        SensorGlucose reading, DateTime since, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await StreamReadingsOf(ctx, reading, since, includeReading: false)
+            .OrderByDescending(e => e.Timestamp)
+            .ThenByDescending(e => e.Id)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : SensorGlucoseMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Read as <see cref="StreamReadingsOf"/> selects, each non-primary copy with its group's primary
+    /// as <see cref="GetHiddenAsync"/> finds it.
+    /// </remarks>
+    public async Task<IReadOnlyList<(SensorGlucose Reading, Guid? DuplicateOf)>> GetStreamSeriesAsync(
+        SensorGlucose newest, DateTime since, CancellationToken ct = default)
+    {
+        var key = RecordTypeKeys.Key(RecordType.SensorGlucose);
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var rows = await StreamReadingsOf(ctx, newest, since, includeReading: true)
+            .OrderBy(e => e.Timestamp)
+            .ThenBy(e => e.Id)
+            .Select(e => new
+            {
+                Entity = e,
+                DuplicateOf = e.IsDuplicate
+                    ? ctx.LinkedRecords
+                        .Where(p => p.RecordType == key && p.IsPrimary
+                            && ctx.LinkedRecords.Any(l =>
+                                l.RecordType == key && l.RecordId == e.Id && l.CanonicalId == p.CanonicalId))
+                        .Select(p => (Guid?)p.RecordId)
+                        .FirstOrDefault()
+                    : null,
+            })
+            .ToListAsync(ct);
+        return rows.Select(r => (SensorGlucoseMapper.ToDomainModel(r.Entity), r.DuplicateOf)).ToList();
+    }
+
+    /// <summary>
+    /// The live readings with a glucose value of <paramref name="reading"/>'s stream and data source
+    /// timestamped in [<paramref name="since"/>, the reading's timestamp], hidden copies included,
+    /// leaving out the copies in the reading's own duplicate group, and the reading itself unless
+    /// <paramref name="includeReading"/>.
+    /// </summary>
     /// <remarks>
     /// A range of <c>ix_sensor_glucose_tenant_timestamp</c>, which unlike the partial list indexes
     /// keeps the duplicate copies, filtered by stream and data source; the own-group test probes
     /// <c>ix_linked_records_tenant_type_id</c>.
     /// </remarks>
-    public async Task<SensorGlucose?> GetStreamPredecessorAsync(
-        SensorGlucose reading, DateTime since, CancellationToken ct = default)
+    private static IQueryable<SensorGlucoseEntity> StreamReadingsOf(
+        NocturneDbContext ctx, SensorGlucose reading, DateTime since, bool includeReading)
     {
         var key = RecordTypeKeys.Key(RecordType.SensorGlucose);
         var at = reading.Timestamp;
         var id = reading.Id;
 
-        await using var ctx = await ContextFactory.CreateAsync(ct);
         var dataSource = reading.DataSource ?? "";
         var query = ctx.SensorGlucose.AsNoTracking()
-            .Where(e => e.Timestamp >= since && e.Timestamp <= at && e.Id != id && e.Mgdl > 0
+            .Where(e => e.Timestamp >= since && e.Timestamp <= at && e.Mgdl > 0
                 && (e.DataSource ?? "") == dataSource);
         if (reading.PatientDeviceId is { } deviceId)
         {
@@ -505,13 +552,11 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         var ownGroup = ctx.LinkedRecords
             .Where(l => l.RecordType == key && l.RecordId == id)
             .Select(l => l.CanonicalId);
-        var entity = await query
-            .Where(e => !ctx.LinkedRecords.Any(l =>
+        return includeReading
+            ? query.Where(e => e.Id == id || !ctx.LinkedRecords.Any(l =>
                 l.RecordType == key && l.RecordId == e.Id && ownGroup.Contains(l.CanonicalId)))
-            .OrderByDescending(e => e.Timestamp)
-            .ThenByDescending(e => e.Id)
-            .FirstOrDefaultAsync(ct);
-        return entity is null ? null : SensorGlucoseMapper.ToDomainModel(entity);
+            : query.Where(e => e.Id != id && !ctx.LinkedRecords.Any(l =>
+                l.RecordType == key && l.RecordId == e.Id && ownGroup.Contains(l.CanonicalId)));
     }
 
     /// <inheritdoc />

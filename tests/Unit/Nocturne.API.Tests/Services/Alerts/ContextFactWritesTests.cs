@@ -68,11 +68,17 @@ public class ContextFactWritesTests
     }
 
     [Fact]
-    public void TheSweepMayWaitOnlyForGlucoseApsUploaderTransmitterTheSensorStateTheDeterminationAndDeviceAges() =>
+    public void TheSweepMayWaitOnlyForGlucoseApsUploaderTransmitterTheSensorStateTheDeterminationDeviceAgesAndTheSeries() =>
         ContextFactWrites.Facts.Keys.Where(ContextFactWrites.SweepMayWaitFor)
             .Should().BeEquivalentTo(
                 [ContextFactWrites.Glucose, ContextFactWrites.Aps, ContextFactWrites.Uploader, ContextFactWrites.Transmitter,
-                 ContextFactWrites.SensorState, ContextFactWrites.ApsDetermination, ContextFactWrites.DeviceAges]);
+                 ContextFactWrites.SensorState, ContextFactWrites.ApsDetermination, ContextFactWrites.DeviceAges,
+                 ContextFactWrites.GlucoseSeries]);
+
+    [Fact]
+    public void OnlyAReadingWriteMovesTheSeries() =>
+        ContextFactWrites.MovedBy.Where(kv => kv.Value.Contains(ContextFactWrites.GlucoseSeries)).Select(kv => kv.Key)
+            .Should().BeEquivalentTo([typeof(SensorGlucose)]);
 
     [Fact]
     public void OnlyAnApsSnapshotWriteMovesTheDetermination() =>
@@ -144,7 +150,8 @@ public class ContextFactWritesTests
         ]);
 
         ContextFactWrites.MovedIn(batch).Facts.Should().BeEquivalentTo(
-            [ContextFactWrites.Glucose, ContextFactWrites.SensorState, ContextFactWrites.Insulin, ContextFactWrites.Pump, ContextFactWrites.Predictions]);
+            [ContextFactWrites.Glucose, ContextFactWrites.SensorState, ContextFactWrites.GlucoseSeries,
+             ContextFactWrites.Insulin, ContextFactWrites.Pump, ContextFactWrites.Predictions]);
     }
 
     [Fact]

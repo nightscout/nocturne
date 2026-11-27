@@ -149,6 +149,8 @@ public class AutoResolveSuggestionTests
     [InlineData("""{"type":"predicted","predicted":{"operator":"<","value":70,"within_minutes":30,"min_of":["iob","zt"]}}""", "not")]
     [InlineData("""{"type":"eventual_glucose","eventual_glucose":{"operator":"<","value":80}}""", "operator")]
     [InlineData("""{"type":"carbs_required","carbs_required":{"operator":">=","value":10}}""", "operator")]
+    [InlineData("""{"type":"glucose_change","glucose_change":{"operator":"<=","value":-30,"window_minutes":15}}""", "operator")]
+    [InlineData("""{"type":"glucose_extreme","glucose_extreme":{"of":"max","operator":">","value":250,"window_minutes":60}}""", "operator")]
     [InlineData("""{"type":"staleness","staleness":{"operator":">","value":15}}""", "operator")]
     [InlineData("""{"type":"iob","iob":{"operator":">","value":2}}""", "operator")]
     [InlineData("""{"type":"cob","cob":{"operator":">","value":20}}""", "operator")]
@@ -194,6 +196,23 @@ public class AutoResolveSuggestionTests
     [InlineData("""{"type":"time_of_day","time_of_day":{"from":"22:00","to":"07:00"}}""")]
     [InlineData("""{"type":"temp_basal","temp_basal":{"metric":"rate","operator":">=","value":1}}""")]
     public void AConditionWithNoClearOppositeHasNone(string condition) => Opposite(condition, null);
+
+    /// <summary>
+    /// A count closes when its tally no longer meets its comparison: the tally's comparison turns,
+    /// and the one each reading meets stays as it was.
+    /// </summary>
+    [Theory]
+    [InlineData("count")]
+    [InlineData("percent")]
+    public void ACountClosesOnItsTallyTurnedRound(string tally) =>
+        Opposite(
+            $$$$"""{"type":"glucose_count","glucose_count":{"reading":{"operator":"<","value":70},"window_minutes":60,"{{{{tally}}}}":{"operator":">=","value":3}}}""",
+            $$$$"""{"type":"glucose_count","glucose_count":{"reading":{"operator":"<","value":70},"window_minutes":60,"{{{{tally}}}}":{"operator":"<","value":3}}}""");
+
+    [Theory]
+    [InlineData("""{"type":"glucose_count","glucose_count":{"reading":{"operator":"<","value":70},"window_minutes":60,"count":{"operator":"==","value":3}}}""")]
+    [InlineData("""{"type":"glucose_count","glucose_count":{"reading":{"operator":"<","value":70},"window_minutes":60}}""")]
+    public void ACountWithNoTallyToTurnHasNoOpposite(string condition) => Opposite(condition, null);
 
     [Fact]
     public void AWaitIsDropped() =>

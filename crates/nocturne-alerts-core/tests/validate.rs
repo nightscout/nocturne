@@ -1009,3 +1009,154 @@ fn the_loop_leaves_take_an_operator_a_value_and_a_clear_margin() {
         );
     }
 }
+
+fn change(payload: Value) -> Vec<ParseError> {
+    issues_of("glucose_change", payload)
+}
+
+fn count(extra: Value) -> Vec<ParseError> {
+    let mut payload = json!({
+        "reading": { "operator": "<", "value": 70 },
+        "window_minutes": 20,
+    });
+    for (k, v) in extra.as_object().unwrap() {
+        payload[k] = v.clone();
+    }
+    issues_of("glucose_count", payload)
+}
+
+#[test]
+fn a_window_is_five_minutes_to_three_hours() {
+    for minutes in [5, 15, 180] {
+        assert_eq!(
+            change(json!({ "operator": "<=", "value": -30, "window_minutes": minutes })),
+            vec![],
+            "{minutes}"
+        );
+    }
+    for minutes in [json!(4), json!(0), json!(-15), json!(181), json!(1440)] {
+        assert_eq!(
+            change(json!({ "operator": "<=", "value": -30, "window_minutes": minutes })),
+            at_leaf("glucose_change", &[Reason::WindowOutOfRange]),
+            "{minutes}"
+        );
+    }
+    assert_eq!(
+        change(json!({ "operator": "<=", "value": -30, "window_minutes": 15.5 })),
+        at_leaf("glucose_change", &[Reason::InvalidField("window_minutes")])
+    );
+    assert_eq!(
+        change(json!({ "operator": "<=", "value": -30 })),
+        at_leaf("glucose_change", &[Reason::FieldMissing("window_minutes")])
+    );
+    assert_eq!(
+        issues_of(
+            "glucose_extreme",
+            json!({ "of": "max", "operator": ">", "value": 250, "window_minutes": 200 })
+        ),
+        at_leaf("glucose_extreme", &[Reason::WindowOutOfRange])
+    );
+}
+
+#[test]
+fn an_extreme_names_min_or_max() {
+    let extreme = |of: Value| {
+        issues_of(
+            "glucose_extreme",
+            json!({ "of": of, "operator": ">", "value": 250, "window_minutes": 120 }),
+        )
+    };
+    assert_eq!(extreme(json!("min")), vec![]);
+    assert_eq!(extreme(json!("max")), vec![]);
+    assert_eq!(
+        extreme(json!("Max")),
+        at_leaf("glucose_extreme", &[Reason::UnknownValue("of")])
+    );
+    assert_eq!(
+        extreme(json!(1)),
+        at_leaf("glucose_extreme", &[Reason::InvalidField("of")])
+    );
+}
+
+#[test]
+fn a_count_takes_exactly_one_of_count_and_percent() {
+    let tally = json!({ "operator": ">=", "value": 3 });
+    assert_eq!(count(json!({ "count": tally })), vec![]);
+    assert_eq!(count(json!({ "percent": tally })), vec![]);
+    assert_eq!(
+        count(json!({ "count": tally, "percent": tally })),
+        at_leaf("glucose_count", &[Reason::SelectorConflict("percent")])
+    );
+    assert_eq!(
+        count(json!({})),
+        at_leaf("glucose_count", &[Reason::FieldMissing("count")])
+    );
+}
+
+#[test]
+fn a_count_is_a_whole_number_and_a_percent_is_zero_to_a_hundred() {
+    let tally =
+        |field: &str, value: Value| count(json!({ field: { "operator": ">=", "value": value } }));
+    assert_eq!(tally("count", json!(0)), vec![]);
+    assert_eq!(tally("count", json!(36)), vec![]);
+    for bad in [json!(-1), json!(2.5)] {
+        assert_eq!(
+            tally("count", bad.clone()),
+            at_leaf("glucose_count", &[Reason::InvalidField("count")]),
+            "{bad}"
+        );
+    }
+    for good in [json!(0), json!(33.3), json!(100)] {
+        assert_eq!(tally("percent", good.clone()), vec![], "{good}");
+    }
+    for bad in [json!(-0.1), json!(100.5)] {
+        assert_eq!(
+            tally("percent", bad.clone()),
+            at_leaf("glucose_count", &[Reason::InvalidField("percent")]),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn a_count_reads_its_comparisons_as_written() {
+    assert_eq!(
+        count(json!({ "count": { "operator": "at_least", "value": 3 } })),
+        at_leaf("glucose_count", &[Reason::UnknownValue("count")])
+    );
+    assert_eq!(
+        count(json!({ "count": { "operator": ">=", "value": 3, "Value": 4 } })),
+        at_leaf("glucose_count", &[Reason::UnknownField])
+    );
+    assert_eq!(
+        count(json!({ "count": { "operator": ">=" } })),
+        at_leaf("glucose_count", &[Reason::FieldMissing("count")])
+    );
+    assert_eq!(
+        count(json!({ "count": {} })),
+        at_leaf("glucose_count", &[Reason::FieldMissing("count")])
+    );
+    assert_eq!(
+        count(json!({ "count": 3 })),
+        at_leaf("glucose_count", &[Reason::InvalidField("count")])
+    );
+    assert_eq!(
+        issues_of(
+            "glucose_count",
+            json!({ "window_minutes": 20, "count": { "operator": ">=", "value": 3 } })
+        ),
+        at_leaf("glucose_count", &[Reason::FieldMissing("reading")])
+    );
+    assert_eq!(
+        issues_of(
+            "glucose_count",
+            json!({ "reading": { "value": 70 }, "window_minutes": 20,
+                "count": { "operator": ">=", "value": 3 } })
+        ),
+        at_leaf("glucose_count", &[Reason::FieldMissing("reading")])
+    );
+    assert_eq!(
+        count(json!({ "count": { "operator": ">=", "value": 3 }, "clear_margin": 5 })),
+        at_leaf("glucose_count", &[Reason::UnknownField])
+    );
+}

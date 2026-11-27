@@ -110,7 +110,10 @@ array; a `default` key there is not read, and a name the engine has no member fo
 (engine-semantics.md §4). `aps_determination` is `{ "at": ..., "eventual_mgdl": ...,
 "carbs_required_grams": ... }` or absent: the loop's newest determination at or before `now`, each
 value optional. A host sends `carbs_required_grams` `0` for an oref command without `carbsReq`, and
-nothing for a Loop determination or a command it cannot read. An engine older than these members
+nothing for a Loop determination or a command it cannot read. `glucose_series` is
+`[{ "at": ..., "mgdl": ... }]`: the recent readings with a value of the newest reading's stream, back
+180 minutes from the newest reading and including it, which the windowed kinds read (engine-semantics.md
+§3, windows). An engine older than these members
 ignores them, as it ignores any context field it does not know, so an unnamed `predicted` reads
 `predictions` on every engine. `active_pump_modes` is the list of every active pump-mode span,
 `[{ "mode": ..., "started_at": ... }]`: spans of different modes overlap, so a
@@ -610,7 +613,8 @@ each, in declaration order:
 
 The names are `glucose`, `predictions`, `insulin`, `carbs`, `pump`, `aps`,
 `uploader`, `transmitter`, `state_spans`, `device_ages`, `trackers`, `sleep`,
-`active_alerts`, `do_not_disturb`, `time_zone`, `sensor_state` and `aps_determination`. A rule with no kinds reads
+`active_alerts`, `do_not_disturb`, `time_zone`, `sensor_state`, `aps_determination`,
+`target_range` and `glucose_series`. A rule with no kinds reads
 `[]`.
 
 ## References any (`nocturne_alerts_references_any`)

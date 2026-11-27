@@ -19,7 +19,7 @@ use uuid::Uuid;
 use crate::enums::{
     AlertStateKind, CmpOp, CompositeOp, DayOfWeek, ForecastCurve, GlucoseBucket, LimitFact,
     PumpMode, RateDirection, SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection,
-    TransmitterBatteryMetric, TrendBucket, WireEnum,
+    TransmitterBatteryMetric, TrendBucket, WindowExtreme, WireEnum,
 };
 use crate::paths::{child_path, node_child_path};
 
@@ -73,13 +73,14 @@ pub enum Reason {
     /// A `clear_margin` above zero on an `==` comparison, which has no side
     /// to widen.
     MarginOnEquality,
-    /// A `rate_of_change` `clear_margin` above its `rate`, which would carry
-    /// the limit past zero.
+    /// A `clear_margin` that would carry the limit of a `rate_of_change` or
+    /// a `glucose_change` past zero.
     MarginPastZero,
     /// A `clear_margin` above zero on a leaf under a `sustained`.
     MarginUnderSustained,
-    /// A `predicted` with more than one of `curve`, `min_of` and `max_of`;
-    /// the field is the second one present.
+    /// A `predicted` with more than one of `curve`, `min_of` and `max_of`,
+    /// or a `glucose_count` with both `count` and `percent`; the field is the
+    /// second one present.
     SelectorConflict(&'static str),
     /// A glucose comparison with both `value` and `value_from`.
     LimitConflict,
@@ -89,6 +90,9 @@ pub enum Reason {
     /// A `threshold` whose `value_from` names `latest_glucose`, which
     /// compares the reading with itself.
     SelfReference,
+    /// A `window_minutes` outside [`MIN_WINDOW_MINUTES`] to
+    /// [`MAX_WINDOW_MINUTES`].
+    WindowOutOfRange,
 }
 
 impl Reason {
@@ -119,6 +123,7 @@ impl Reason {
             Reason::LimitConflict => "limit_conflict",
             Reason::OffsetOutOfRange => "offset_out_of_range",
             Reason::SelfReference => "self_reference",
+            Reason::WindowOutOfRange => "window_out_of_range",
         }
     }
 
@@ -142,6 +147,7 @@ impl Reason {
             Reason::TypeMissing | Reason::UnknownKind => Some("type"),
             Reason::LimitConflict | Reason::SelfReference => Some(VALUE_FROM),
             Reason::OffsetOutOfRange => Some(OFFSET),
+            Reason::WindowOutOfRange => Some(WINDOW_MINUTES),
             Reason::NotAnObject
             | Reason::TooDeep
             | Reason::ConditionMissing
@@ -286,6 +292,9 @@ condition_kinds! {
     SensorState = "sensor_state" => SensorStatePayload,
     EventualGlucose = "eventual_glucose" => GlucoseComparePayload,
     CarbsRequired = "carbs_required" => ComparePayload,
+    GlucoseChange = "glucose_change" => GlucoseChangePayload,
+    GlucoseCount = "glucose_count" => GlucoseCountPayload,
+    GlucoseExtreme = "glucose_extreme" => GlucoseExtremePayload,
 }
 
 impl Payload {
@@ -306,6 +315,8 @@ impl Payload {
             | Payload::CarbsRequired(p) => Some(p),
             Payload::TempBasal(p) => Some(p),
             Payload::TransmitterBattery(p) => Some(p),
+            Payload::GlucoseChange(p) => Some(p),
+            Payload::GlucoseExtreme(p) => Some(p),
             _ => None,
         }
     }
@@ -689,6 +700,37 @@ impl Operand for NonNegativeMinutes {
     }
 }
 
+/// The payload property a window's length is read from.
+pub const WINDOW_MINUTES: &str = "window_minutes";
+
+/// The shortest window: one reading interval of the common CGMs.
+pub const MIN_WINDOW_MINUTES: i32 = 5;
+
+/// The longest window, three hours, which bounds the readings a host sends.
+pub const MAX_WINDOW_MINUTES: i32 = 180;
+
+/// How far back from the newest reading a windowed leaf reads
+/// (engine-semantics.md §3, windows).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct WindowMinutes(i32);
+
+impl WindowMinutes {
+    #[must_use]
+    pub fn get(self) -> i32 {
+        self.0
+    }
+}
+
+impl Operand for WindowMinutes {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+        match i32::parse(v, name)? {
+            m if (MIN_WINDOW_MINUTES..=MAX_WINDOW_MINUTES).contains(&m) => Ok(Self(m)),
+            _ => Err(Reason::WindowOutOfRange),
+        }
+    }
+}
+
 /// The payload property a [`ClearMargin`] is read from.
 pub const CLEAR_MARGIN: &str = "clear_margin";
 
@@ -961,6 +1003,7 @@ enum_operands!(
     PumpMode,
     StateSpanCategory,
     ForecastCurve,
+    WindowExtreme,
 );
 
 operand_fields!(
@@ -973,6 +1016,7 @@ operand_fields!(
     NaiveTime,
     PositiveMinutes,
     NonNegativeMinutes,
+    WindowMinutes,
     ClearMargin,
     ThresholdDirection,
     RateDirection,
@@ -985,6 +1029,7 @@ operand_fields!(
     PumpMode,
     StateSpanCategory,
     ForecastCurve,
+    WindowExtreme,
 );
 
 macro_rules! enum_lists {
@@ -1347,6 +1392,170 @@ payload!(
         @limit
     }
     operator |p| p.operator
+);
+
+payload!(
+    /// `{operator, value, window_minutes, clear_margin?}`: the newest reading
+    /// less the oldest one in the window, in mg/dL (engine-semantics.md §3,
+    /// windows).
+    /// A margin is at most the size of `value`: under a `not` it moves the
+    /// limit the other way, so a larger one could carry it past zero on
+    /// either side, and a rule about a fall would stay open on a rise.
+    margined GlucoseChangePayload {
+        operator: CmpOp,
+        #[serde(serialize_with = "exact_decimal")]
+        value: Decimal,
+        window_minutes: WindowMinutes,
+    }
+    comparison |p| (p.operator, p.value),
+    largest_margin |p| Some(p.value.abs())
+);
+
+payload!(
+    /// `{of, operator, value, window_minutes, clear_margin?}`: the lowest or
+    /// highest reading in the window.
+    margined GlucoseExtremePayload {
+        of: WindowExtreme,
+        operator: CmpOp,
+        #[serde(serialize_with = "exact_decimal")]
+        value: Decimal,
+        window_minutes: WindowMinutes,
+    }
+    comparison |p| (p.operator, p.value)
+);
+
+/// A comparison inside a windowed payload: `{operator, value}`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Comparison {
+    pub operator: CmpOp,
+    #[serde(serialize_with = "exact_decimal")]
+    pub value: Decimal,
+}
+
+/// The payload property a `glucose_count` reads its percent from.
+pub const PERCENT: &str = "percent";
+
+/// What a `glucose_count` compares: how many of the window's readings meet
+/// its `reading` comparison, or what percent of them do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tally {
+    Count(Comparison),
+    Percent(Comparison),
+}
+
+/// As the one property it was read from.
+impl Serialize for Tally {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = s.serialize_map(Some(1))?;
+        match self {
+            Tally::Count(c) => map.serialize_entry("count", c)?,
+            Tally::Percent(c) => map.serialize_entry(PERCENT, c)?,
+        }
+        map.end()
+    }
+}
+
+/// The object `name` as a [`Comparison`] whose value `accepts`, `None`
+/// inside when it is absent. A value it does not accept is
+/// [`Reason::InvalidField`] on `name`.
+fn comparison(
+    r: &Reader<'_>,
+    name: &'static str,
+    accepts: fn(Decimal) -> bool,
+) -> Option<Option<Comparison>> {
+    let Some(v) = r.get(name) else {
+        return Some(None);
+    };
+    let obj = match v {
+        Value::Object(_) if !within_depth(r.level) => {
+            r.report(Reason::TooDeep);
+            return None;
+        }
+        Value::Object(obj) => obj,
+        _ => {
+            r.report(Reason::InvalidField(name));
+            return None;
+        }
+    };
+    let inner = Reader {
+        obj,
+        level: r.level.saturating_add(1),
+        path: r.path,
+        issues: r.issues,
+    };
+    inner.report_unknown(|k| k == "operator" || k == "value");
+    // A problem inside is reported on `name`, so it says which comparison it is in.
+    // One problem per object: its first, on `name`, so it says which comparison it is in.
+    let operand = |key: &str| inner.get(key).ok_or(Reason::FieldMissing(name));
+    let read = operand("operator")
+        .and_then(|v| <CmpOp as Operand>::parse(v, name))
+        .and_then(|operator| {
+            let value = operand("value").and_then(|v| <Decimal as Operand>::parse(v, name))?;
+            if accepts(value) {
+                Ok(Comparison { operator, value })
+            } else {
+                Err(Reason::InvalidField(name))
+            }
+        });
+    r.ok(read).map(Some)
+}
+
+/// `reading`: required, any value.
+impl Field for Comparison {
+    fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
+        comparison(r, name, |_| true)?.or_else(|| {
+            r.report(Reason::FieldMissing(name));
+            None
+        })
+    }
+}
+
+/// Reads `name` (`count`, a whole number of readings) and [`PERCENT`] (0 to
+/// 100) together: exactly one of them.
+impl Field for Tally {
+    fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
+        let count = comparison(r, name, |v| v >= Decimal::ZERO && v.fract().is_zero());
+        let percent = comparison(r, PERCENT, |v| {
+            v >= Decimal::ZERO && v <= Decimal::ONE_HUNDRED
+        });
+        match (count?, percent?) {
+            (Some(_), Some(_)) => {
+                r.report(Reason::SelectorConflict(PERCENT));
+                None
+            }
+            (Some(c), None) => Some(Tally::Count(c)),
+            (None, Some(c)) => Some(Tally::Percent(c)),
+            (None, None) => {
+                r.report(Reason::FieldMissing(name));
+                None
+            }
+        }
+    }
+}
+
+/// Holds [`PERCENT`]'s place among a payload's properties, which [`Tally`]
+/// reads.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TallySlot;
+
+impl Field for TallySlot {
+    fn read(_: &Reader<'_>, _: &'static str) -> Option<Self> {
+        Some(Self)
+    }
+}
+
+payload!(
+    /// `{reading, window_minutes, count | percent}`: how many of the
+    /// window's readings meet `reading`.
+    GlucoseCountPayload {
+        reading: Comparison,
+        window_minutes: WindowMinutes,
+        #[serde(flatten)]
+        count: Tally,
+        #[serde(skip)]
+        percent: TallySlot,
+    }
 );
 
 payload!(

@@ -520,6 +520,60 @@ public class AlertRulesControllerConditionValidationTests
         (await db.AlertRules.CountAsync()).Should().Be(1);
     }
 
+    [NativeTheory]
+    [InlineData("GlucoseChange", """{"operator": "<=", "value": -30, "window_minutes": 15, "clear_margin": 10}""")]
+    [InlineData("GlucoseExtreme", """{"of": "max", "operator": ">", "value": 250, "window_minutes": 180}""")]
+    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 3}}""")]
+    [InlineData("GlucoseCount", """{"reading": {"operator": ">", "value": 180}, "window_minutes": 5, "percent": {"operator": ">=", "value": 50.5}}""")]
+    public async Task CreateRule_saves_the_windowed_conditions(string type, string conditionParams)
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Window",
+            ConditionType = Enum.Parse<AlertConditionType>(type),
+            ConditionParams = Json(conditionParams),
+        }, CancellationToken.None);
+
+        result.Result.Should().NotBeOfType<BadRequestObjectResult>();
+        (await db.AlertRules.CountAsync()).Should().Be(1);
+    }
+
+    [NativeTheory]
+    [InlineData("GlucoseChange", """{"operator": "<=", "value": -30, "window_minutes": 4}""", "glucose_change", "window_out_of_range:window_minutes")]
+    [InlineData("GlucoseExtreme", """{"of": "min", "operator": "<", "value": 70, "window_minutes": 181}""", "glucose_extreme", "window_out_of_range:window_minutes")]
+    [InlineData("GlucoseChange", """{"operator": "<=", "value": -30, "window_minutes": 15, "clear_margin": 31}""", "glucose_change", "margin_past_zero:clear_margin")]
+    [InlineData("GlucoseExtreme", """{"of": "median", "operator": "<", "value": 70, "window_minutes": 60}""", "glucose_extreme", "unknown_value:of")]
+    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 3}, "percent": {"operator": ">=", "value": 10}}""", "glucose_count", "selector_conflict:percent")]
+    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60}""", "glucose_count", "field_missing:count")]
+    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 2.5}}""", "glucose_count", "invalid_field:count")]
+    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60, "percent": {"operator": ">=", "value": 101}}""", "glucose_count", "invalid_field:percent")]
+    [InlineData("GlucoseCount", """{"window_minutes": 60, "count": {"operator": ">=", "value": 3}}""", "glucose_count", "field_missing:reading")]
+    [InlineData("GlucoseCount", """{"reading": {"operator": "<", "value": 70}, "window_minutes": 60, "count": {"operator": ">=", "value": 3}, "clear_margin": 1}""", "glucose_count", "unknown_field")]
+    public async Task CreateRule_rejects_an_invalid_windowed_condition(
+        string type, string conditionParams, string path, string error)
+    {
+        var (controller, db) = CreateController(
+            new AlertRuleConditionValidator());
+
+        var result = await controller.CreateRule(new CreateAlertRuleRequest
+        {
+            Name = "Window",
+            ConditionType = Enum.Parse<AlertConditionType>(type),
+            ConditionParams = Json(conditionParams),
+        }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value
+            .Should().BeOfType<ValidationProblemDetails>().Which.Errors
+            .Should().BeEquivalentTo(new Dictionary<string, string[]>
+            {
+                [$"condition:{path}"] = [error],
+            });
+        (await db.AlertRules.CountAsync()).Should().Be(0);
+    }
+
     [NativeFact]
     public async Task CreateRule_saves_a_valid_clear_margin_as_written()
     {
