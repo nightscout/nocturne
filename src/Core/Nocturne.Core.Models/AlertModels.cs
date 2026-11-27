@@ -311,12 +311,15 @@ public record SensorContext
 /// <summary>
 /// The device and data source a reading was written under, and the registered device it is
 /// attributed to, which with them names its stream (<see cref="V4.CanonicalGlucoseStream.StreamKey"/>).
+/// <paramref name="ReadingId"/> is the reading itself, whose duplicate copies its recent readings
+/// leave out.
 /// </summary>
-public sealed record ReadingSource(string? DataSource, string? Device, Guid? PatientDeviceId = null)
+public sealed record ReadingSource(
+    string? DataSource, string? Device, Guid? PatientDeviceId = null, Guid? ReadingId = null)
 {
     /// <summary>Where <paramref name="reading"/> came from.</summary>
     public static ReadingSource Of(V4.SensorGlucose reading) =>
-        new(reading.DataSource, reading.Device, reading.PatientDeviceId);
+        new(reading.DataSource, reading.Device, reading.PatientDeviceId, reading.Id);
 }
 
 /// <summary>What a live pass saw of the stored spans of one context fact.</summary>

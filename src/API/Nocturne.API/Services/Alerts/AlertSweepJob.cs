@@ -546,6 +546,7 @@ public sealed class AlertSweepJob(ILogger<AlertSweepJob> logger) : IScheduledJob
                 TrendRate = trend.Rate,
                 TrendBucket = trend.Bucket,
                 LastReadingAt = last.At,
+                LatestSource = fresh is null ? null : ReadingSource.Of(fresh),
             };
             return await enricher.EnrichAsync(baseContext, syntheticRules, ct);
         }

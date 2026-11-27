@@ -133,11 +133,12 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         }
 
         // Replay fills the series per tick from the readings it walks (AlertReplayService).
-        if (needs.NeedsGlucoseSeries && !isReplay
-            && baseContext is { LatestSource: { } source, LatestTimestamp: { } newestAt })
+        if (needs.NeedsGlucoseSeries && !isReplay && RecentReadings.NewestOf(baseContext) is { } newest)
         {
-            var window = await _deps.CanonicalGlucose.GetWindowAsync(newestAt - RecentReadings.Span, newestAt, ct);
-            enriched = enriched with { GlucoseSeries = RecentReadings.Of(source, newestAt, window) };
+            enriched = enriched with
+            {
+                GlucoseSeries = await RecentReadings.ReadAsync(newest, _deps.CanonicalGlucose, ct),
+            };
         }
 
         if (needs.NeedsReservoir)

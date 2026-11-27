@@ -246,14 +246,15 @@ internal sealed class AlertReplayService(
         // readings are never all resident; the per-tick contexts built from them are.
         await using var readings = await ReadingCursor.CreateAsync(
             StreamCanonicalReadingsAsync(windowStart - LookBack(readsSeries), windowEnd, ct),
-            StreamHiddenReadingsAsync(windowStart - ReadingTrend.MaxGap, windowEnd, ct),
+            StreamHiddenReadingsAsync(windowStart - LookBack(readsSeries), windowEnd, ct),
             windowStart, ct);
 
-        // The canonical readings walked so far, each with the instant live evaluated it. A tick's
-        // recent readings are those that had arrived by the tick, as live read only the readings
-        // stored by then. Null when no rule reads them.
+        // The readings walked so far, canonical and hidden, each with the primary of its duplicate
+        // group when it is a non-primary copy and the instant live evaluated it. A tick's recent
+        // readings are those that had arrived by the tick, as live read only the readings stored by
+        // then. Null when no rule reads them.
         var recent = readsSeries
-            ? readings.Preceding.Select(r => (Reading: r, EvaluatedAt: arrivals.EvaluatedAt(r))).ToList()
+            ? readings.Preceding.Select(r => new RecentReading(r, null, arrivals.EvaluatedAt(r))).ToList()
             : null;
 
         // Scoped DND (ADR 0004 D5): the tenant's windows received by the replay's end, resolved
@@ -371,15 +372,20 @@ internal sealed class AlertReplayService(
     private static void Enqueue(
         ReadingCursor readings, Arrivals arrivals,
         PriorityQueue<(SensorGlucose Reading, ReadingTrend Trend), DateTime> arriving,
-        List<(SensorGlucose Reading, DateTime EvaluatedAt)>? recent)
+        List<RecentReading>? recent)
     {
         foreach (var advanced in readings.TakeAdvanced())
         {
             var evaluatedAt = arrivals.EvaluatedAt(advanced.Reading);
             arriving.Enqueue(advanced, evaluatedAt);
-            recent?.Add((advanced.Reading, evaluatedAt));
+            recent?.Add(new RecentReading(advanced.Reading, null, evaluatedAt));
         }
+        foreach (var (hidden, duplicateOf) in readings.TakeHidden())
+            recent?.Add(new RecentReading(hidden, duplicateOf, arrivals.EvaluatedAt(hidden)));
     }
+
+    /// <summary>A reading replay has loaded, as a tick's recent readings select from it.</summary>
+    private sealed record RecentReading(SensorGlucose Reading, Guid? DuplicateOf, DateTime EvaluatedAt);
 
     /// <summary>
     /// The recent readings of <paramref name="newest"/> at <paramref name="tick"/>, among those of
@@ -387,12 +393,11 @@ internal sealed class AlertReplayService(
     /// series reaches, since the newest reading only moves forward.
     /// </summary>
     private static IReadOnlyList<GlucoseSeriesPoint> RecentSeries(
-        List<(SensorGlucose Reading, DateTime EvaluatedAt)> recent, SensorGlucose newest, DateTime tick)
+        List<RecentReading> recent, SensorGlucose newest, DateTime tick)
     {
         recent.RemoveAll(r => r.Reading.Timestamp < newest.Timestamp - RecentReadings.Span);
         return RecentReadings.Of(
-            ReadingSource.Of(newest), newest.Timestamp,
-            recent.Where(r => r.EvaluatedAt <= tick).Select(r => r.Reading));
+            newest, recent.Where(r => r.EvaluatedAt <= tick).Select(r => (r.Reading, r.DuplicateOf)));
     }
 
     /// <summary>
@@ -403,7 +408,7 @@ internal sealed class AlertReplayService(
     private static async Task<DateTime?> NextEvaluationAsync(
         ReadingCursor readings, Arrivals arrivals,
         PriorityQueue<(SensorGlucose Reading, ReadingTrend Trend), DateTime> arriving,
-        List<(SensorGlucose Reading, DateTime EvaluatedAt)>? recent)
+        List<RecentReading>? recent)
     {
         while (true)
         {
@@ -439,8 +444,9 @@ internal sealed class AlertReplayService(
             ct);
 
     /// <summary>
-    /// Keyset-pages the window's glucose rows the canonical read leaves out, which only ever serve
-    /// as the earlier reading of a derived <see cref="ReadingTrend"/>.
+    /// Keyset-pages the window's glucose rows the canonical read leaves out, which serve only as the
+    /// earlier reading of a derived <see cref="ReadingTrend"/> and in the recent readings
+    /// (<see cref="RecentReadings"/>).
     /// </summary>
     private IAsyncEnumerable<(SensorGlucose Reading, Guid? DuplicateOf)> StreamHiddenReadingsAsync(
         DateTime windowStart, DateTime windowEnd, CancellationToken ct) =>
@@ -495,8 +501,9 @@ internal sealed class AlertReplayService(
 
     /// <summary>
     /// One-reading-lookahead cursor over the paged canonical stream, walked in timestamp order. Each
-    /// reading of the window it walks past is handed out once by <see cref="TakeAdvanced"/>; the
-    /// readings before the window start serve only as the earlier readings of a trend.
+    /// reading of the window it walks past is handed out once by <see cref="TakeAdvanced"/>, and each
+    /// hidden reading it reads once by <see cref="TakeHidden"/>; the canonical readings before the
+    /// window start serve only as the earlier readings of a trend and as recent readings.
     /// </summary>
     /// <remarks>
     /// The earlier readings are those of the last <see cref="ReadingTrend.MaxGap"/> before the
@@ -522,6 +529,7 @@ internal sealed class AlertReplayService(
         }
 
         private readonly List<(SensorGlucose Reading, ReadingTrend Trend)> _advanced = [];
+        private readonly List<(SensorGlucose Reading, Guid? DuplicateOf)> _hiddenRead = [];
 
         private SensorGlucose? Current { get; set; }
 
@@ -540,6 +548,17 @@ internal sealed class AlertReplayService(
             var advanced = _advanced.ToList();
             _advanced.Clear();
             return advanced;
+        }
+
+        /// <summary>
+        /// The hidden readings read since the last call, those before the window start included,
+        /// each with the primary of its duplicate group when it is a non-primary copy.
+        /// </summary>
+        public List<(SensorGlucose Reading, Guid? DuplicateOf)> TakeHidden()
+        {
+            var read = _hiddenRead.ToList();
+            _hiddenRead.Clear();
+            return read;
         }
 
         public static async Task<ReadingCursor> CreateAsync(
@@ -592,6 +611,7 @@ internal sealed class AlertReplayService(
             while (_nextHidden is { } hidden && hidden.Reading.Timestamp <= reading.Timestamp)
             {
                 _earlier.Add(hidden);
+                _hiddenRead.Add(hidden);
                 _nextHidden = await PullHiddenAsync();
             }
             _earlier.RemoveAll(e => reading.Timestamp - e.Reading.Timestamp > ReadingTrend.MaxGap);

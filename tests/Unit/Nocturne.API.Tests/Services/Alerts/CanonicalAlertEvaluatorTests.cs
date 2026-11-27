@@ -583,9 +583,12 @@ public class CanonicalAlertEvaluatorTests
         EvaluatedRules().Should().Equal(fallRule);
     }
 
-    /// <summary>The context names the newest reading's stream, which its recent readings are read from.</summary>
+    /// <summary>
+    /// The context names the newest reading and its stream, which its recent readings are read from
+    /// leaving out the reading's own duplicate copies.
+    /// </summary>
     [Fact]
-    public void ContextFor_NamesTheNewestReadingsStream()
+    public void ContextFor_NamesTheNewestReadingAndItsStream()
     {
         var latest = Latest(Reading);
         latest.DataSource = "carelink-connector";
@@ -593,7 +596,7 @@ public class CanonicalAlertEvaluatorTests
         latest.PatientDeviceId = Guid.NewGuid();
 
         CanonicalAlertEvaluator.ContextFor(latest, default).LatestSource.Should().Be(
-            new ReadingSource("carelink-connector", "CareLink MiniMed 780G", latest.PatientDeviceId));
+            new ReadingSource("carelink-connector", "CareLink MiniMed 780G", latest.PatientDeviceId, latest.Id));
     }
 
     [NativeFact]

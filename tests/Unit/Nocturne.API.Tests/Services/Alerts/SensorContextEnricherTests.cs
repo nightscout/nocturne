@@ -2290,14 +2290,21 @@ public class SensorContextEnricherTests
         PatientDeviceId = source.PatientDeviceId,
     };
 
-    /// <summary>The canonical readings the window read returns, whatever window it is asked for.</summary>
-    private void CanonicalWindowHolds(params SensorGlucose[] readings) =>
+    private static readonly Guid NewestId = Guid.NewGuid();
+
+    /// <summary>The readings the stream's series read returns, whatever it is asked for.</summary>
+    private void StreamSeriesHolds(params SensorGlucose[] readings) =>
         _canonicalGlucose
-            .Setup(c => c.GetWindowAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(readings.OrderByDescending(r => r.Timestamp).ToList());
+            .Setup(c => c.GetStreamSeriesAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(readings.OrderBy(r => r.Timestamp).ToList());
 
     private Task<SensorContext> EnrichSeries(ReadingSource source) =>
-        BuildEnricher().EnrichAsync(ReadingOf(source), [FallRule], CancellationToken.None);
+        BuildEnricher().EnrichAsync(ReadingOf(source with { ReadingId = NewestId }), [FallRule], CancellationToken.None);
+
+    private void VerifyNoSeriesRead() =>
+        _canonicalGlucose.Verify(
+            c => c.GetStreamSeriesAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
     /// <summary>
     /// The series is the newest reading's stream and uploader: another uploader of the same device,
@@ -2309,7 +2316,7 @@ public class SensorContextEnricherTests
     {
         var xdrip = CareLink with { DataSource = "xdrip" };
         var otherPump = CareLink with { Device = "CareLink MiniMed 770G" };
-        CanonicalWindowHolds(
+        StreamSeriesHolds(
             Glucose(Now, 110, CareLink),
             Glucose(Now.AddMinutes(-3), 112, xdrip),
             Glucose(Now.AddMinutes(-4), 114, otherPump),
@@ -2331,7 +2338,7 @@ public class SensorContextEnricherTests
     {
         var device = Guid.NewGuid();
         var registered = CareLink with { PatientDeviceId = device };
-        CanonicalWindowHolds(
+        StreamSeriesHolds(
             Glucose(Now, 110, registered),
             Glucose(Now.AddMinutes(-5), 120, registered with { Device = "renamed" }),
             Glucose(Now.AddMinutes(-6), 121, registered with { DataSource = "xdrip" }),
@@ -2346,28 +2353,33 @@ public class SensorContextEnricherTests
     }
 
     /// <summary>
-    /// The series reaches back 180 minutes from the newest reading, the longest window, and no
-    /// further, and stops at it: a reading dated after it, which the context did not select, is not
-    /// read.
+    /// The stream's read is asked for the newest reading, whose own duplicate copies it leaves out,
+    /// over the 180 minutes before it, the longest window. A reading dated outside that range is not
+    /// in the series.
     /// </summary>
     [Fact]
     public async Task The_series_runs_from_180_minutes_before_the_newest_reading_to_it()
     {
         var newestAt = Now.AddMinutes(-2);
-        CanonicalWindowHolds(
+        StreamSeriesHolds(
             Glucose(Now.AddMinutes(10), 90, CareLink),
             Glucose(newestAt, 110, CareLink),
             Glucose(newestAt.AddMinutes(-180), 150, CareLink),
             Glucose(newestAt.AddMinutes(-180).AddTicks(-1), 151, CareLink));
 
         var enriched = await BuildEnricher().EnrichAsync(
-            ReadingOf(CareLink) with { LatestTimestamp = newestAt }, [FallRule], CancellationToken.None);
+            ReadingOf(CareLink with { ReadingId = NewestId }) with { LatestTimestamp = newestAt },
+            [FallRule], CancellationToken.None);
 
         enriched.GlucoseSeries.Should().Equal(
             new GlucoseSeriesPoint(newestAt.AddMinutes(-180), 150m),
             new GlucoseSeriesPoint(newestAt, 110m));
         _canonicalGlucose.Verify(
-            c => c.GetWindowAsync(newestAt.AddMinutes(-180), newestAt, It.IsAny<CancellationToken>()), Times.Once);
+            c => c.GetStreamSeriesAsync(
+                It.Is<SensorGlucose>(r => r.Id == NewestId && r.Timestamp == newestAt
+                    && r.DataSource == CareLink.DataSource && r.Device == CareLink.Device && r.PatientDeviceId == null),
+                newestAt.AddMinutes(-180), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     /// <summary>
@@ -2382,33 +2394,38 @@ public class SensorContextEnricherTests
         IReadOnlyList<GlucoseSeriesPoint> walked = [new(tick.AddMinutes(-5), 130m), new(tick, 120m)];
 
         var enriched = await BuildEnricher().EnrichAsOfAsync(
-            ReadingOf(CareLink) with { LatestTimestamp = tick, GlucoseSeries = walked }, [FallRule], tick,
-            CancellationToken.None);
+            ReadingOf(CareLink with { ReadingId = NewestId }) with { LatestTimestamp = tick, GlucoseSeries = walked },
+            [FallRule], tick, CancellationToken.None);
 
         enriched.GlucoseSeries.Should().Equal(walked);
-        _canonicalGlucose.Verify(
-            c => c.GetWindowAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        VerifyNoSeriesRead();
     }
 
     [Fact]
     public async Task A_rule_that_reads_no_series_does_not_fetch_one()
     {
-        var enriched = await BuildEnricher().EnrichAsync(ReadingOf(CareLink), [LowRule()], CancellationToken.None);
+        var enriched = await BuildEnricher().EnrichAsync(
+            ReadingOf(CareLink with { ReadingId = NewestId }), [LowRule()], CancellationToken.None);
 
         enriched.GlucoseSeries.Should().BeEmpty();
-        _canonicalGlucose.Verify(
-            c => c.GetWindowAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        VerifyNoSeriesRead();
     }
 
-    /// <summary>A context that does not say where its reading came from names no stream to read.</summary>
-    [Fact]
-    public async Task A_context_without_its_readings_source_reads_no_series()
+    /// <summary>
+    /// A context that does not name its newest reading has no stream to read, nor a duplicate group
+    /// to leave out.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_context_that_does_not_name_its_newest_reading_reads_no_series(bool withSource)
     {
-        var enriched = await BuildEnricher().EnrichAsync(BaseContext(), [FallRule], CancellationToken.None);
+        var context = withSource ? ReadingOf(CareLink) : BaseContext();
+
+        var enriched = await BuildEnricher().EnrichAsync(context, [FallRule], CancellationToken.None);
 
         enriched.GlucoseSeries.Should().BeEmpty();
-        _canonicalGlucose.Verify(
-            c => c.GetWindowAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        VerifyNoSeriesRead();
     }
 
     private static string TryResolve(string ianaId, string windowsId)

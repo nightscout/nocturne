@@ -235,6 +235,16 @@ public interface ISensorGlucoseRepository
         SensorGlucose reading, DateTime since, CancellationToken ct = default);
 
     /// <summary>
+    /// Every live reading of <paramref name="newest"/>'s stream and data source with a glucose value,
+    /// timestamped in [<paramref name="since"/>, the newest reading's timestamp], oldest first, chosen
+    /// as <see cref="GetStreamPredecessorAsync"/> chooses: non-primary duplicate copies and readings of
+    /// a stream that lost its bucket are in it, a copy in the newest reading's own duplicate group is
+    /// not, and the newest reading itself is.
+    /// </summary>
+    Task<IReadOnlyList<SensorGlucose>> GetStreamSeriesAsync(
+        SensorGlucose newest, DateTime since, CancellationToken ct = default);
+
+    /// <summary>
     /// The first arrival of every stream the tenant ever stored a reading from: the earliest
     /// <c>sys_created_at</c> per writer, data source and device, in one grouped read. It is read with
     /// the member history clamp lifted, since it feeds only replay's internal classification of

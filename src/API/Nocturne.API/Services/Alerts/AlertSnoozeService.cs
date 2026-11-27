@@ -131,6 +131,7 @@ internal sealed class AlertSnoozeService(
             TrendRate = trend.Rate,
             TrendBucket = trend.Bucket,
             LastReadingAt = latest?.Timestamp,
+            LatestSource = fresh is null ? null : ReadingSource.Of(fresh),
         };
 
         var rule = AlertRuleMapper.ToSnapshot(ruleEntity);

@@ -58,6 +58,45 @@ public class SensorGlucoseStreamPredecessorPlanTests(RlsCompletenessFixture fx)
         plan.Descendants("Index Name").Should().Contain("ix_sensor_glucose_tenant_timestamp", plan.ToString());
     }
 
+    /// <summary>
+    /// The recent readings a windowed alert condition reads range the same index over the 180 minutes
+    /// before the newest reading.
+    /// </summary>
+    [Fact]
+    public async Task The_recent_readings_read_ranges_the_tenant_timestamp_index()
+    {
+        for (var i = 0; i < OtherTenants; i++)
+            await SeedReadingsAsync(Guid.NewGuid());
+        var tenant = Guid.NewGuid();
+        await SeedReadingsAsync(tenant);
+        await SeedLinksAsync(tenant);
+
+        await using var conn = await fx.OpenAppConnectionAsync();
+        await conn.PinTenantAsync(tenant);
+
+        var capture = new QueryPlans.LastReaderCapture();
+        await using var ctx = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(conn)
+            .AddInterceptors(capture)
+            .Options) { TenantId = tenant };
+
+        var repository = new SensorGlucoseRepository(
+            new TestNocturneDbContextFactory(ctx),
+            new Mock<IDuplicateLinker>().Object,
+            new Mock<IAuditContext>().Object,
+            NullLogger<SensorGlucoseRepository>.Instance);
+        var at = DateTime.UtcNow.AddHours(-4);
+        var newest = new SensorGlucose
+        {
+            Id = Guid.NewGuid(), Timestamp = at, Mgdl = 100, DataSource = "xdrip", Device = "g7",
+        };
+        (await repository.GetStreamSeriesAsync(newest, at.AddMinutes(-180))).Should().NotBeEmpty();
+
+        var plan = await QueryPlans.ExplainAsync(conn, capture.Command!);
+        plan.Descendants("Node Type").Should().NotContain("Seq Scan", plan.ToString());
+        plan.Descendants("Index Name").Should().Contain("ix_sensor_glucose_tenant_timestamp", plan.ToString());
+    }
+
     private Task SeedReadingsAsync(Guid tenant) =>
         PlanTestSupport.SeedAsync(
             fx, tenant, "sensor_glucose",

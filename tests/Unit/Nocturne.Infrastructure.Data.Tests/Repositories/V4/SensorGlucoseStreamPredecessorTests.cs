@@ -15,7 +15,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
 /// <summary>
 /// The reads a derived glucose trend pairs a reading with: the previous reading of its stream,
-/// hidden copies included, and replay's page of the rows the canonical read hides. Written through
+/// hidden copies included, and replay's page of the rows the canonical read hides; and the recent
+/// readings of a stream the windowed alert conditions read, chosen the same way. Written through
 /// the repository with the real duplicate linker, so the copies of one reading are linked as they
 /// are in production: whichever copy is written first is shown.
 /// </summary>
@@ -244,5 +245,76 @@ public class SensorGlucoseStreamPredecessorTests : IDisposable
             (xdrip[0].Id, dexcom[0].Id),
             (dexcom[1].Id, xdrip[1].Id),
             (xdrip[2].Id, dexcom[2].Id));
+    }
+
+    private async Task<bool> IsSecondaryStreamAsync(SensorGlucose reading) =>
+        await _context.SensorGlucose.AsNoTracking().Where(e => e.Id == reading.Id).Select(e => e.IsSecondaryStream).SingleAsync();
+
+    private async Task<IEnumerable<Guid>> SeriesOfAsync(SensorGlucose newest, DateTime since) =>
+        (await _glucose.GetStreamSeriesAsync(newest, since)).Select(r => r.Id);
+
+    /// <summary>
+    /// With the primary alternating between two uploaders, a stream's recent readings are every one
+    /// of its own copies, hidden or shown, oldest first, and never the other uploader's.
+    /// </summary>
+    [Fact]
+    public async Task The_series_of_two_uploaders_taking_turns_is_each_ones_own_copies()
+    {
+        var (dexcom, xdrip) = await TakingTurnsAsync();
+        (await IsDuplicateAsync(dexcom[1])).Should().BeTrue("the xdrip copy at 02:04:03 was written first");
+        (await IsDuplicateAsync(xdrip[0])).Should().BeTrue("the dexcom copy at 01:59 was written first");
+
+        (await SeriesOfAsync(dexcom[2], Start.AddMinutes(-180)))
+            .Should().Equal(dexcom[0].Id, dexcom[1].Id, dexcom[2].Id);
+        (await SeriesOfAsync(xdrip[1], Start.AddMinutes(-180)))
+            .Should().Equal(xdrip[0].Id, xdrip[1].Id);
+    }
+
+    /// <summary>
+    /// Two uploaders 40 seconds apart are not linked, and their pseudo-device streams compete for each
+    /// bucket: xdrip's readings lose to dexcom's and are hidden, but stay in xdrip's own series.
+    /// </summary>
+    [Fact]
+    public async Task The_series_holds_the_readings_of_buckets_its_stream_lost()
+    {
+        await WriteAsync(Dexcom, Start.AddMinutes(-5), 120);
+        var lost = await WriteAsync(Xdrip, Start.AddMinutes(-5).AddSeconds(40), 118);
+        await WriteAsync(Dexcom, Start, 100);
+        var newest = await WriteAsync(Xdrip, Start.AddSeconds(40), 98);
+        (await IsDuplicateAsync(lost)).Should().BeFalse();
+        (await IsSecondaryStreamAsync(lost)).Should().BeTrue();
+
+        (await SeriesOfAsync(newest, Start.AddMinutes(-180))).Should().Equal(lost.Id, newest.Id);
+    }
+
+    /// <summary>A copy in the newest reading's own duplicate group is the same reading, not an earlier one.</summary>
+    [Fact]
+    public async Task The_series_leaves_out_the_copies_of_the_newest_reading()
+    {
+        var previous = await WriteAsync(Dexcom, Start.AddMinutes(-5), 110);
+        var newest = await WriteAsync(Dexcom, Start, 100);
+        var copy = await WriteAsync(Dexcom, Start, 100);
+        (await IsDuplicateAsync(copy)).Should().BeTrue();
+
+        (await SeriesOfAsync(newest, Start.AddMinutes(-180))).Should().Equal(previous.Id, newest.Id);
+    }
+
+    /// <summary>
+    /// The series runs from <c>since</c> up to and including the newest reading, with only the readings
+    /// of its stream that carry a value and are not deleted.
+    /// </summary>
+    [Fact]
+    public async Task The_series_runs_from_since_to_the_newest_reading_with_its_streams_valued_readings()
+    {
+        var newest = await WriteAsync(Dexcom, Start, 100);
+        await WriteAsync(Xdrip, Start.AddMinutes(-1), 180);
+        await WriteAsync(Dexcom, Start.AddMinutes(1), 90);
+        await WriteAsync(Dexcom, Start.AddMinutes(-2), 0);
+        var deleted = await WriteAsync(Dexcom, Start.AddMinutes(-10), 120);
+        await _glucose.DeleteAsync(deleted.Id, WriteOrigin.Live);
+        var edge = await WriteAsync(Dexcom, Start.AddMinutes(-180), 130);
+        await WriteAsync(Dexcom, Start.AddMinutes(-180).AddSeconds(-1), 131);
+
+        (await SeriesOfAsync(newest, Start.AddMinutes(-180))).Should().Equal(edge.Id, newest.Id);
     }
 }
