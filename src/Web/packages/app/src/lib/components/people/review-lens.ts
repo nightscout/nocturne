@@ -4,7 +4,7 @@ import {
   type TenantReviewResponse,
   type TenantReviewStatistics,
 } from "@nocturne/api-client";
-import type { PeopleTab } from "./people-tab.js";
+import { withTab, type PeopleTab } from "./people-tab.js";
 
 export type Lens = "now" | "review";
 
@@ -34,12 +34,10 @@ export interface PageView {
 
 /** The page's address for a view. The Now lens carries no period. */
 export function pageUrl(current: { href: string }, view: PageView): URL {
-  const url = new URL(current.href);
-  url.searchParams.delete("group");
+  const url = withTab(new URL(current.href), view.tab);
   url.searchParams.delete("lens");
   url.searchParams.delete("days");
   url.searchParams.delete("person");
-  if (view.tab.kind === "group") url.searchParams.set("group", view.tab.id);
   if (view.lens === "review") {
     url.searchParams.set("lens", view.lens);
     url.searchParams.set("days", String(view.days));

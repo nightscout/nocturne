@@ -497,6 +497,20 @@ describe("PeoplePage group tabs", () => {
   });
 });
 
+describe("the wall display link", () => {
+  it("opens the wall on the open tab", async () => {
+    openAt(`?group=${birch.id}`);
+    const link = page.getByRole("link", { name: "Wall display" });
+    await expect.element(link).toHaveAttribute("href", `/people/wall?group=${birch.id}`);
+
+    await tab("Everyone").click();
+    await expect.element(link).toHaveAttribute("href", "/people/wall");
+
+    await tab("Oak cabin").click();
+    await expect.element(link).toHaveAttribute("href", `/people/wall?group=${oak.id}`);
+  });
+});
+
 describe("the overview and groups responses through their generated schemas", () => {
   it("turns a null hidden count into none, which the page reads as no sentence, and keeps a number", async () => {
     const everyone = TenantOverviewResponseSchema.parse({ tenants: [], hiddenCount: null });

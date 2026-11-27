@@ -37,7 +37,7 @@ public class TenantOverviewGroupTests
     private readonly Guid _subject = Guid.NewGuid();
     private readonly Guid _group = Guid.NewGuid();
     private readonly DbContextOptions<NocturneDbContext> _options = NewOptions();
-    private readonly Mock<ITeamRepository> _teams = new();
+    private readonly Mock<ITeamRepository> _teams = InNoGroup();
     private readonly Dictionary<Guid, SensorGlucose> _latest = [];
     private readonly ErrorLog _errors = new();
 
@@ -114,6 +114,25 @@ public class TenantOverviewGroupTests
 
         group!.Tenants.Should().BeEmpty();
         group.HiddenCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Everyone_puts_each_person_under_the_group_the_teams_read_names_and_a_group_puts_nobody_under_one()
+    {
+        var amy = SeedMembership(_options, _subject, "amy", GlucoseReader);
+        var bo = SeedMembership(_options, _subject, "bo", GlucoseReader);
+        var birch = Guid.NewGuid();
+        _teams.Setup(t => t.GetFirstGroupOfPeopleAsync(_subject, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, Guid> { [amy] = birch, [Guid.NewGuid()] = Guid.NewGuid() });
+        InGroup(amy, bo);
+
+        var everyone = await Service().GetOverviewAsync(_subject, FullTokenScopes, AuthType.SessionCookie);
+        everyone.Tenants.ToDictionary(t => t.Slug, t => t.FirstGroupId).Should().BeEquivalentTo(
+            new Dictionary<string, Guid?> { ["amy"] = birch, ["bo"] = null });
+
+        var group = await Service().GetGroupOverviewAsync(
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, false, CancellationToken.None);
+        group!.Tenants.Should().HaveCount(2).And.OnlyContain(t => t.FirstGroupId == null);
     }
 
     private void InGroup(params Guid[] tenants) =>

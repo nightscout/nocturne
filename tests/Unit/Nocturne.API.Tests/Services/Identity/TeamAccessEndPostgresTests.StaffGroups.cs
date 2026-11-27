@@ -141,6 +141,88 @@ public partial class TeamAccessEndPostgresTests
     }
 
     [Fact]
+    public async Task Each_person_on_the_everyone_overview_is_under_the_first_of_the_staff_members_own_groups_that_holds_them()
+    {
+        var camp = await TeamAsync("Camp");
+        var staff = await JoinStaffAsync(camp);
+        var aspen = await GroupAsync(camp, "Aspen");
+        var birch = await GroupAsync(camp, "birch");
+        await PutStaffAsync(camp, birch, staff);
+        var ward = await TeamAsync("Ward team");
+        await JoinStaffAsync(ward, staff);
+        var oak = await GroupAsync(ward, "Oak");
+        var elm = await GroupAsync(ward, "elm");
+        await PutStaffAsync(ward, oak, staff);
+        await PutStaffAsync(ward, elm, staff);
+
+        var inBoth = await SiteAsync("in-both");
+        var aspenOnly = await SiteAsync("aspen-only");
+        var inNone = await SiteAsync("in-none");
+        var wardOnly = await SiteAsync("ward-only");
+        var everywhere = await SiteAsync("everywhere");
+        foreach (var site in new[] { inBoth, aspenOnly, inNone, everywhere })
+            await FollowAsync(camp, site);
+        foreach (var site in new[] { wardOnly, everywhere })
+            await FollowAsync(ward, site);
+        foreach (var (team, group, site) in new[]
+        {
+            (camp, aspen, inBoth), (camp, birch, inBoth), (camp, aspen, aspenOnly),
+            (ward, oak, wardOnly), (ward, elm, wardOnly),
+            (camp, aspen, everywhere), (camp, birch, everywhere), (ward, oak, everywhere), (ward, elm, everywhere),
+        })
+            await PutSiteAsync(team, group, site);
+
+        string.CompareOrdinal(oak.ToString(), elm.ToString()).Should().BeNegative("an order by id would put Oak first");
+        (await Teams().GetGroupsOfStaffAsync(staff, Now, Ct)).Select(g => g.Id).Should().Equal(birch, elm, oak);
+
+        var overview = Overview(new TenantOverviewTestKit.ErrorLog(), withReading: Guid.Empty);
+        var everyone = await overview.GetOverviewAsync(staff, SessionScopes, AuthType.SessionCookie, false, Ct);
+        everyone.Tenants.ToDictionary(t => t.TenantId, t => t.FirstGroupId).Should().BeEquivalentTo(new Dictionary<Guid, Guid?>
+        {
+            [inBoth.Tenant] = birch,
+            [aspenOnly.Tenant] = null,
+            [inNone.Tenant] = null,
+            [wardOnly.Tenant] = elm,
+            [everywhere.Tenant] = birch,
+        });
+        var json = JsonSerializer.Serialize(everyone);
+        json.Should().NotContain(aspen.ToString(), "the staff member is not in Aspen");
+        json.Should().NotContain(oak.ToString(), "nobody is under Oak, so nothing says who is in it");
+
+        var birchOverview = await overview.GetGroupOverviewAsync(staff, birch, SessionScopes, AuthType.SessionCookie, false, Ct);
+        birchOverview!.Tenants.Select(t => t.TenantId).Should().BeEquivalentTo([inBoth.Tenant, everywhere.Tenant]);
+        birchOverview.Tenants.Should().OnlyContain(t => t.FirstGroupId == null, "only the overview of everyone puts people under headings");
+    }
+
+    [Fact]
+    public async Task Two_staff_members_with_the_same_access_read_the_same_groups_overview()
+    {
+        var team = await TeamAsync("Camp");
+        var first = await JoinStaffAsync(team);
+        var second = await JoinStaffAsync(team);
+        var group = await GroupAsync(team, "Birch cabin");
+        await PutStaffAsync(team, group, first);
+        await PutStaffAsync(team, group, second);
+
+        var amy = await SiteAsync("amy");
+        var bo = await SiteAsync("bo");
+        await FollowAsync(team, amy);
+        await FollowAsync(team, bo);
+        var pending = await SiteAsync("pending");
+        await FollowAsync(team, pending, Gives(pending, [pending.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
+        foreach (var site in new[] { amy, bo, pending })
+            await PutSiteAsync(team, group, site);
+
+        var overview = Overview(new TenantOverviewTestKit.ErrorLog(), withReading: Guid.Empty);
+        var one = await overview.GetGroupOverviewAsync(first, group, SessionScopes, AuthType.SessionCookie, false, Ct);
+        var two = await overview.GetGroupOverviewAsync(second, group, SessionScopes, AuthType.SessionCookie, false, Ct);
+
+        one!.Tenants.Select(t => t.TenantId).Should().Equal(amy.Tenant, bo.Tenant);
+        one.HiddenCount.Should().Be(1);
+        JsonSerializer.Serialize(two).Should().Be(JsonSerializer.Serialize(one));
+    }
+
+    [Fact]
     public async Task A_place_whose_group_is_another_teams_opens_no_group()
     {
         var north = await TeamAsync("North");

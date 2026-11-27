@@ -625,7 +625,7 @@ public class TenantOverviewServiceTests
 
         var service = new TenantOverviewService(
             new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory(), AccountLinkRoutes.Off),
-            Mock.Of<ITeamRepository>(),
+            TenantOverviewTestKit.InNoGroup().Object,
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
@@ -1006,7 +1006,8 @@ public class TenantOverviewServiceTests
         string slug, string displayName, params NotificationUrgency[] levels) =>
         new(Guid.NewGuid(), slug, displayName, null, null, GlucoseStatus.InRange, Defaults, null, null,
             [], null, null, null,
-            levels.Select(l => new TenantOverviewAttention(TenantOverviewAttentionKind.TrackerDue, l)).ToList());
+            levels.Select(l => new TenantOverviewAttention(TenantOverviewAttentionKind.TrackerDue, l)).ToList(),
+            FirstGroupId: null);
 
     private static IobCobReading OnBoard(double iob, double cob, bool insulin = true, bool carbs = true) =>
         new(new IobResult { Iob = iob }, new CobResult { Cob = cob },
@@ -1119,7 +1120,7 @@ public class TenantOverviewServiceTests
 
         return new TenantOverviewService(
             new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory(), AccountLinkRoutes.Off),
-            Mock.Of<ITeamRepository>(),
+            TenantOverviewTestKit.InNoGroup().Object,
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),

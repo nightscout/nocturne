@@ -49,20 +49,46 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
         Guid groupId, Guid subjectId, DateTime now, CancellationToken ct)
     {
         await using var db = await contexts.CreateForSubjectAsync(subjectId, ct);
+        var people = PeopleOfStaffPlaces(db, subjectId, now);
         var group = await StaffPlacesOf(db, subjectId, now)
             .Where(s => s.TeamGroupId == groupId)
-            .Select(s => new
-            {
-                People = s.TeamGroup!.People
-                    .Where(p => db.TeamTenantAccess.Any(a => a.TeamId == s.TeamGroup!.TeamId
-                        && a.TenantId == p.TenantId
-                        && (a.AccessEndsAt == null || a.AccessEndsAt > now)))
-                    .Select(p => p.TenantId)
-                    .ToList(),
-            })
+            .Select(s => new { People = people.Where(p => p.GroupId == s.TeamGroupId).Select(p => p.TenantId).ToList() })
             .FirstOrDefaultAsync(ct);
         return group?.People.ToHashSet();
     }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyDictionary<Guid, Guid>> GetFirstGroupOfPeopleAsync(
+        Guid subjectId, DateTime now, CancellationToken ct)
+    {
+        await using var db = await contexts.CreateForSubjectAsync(subjectId, ct);
+        var places = await PeopleOfStaffPlaces(db, subjectId, now)
+            .OrderBy(p => p.NameKey)
+            .ThenBy(p => p.GroupId)
+            .Select(p => new { p.TenantId, p.GroupId })
+            .ToListAsync(ct);
+
+        var first = new Dictionary<Guid, Guid>();
+        foreach (var place in places)
+            first.TryAdd(place.TenantId, place.GroupId);
+        return first;
+    }
+
+    /// <summary>A site in one of a staff member's groups, with the group's name key, which orders their groups.</summary>
+    private sealed class StaffGroupPerson
+    {
+        public required Guid GroupId { get; init; }
+        public required string NameKey { get; init; }
+        public required Guid TenantId { get; init; }
+    }
+
+    /// <summary>The sites of each of the subject's places whose team's access has not ended at <paramref name="now"/>.</summary>
+    private static IQueryable<StaffGroupPerson> PeopleOfStaffPlaces(NocturneDbContext db, Guid subjectId, DateTime now) =>
+        StaffPlacesOf(db, subjectId, now).SelectMany(
+            s => s.TeamGroup!.People.Where(p => db.TeamTenantAccess.Any(a => a.TeamId == s.TeamGroup!.TeamId
+                && a.TenantId == p.TenantId
+                && (a.AccessEndsAt == null || a.AccessEndsAt > now))),
+            (s, p) => new StaffGroupPerson { GroupId = s.TeamGroupId, NameKey = s.TeamGroup!.NameKey, TenantId = p.TenantId });
 
     private static IQueryable<TeamGroupStaffEntity> StaffPlacesOf(NocturneDbContext db, Guid subjectId, DateTime now) =>
         db.TeamGroupStaff.AsNoTracking()

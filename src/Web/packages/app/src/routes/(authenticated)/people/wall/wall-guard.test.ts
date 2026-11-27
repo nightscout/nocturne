@@ -11,7 +11,9 @@ import { load as wallUniversalLoad } from "./+layout";
 
 type ServerEvent = Parameters<typeof wallServerLoad>[0];
 
-function eventFor(signedIn: boolean) {
+const WALL = "https://acme.nocturne.run/people/wall";
+
+function eventFor(signedIn: boolean, address: string) {
   return {
     locals: {
       isGuestSession: false,
@@ -27,7 +29,7 @@ function eventFor(signedIn: boolean) {
       },
     },
     cookies: { get: () => undefined, set: () => {}, delete: () => {} } as unknown as Cookies,
-    url: new URL("https://acme.nocturne.run/people/wall"),
+    url: new URL(address),
     untrack: <T>(fn: () => T) => fn(),
     depends: () => {},
     parent: async () => ({ tenantless: false }),
@@ -62,7 +64,7 @@ describe("people wall route guard", () => {
   it("sends a signed-out visitor to sign in and back to the wall", async () => {
     let location: string | null = null;
     try {
-      await wallServerLoad(eventFor(false));
+      await wallServerLoad(eventFor(false, WALL));
     } catch (error) {
       if (!isRedirect(error)) throw error;
       location = error.location;
@@ -71,8 +73,20 @@ describe("people wall route guard", () => {
     expect(location).toBe("/auth/login?returnUrl=%2Fpeople%2Fwall");
   });
 
+  it("keeps the wall's group through sign-in, so a display that signs in again reopens the group", async () => {
+    let location: string | null = null;
+    try {
+      await wallServerLoad(eventFor(false, "https://acme.nocturne.run/people/wall?group=g-1"));
+    } catch (error) {
+      if (!isRedirect(error)) throw error;
+      location = error.location;
+    }
+
+    expect(location).toBe("/auth/login?returnUrl=%2Fpeople%2Fwall%3Fgroup%3Dg-1");
+  });
+
   it("lets a signed-in visitor through", async () => {
-    await expect(wallServerLoad(eventFor(true))).resolves.toMatchObject({
+    await expect(wallServerLoad(eventFor(true, WALL))).resolves.toMatchObject({
       user: { name: "Sam" },
     });
   });

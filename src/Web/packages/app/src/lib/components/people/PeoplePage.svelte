@@ -16,8 +16,19 @@
   import Monitor from "@lucide/svelte/icons/monitor";
   import Users from "@lucide/svelte/icons/users";
   import PeopleRoster from "./PeopleRoster.svelte";
+  import HiddenInGroup from "./HiddenInGroup.svelte";
   import PeopleTabs from "./PeopleTabs.svelte";
-  import { EVERYONE, groupOf, parseTab, tabValue, type PeopleTab } from "./people-tab.js";
+  import TabFallback from "./TabFallback.svelte";
+  import {
+    EVERYONE,
+    fallbackOf,
+    groupOf,
+    parseTab,
+    tabValue,
+    withTab,
+    type PeopleTab,
+    type FallbackReason,
+  } from "./people-tab.js";
   import { followPeople } from "./people-overview.svelte.js";
   import { setReadState } from "./read-state.js";
   import PersonPanel from "./PersonPanel.svelte";
@@ -41,7 +52,7 @@
    * Why the page shows everyone in place of the group the address named: the viewer is not in it,
    * or their groups did not load.
    */
-  let fellBack = $state<"unknown" | "unread" | null>(null);
+  let fellBack = $state<FallbackReason | null>(null);
   /** How many reads of the groups are running after navigations named one they did not list. */
   let groupRereads = $state(0);
   const rereadingGroups = $derived(groupRereads > 0);
@@ -114,6 +125,11 @@
     return pageUrl(page.url, { tab, lens, days, person: personSlug, ...view });
   }
 
+  const wallLocation = $derived.by(() => {
+    const url = withTab(new URL(resolve("/(authenticated)/people/wall"), page.url.href), tab);
+    return url.pathname + url.search;
+  });
+
   function choose(next: PeopleTab) {
     tab = next;
     fellBack = null;
@@ -125,15 +141,7 @@
   // Without the groups the page has no tab to show the group under, so it shows everyone.
   $effect(() => {
     if (tab.kind !== "group" || rereadingGroups) return;
-    const id = tab.id;
-    const listed = groupsQuery.current;
-    const reason =
-      listed === undefined && groupsQuery.error
-        ? "unread"
-        : (listed !== undefined && !listed.some((listedGroup) => listedGroup.id === id)) ||
-            groupNotFound
-          ? "unknown"
-          : null;
+    const reason = fallbackOf(tab.id, groupsQuery.current, !!groupsQuery.error, groupNotFound);
     if (!reason) return;
     untrack(() => {
       choose(EVERYONE);
@@ -295,7 +303,7 @@
         <Button
           variant="outline"
           size="sm"
-          href={resolve("/(authenticated)/people/wall")}
+          href={wallLocation}
         >
           <Monitor class="size-4" aria-hidden="true" />
           Wall display
@@ -320,14 +328,8 @@
     </div>
   </div>
 
-  {#if fellBack === "unknown"}
-    <p class="text-sm text-muted-foreground">
-      You are not in that group. The list shows everyone you follow.
-    </p>
-  {:else if fellBack === "unread"}
-    <p class="text-sm text-muted-foreground">
-      Your groups did not load. The list shows everyone you follow.
-    </p>
+  {#if fellBack}
+    <p class="text-sm text-muted-foreground"><TabFallback reason={fellBack} /></p>
   {/if}
 
   {#snippet list()}
@@ -348,12 +350,7 @@
       <p class="text-sm text-muted-foreground">Loading…</p>
     {:else if data}
       {#if group && hiddenCount > 0}
-        <p class="text-sm text-muted-foreground">
-          {plural(hiddenCount, [
-            "You cannot see # person in this group.",
-            "You cannot see # people in this group.",
-          ])}
-        </p>
+        <p class="text-sm text-muted-foreground"><HiddenInGroup count={hiddenCount} /></p>
       {/if}
       {#if people.length === 0 && group && hiddenCount > 0}
         <EmptyState
