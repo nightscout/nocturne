@@ -109,6 +109,49 @@ your CGM with each reading.
   over 15 minutes adds up to 30 mg/dL (1.7 mmol/L). If your CGM or uploader
   does not send a rate with its readings, this condition is never true.
 
+### Glucose change
+
+How much glucose changed in a time window: the newest reading minus the oldest
+reading in the window, in mg/dL (or mmol/L). A fall is a negative number.
+
+- **Settings:** a comparison, a change in glucose, and the length of the window
+  in minutes, from 5 to 180.
+- **Use it for:** a fall of 30 mg/dL or more in 15 minutes. Set at most, -30 and
+  a window of 15 minutes.
+- **Good to know:** the window ends at the newest reading, not at the current
+  time. The condition needs two or more readings in the window. If the first
+  reading comes late in the window, the condition does not know if it is true.
+  See [Time windows](/docs/alerts/building-rules#time-windows).
+
+### Lowest or highest glucose
+
+The lowest or the highest reading in a time window, compared with a glucose
+value.
+
+- **Settings:** lowest or highest, the length of the window in minutes (5 to
+  180), a comparison, and a glucose value.
+- **Use it for:** a reading above 250 mg/dL at any time in the 2 hours to the
+  newest reading. Set highest, a window of 120 minutes, more than, and 250.
+- **Good to know:** a gap in the readings can hide a lower or a higher value.
+  Then the condition knows its result only when no missing reading can change
+  it. For example, "highest more than 250" with a reading of 260 is true. "Highest
+  less than 250" with a highest reading of 240 is not known.
+
+### Reading count
+
+How many readings in a time window meet a comparison, or what percent of the
+readings in the window meet it.
+
+- **Settings:** a number of readings or a percent, a comparison and a glucose
+  value for each reading, the length of the window in minutes (5 to 180), and a
+  comparison with the number or the percent.
+- **Use it for:** 3 or more readings below 70 mg/dL in 1 hour. Or more than 50
+  percent of the readings above 180 mg/dL in 3 hours.
+- **Good to know:** a number of readings is a whole number. A percent is from 0
+  to 100. This condition cannot have a clear margin. A gap in the readings can
+  hide readings that meet the comparison or readings that do not. Then the
+  condition knows its result only when no missing reading can change it.
+
 ### Trend
 
 The trend arrow, as a rough direction: rising fast, rising, flat, falling,
