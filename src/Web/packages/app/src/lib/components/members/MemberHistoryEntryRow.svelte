@@ -48,8 +48,10 @@
   }
 
   const actor = $derived(actorName(entry.actor));
+  // @wc-include
   const member = $derived(entry.member?.name ?? "a deleted member");
   const memberFirst = $derived(entry.member?.name ?? "A deleted member");
+  // @wc-include
   const by = $derived(entry.by ? (entry.by.name ?? "a deleted member") : undefined);
   const approver = $derived(entry.by ? (entry.by.name ?? "A deleted member") : actor);
   const role = $derived(

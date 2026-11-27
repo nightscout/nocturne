@@ -2,6 +2,9 @@ import { TrackerMode } from "#lib/api/index.js";
 
 export type ThresholdUnit = "hours" | "days";
 
+/** The threshold units by name, for a component that also shows a translated word for the unit. */
+export const ThresholdUnits = { Hours: "hours", Days: "days" } as const satisfies Record<string, ThresholdUnit>;
+
 /** `before` counts back from the end of the lifespan, or from an Event tracker's date. */
 export type ThresholdSide = "before" | "after";
 

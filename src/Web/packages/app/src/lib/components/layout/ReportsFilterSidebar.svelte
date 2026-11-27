@@ -35,10 +35,15 @@
   // Quick day presets
   const dayPresets = [
     { label: "Today", days: 1 },
+    // @wc-include
     { label: "3 Days", days: 3 },
+    // @wc-include
     { label: "7 Days", days: 7 },
+    // @wc-include
     { label: "14 Days", days: 14 },
+    // @wc-include
     { label: "30 Days", days: 30 },
+    // @wc-include
     { label: "90 Days", days: 90 },
   ];
 

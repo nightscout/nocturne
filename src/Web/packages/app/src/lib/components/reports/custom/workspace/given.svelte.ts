@@ -10,6 +10,7 @@ import type {
   CustomReportDatasetMark,
 } from "@nocturne/api-client";
 import { formatList } from "#lib/utils/formatting.js";
+import { plural } from "#lib/utils/plural.js";
 import { bindingsOf, type Cell } from "./catalogue-vocabulary.js";
 import { againstText, dividedByText, minusText, type Reason } from "./workspace.svelte.js";
 
@@ -240,9 +241,9 @@ export function withTrimmedTitle(panel: Json): Json {
 }
 
 export function windowWords(minutes: number): string {
-  if (minutes % 1440 === 0) return minutes === 1440 ? "1 day" : `${minutes / 1440} days`;
-  if (minutes % 60 === 0) return minutes === 60 ? "1 hour" : `${minutes / 60} hours`;
-  return `${minutes} minutes`;
+  if (minutes % 1440 === 0) return plural(minutes / 1440, ["# day", "# days"]);
+  if (minutes % 60 === 0) return plural(minutes / 60, ["# hour", "# hours"]);
+  return plural(minutes, ["# minute", "# minutes"]);
 }
 
 /** A layer's name: the one the member gave it, else what it shows. */

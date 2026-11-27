@@ -98,7 +98,8 @@
                   item.tone === "destructive" && "text-destructive"
                 )}
               >
-                {#if item.lead}<b>{item.lead}</b>{/if}{item.value}
+                <!-- eslint-disable-next-line svelte/no-useless-mustaches -- Svelte trims a bare space at the end of a block. -->
+                {#if item.lead}<b>{item.lead}</b>{" "}{/if}{item.value}
               </span>
             </div>
           {/if}

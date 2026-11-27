@@ -108,10 +108,13 @@
   function formatSensitivity(ratio: number | undefined | null): string | null {
     if (ratio == null) return null;
     const deviation = Math.round((ratio - 1) * 100);
+    // @wc-include
     if (deviation === 0) return "0% (nominal)";
-    const label = deviation > 0 ? "more sensitive" : "less sensitive";
     const prefix = deviation > 0 ? `+${deviation}%` : `${deviation}%`;
-    return `${prefix} (${label})`;
+    // @wc-include
+    if (deviation > 0) return `${prefix} (more sensitive)`;
+    // @wc-include
+    return `${prefix} (less sensitive)`;
   }
 
   // Whether we have active modifiers to show

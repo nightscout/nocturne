@@ -155,7 +155,8 @@ describe("the words of the vocabulary", () => {
     check("when axis choice", ws.events.whenAxes, words.whenAxisChoices());
     check("mark", ws.cells.flatMap((c) => [...c.marks, ...(c.fromStartMarks ?? [])].map((m) => m.word)), words.markLabels());
     check("source", [...ws.sources.figures, ...ws.sources.tables], words.sourceLabels());
-    check("scope", [...ws.cells.flatMap((c) => c.scopes), ...ws.anchors.flatMap((a) => a.scopes), ...ws.dayKinds.flatMap((k) => k.scopes)], words.scopeWords());
+    for (const scope of [...ws.cells.flatMap((c) => c.scopes), ...ws.anchors.flatMap((a) => a.scopes), ...ws.dayKinds.flatMap((k) => k.scopes)])
+      if (words.scopeWord(scope) === scope) missing.push(`scope ${scope}`);
     check("starter", STARTERS.map((s) => s.id), Object.fromEntries(Object.entries(words.starterWords(String)).map(([id, w]) => [id, w.title])));
     check("starter group", STARTERS.map((s) => s.group), words.starterGroupLabels());
     expect([...new Set(missing)]).toEqual([]);

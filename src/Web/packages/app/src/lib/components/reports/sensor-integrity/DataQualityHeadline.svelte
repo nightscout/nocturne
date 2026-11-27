@@ -11,9 +11,13 @@
 
   const cards = $derived([
     { label: "Days analyzed", value: summary?.days ?? 0, hint: "" },
+    // @wc-include
     { label: "Windows flagged", value: summary?.clusters ?? 0, hint: "physiologically implausible patterns" },
+    // @wc-include
     { label: "High confidence", value: summary?.highClusters ?? 0, hint: "of the flagged windows" },
+    // @wc-include
     { label: "Hypos after a window", value: summary?.events ?? 0, hint: "a low within 3 h of a window" },
+    // @wc-include
     { label: "Overnight", value: summary?.nocturnalEvents ?? 0, hint: "of those hypos, overnight" },
   ]);
 </script>

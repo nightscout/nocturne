@@ -152,10 +152,13 @@
   function curveChoiceLabel(choice: CurveChoice): string {
     switch (choice) {
       case "curve":
+        // @wc-include
         return "one curve";
       case "min_of":
+        // @wc-include
         return "lowest of";
       case "max_of":
+        // @wc-include
         return "highest of";
     }
   }
@@ -196,12 +199,16 @@
   function operatorLabel(operator: string): string {
     switch (operator) {
       case ">=":
+        // @wc-include
         return "at least";
       case ">":
+        // @wc-include
         return "more than";
       case "<=":
+        // @wc-include
         return "at most";
       case "<":
+        // @wc-include
         return "less than";
       default:
         return operator;

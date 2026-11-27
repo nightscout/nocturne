@@ -69,10 +69,15 @@
   // The API refuses anything past 90 days: the token is a bearer credential for tenant
   // membership, so its lifetime is bounded rather than free-form.
   const EXPIRY_OPTIONS = [
+    // @wc-include
     { value: 1, label: "1 day" },
+    // @wc-include
     { value: 7, label: "7 days" },
+    // @wc-include
     { value: 14, label: "14 days" },
+    // @wc-include
     { value: 30, label: "30 days" },
+    // @wc-include
     { value: 90, label: "90 days" },
   ];
 

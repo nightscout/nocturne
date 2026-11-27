@@ -83,14 +83,19 @@
   const timeZoneNote = $derived.by(() => {
     switch (connection?.timeZone?.source) {
       case ConnectorTimeZoneSource.ConnectorZone:
+        // @wc-include
         return "set on this connection";
       case ConnectorTimeZoneSource.ConnectorOffset:
+        // @wc-include
         return "offset set on this connection";
       case ConnectorTimeZoneSource.TenantZone:
+        // @wc-include
         return "from your Timezone setting";
       case ConnectorTimeZoneSource.TenantTimeline:
+        // @wc-include
         return "from your Timezone history";
       case ConnectorTimeZoneSource.Utc:
+        // @wc-include
         return "no time zone is set";
       default:
         return undefined;

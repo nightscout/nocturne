@@ -103,6 +103,7 @@
   const hiddenLabels = $derived(
     shareable.filter((c) => !scopes.includes(c.scope)).map((c) => c.name.toLowerCase()),
   );
+  // @wc-include
   const windowPhrase = $derived(fullHistory ? "your entire history" : "the last 24 hours");
 
   async function setEnabled(on: boolean) {
@@ -222,6 +223,7 @@
   }
 
   function formatDate(date: Date | string | undefined | null): string {
+    // @wc-include
     if (!date) return "never";
     const d = date instanceof Date ? date : new Date(date);
     return formatDayTime(d);

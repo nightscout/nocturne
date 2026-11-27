@@ -117,6 +117,15 @@ export interface BasalPillData extends PillDisplayProps {
  */
 export type LoopStatusCode = 'enacted' | 'recommendation' | 'looping' | 'warning' | 'error';
 
+/** The loop status codes by name, for a component that also shows a translated word for the status. */
+export const LoopStatus = {
+	Enacted: 'enacted',
+	Recommendation: 'recommendation',
+	Looping: 'looping',
+	Warning: 'warning',
+	Error: 'error',
+} as const satisfies Record<string, LoopStatusCode>;
+
 /**
  * Loop pill display data
  */

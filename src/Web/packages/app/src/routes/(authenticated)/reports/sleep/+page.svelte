@@ -174,6 +174,7 @@
       figures.push({
         label: "Average sleep",
         value: formatHoursMinutes((s?.meanAsleepMinutes ?? 0) / 60),
+        // @wc-include
         note: "per night",
       });
     }
@@ -195,6 +196,7 @@
         label: "HRV",
         value: Math.round(s.meanHrvMs).toString(),
         unit: "ms",
+        // @wc-include
         note: "overnight average",
       });
     }

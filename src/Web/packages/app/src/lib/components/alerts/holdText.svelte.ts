@@ -79,16 +79,22 @@ function factName(fact: KnownFact): string {
 function reasonText(reason: KnownReason): string {
   switch (reason) {
     case "absent":
+      // @wc-include
       return "missing";
     case "stale":
+      // @wc-include
       return "too old";
     case "ahead_of_clock":
+      // @wc-include
       return "has a time in the future";
     case "unrecognised":
+      // @wc-include
       return "has a value that Nocturne does not know";
     case "inexact":
+      // @wc-include
       return "not exact";
     case "sensor_not_ok":
+      // @wc-include
       return "not OK, so Nocturne does not use the glucose value";
     default: {
       const unhandled: never = reason;

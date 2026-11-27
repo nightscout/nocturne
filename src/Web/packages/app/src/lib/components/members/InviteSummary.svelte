@@ -18,6 +18,7 @@
 
   let { invite, signedIn }: Props = $props();
 
+  // @wc-include
   const siteName = $derived(invite.tenantName || "this site");
   const roleNames = $derived(invite.roleNames ?? []);
   const accessEnd = $derived(
