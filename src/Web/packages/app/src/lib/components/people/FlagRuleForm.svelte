@@ -37,9 +37,11 @@
     busy: boolean;
     onSave: (request: FlagRuleRequest) => void;
     onCancel: () => void;
+    /** A rule carries a level; a filter on the People page is the same fact, range and value with none. */
+    mode?: "rule" | "filter";
   }
 
-  const { facts, presets, initial, busy, onSave, onCancel }: Props = $props();
+  const { facts, presets, initial, busy, onSave, onCancel, mode = "rule" }: Props = $props();
 
   // The form edits its own copy; a changed `initial` is a new form, keyed by the caller.
   // svelte-ignore state_referenced_locally
@@ -124,7 +126,13 @@
 <form class="space-y-4" onsubmit={save} data-testid="flag-rule-form">
   {#if !initial && !draft}
     <div class="space-y-2">
-      <p class="text-sm font-medium">Suggested rules</p>
+      <p class="text-sm font-medium">
+        {#if mode === "filter"}
+          Suggested filters
+        {:else}
+          Suggested rules
+        {/if}
+      </p>
       <ul class="space-y-1">
         {#each presetChoices as { preset, fact: presetFact } (factKey(preset.dataset, preset.field))}
           <li>
@@ -193,7 +201,13 @@
         </div>
       {/if}
       <div class="space-y-1">
-        <Label id="flag-rule-comparison-label">Flag when the value is</Label>
+        <Label id="flag-rule-comparison-label">
+          {#if mode === "filter"}
+            Show people whose value is
+          {:else}
+            Flag when the value is
+          {/if}
+        </Label>
         <ToggleGroup.Root
           type="single"
           variant="segmented"
@@ -224,31 +238,37 @@
           {/if}
         </div>
       </div>
-      <div class="space-y-1">
-        <Label for="flag-rule-level">Level</Label>
-        <Select.Root
-          type="single"
-          value={draft.level}
-          onValueChange={(value) => {
-            const level = RULE_LEVELS.find((l) => l === value);
-            if (draft && level) draft.level = level;
-          }}
-        >
-          <Select.Trigger id="flag-rule-level" class="w-36">{levelLabel(draft.level)}</Select.Trigger>
-          <Select.Content>
-            {#each RULE_LEVELS as level (level)}
-              <Select.Item value={level} label={levelLabel(level)} />
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
+      {#if mode === "rule"}
+        <div class="space-y-1">
+          <Label for="flag-rule-level">Level</Label>
+          <Select.Root
+            type="single"
+            value={draft.level}
+            onValueChange={(value) => {
+              const level = RULE_LEVELS.find((l) => l === value);
+              if (draft && level) draft.level = level;
+            }}
+          >
+            <Select.Trigger id="flag-rule-level" class="w-36">{levelLabel(draft.level)}</Select.Trigger>
+            <Select.Content>
+              {#each RULE_LEVELS as level (level)}
+                <Select.Item value={level} label={levelLabel(level)} />
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+      {/if}
     </div>
     <div class="flex gap-2">
       <Button type="submit" size="sm" disabled={busy || !valid}>
         {#if busy}
           <Loader2 class="size-4 animate-spin" aria-hidden="true" />
         {/if}
-        Save rule
+        {#if mode === "filter"}
+          Add filter
+        {:else}
+          Save rule
+        {/if}
       </Button>
       <Button type="button" variant="ghost" size="sm" onclick={onCancel}>Cancel</Button>
     </div>
