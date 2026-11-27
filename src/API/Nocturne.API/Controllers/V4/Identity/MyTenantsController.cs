@@ -121,7 +121,7 @@ public class MyTenantsController : ControllerBase
 
         // See ResolveOwnSubject for why a caller without a subject is answered, not refused.
         if (caller.SubjectId is not { } subjectId)
-            return Ok(new TenantOverviewResponse([], null, 0));
+            return Ok(new TenantOverviewResponse([], null, 0, []));
 
         var overview = await _overviewService.GetOverviewAsync(
             subjectId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, flagRules, caller.LimitTo24Hours, ct);
@@ -181,9 +181,8 @@ public class MyTenantsController : ControllerBase
         return Ok(review);
     }
 
-    /// <summary>The caller's own rules are judged only when asked for by name.</summary>
-    private static OverviewFlagRules FlagRulesOf(OverviewRuleSet? rules) =>
-        rules == OverviewRuleSet.All ? OverviewFlagRules.Judge : OverviewFlagRules.LeaveOut;
+    /// <summary>Rules are judged only when asked for by name.</summary>
+    private static OverviewRuleSet FlagRulesOf(OverviewRuleSet? rules) => rules ?? OverviewRuleSet.Fixed;
 
     /// <summary>A group the caller is not in as current staff reads as one that does not exist.</summary>
     private ObjectResult NoSuchGroup() =>

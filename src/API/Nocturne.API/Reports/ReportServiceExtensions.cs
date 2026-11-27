@@ -55,7 +55,7 @@ internal static class ReportServiceExtensions
         services.AddScoped<ICustomReportRunner, CustomReportRunner>();
         services.AddScoped<FlagFactEvaluator>();
         services.AddSingleton<FlagFactReads>();
-        services.AddScoped<IPersonalFlagRules, PersonalFlagRules>();
+        services.AddScoped<IViewerFlagRules, ViewerFlagRules>();
         services.AddScoped<IFlagRuleCatalogue, FlagRuleCatalogue>();
         return services;
     }

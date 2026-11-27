@@ -49,7 +49,7 @@ public class TenantOverviewPersonTests
         var harness = new Harness(options);
 
         var person = await harness.Service.GetPersonAsync(
-            subjectId, strangers, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            subjectId, strangers, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         person.Should().BeNull();
         harness.Reads.Should().BeEmpty();
@@ -64,7 +64,7 @@ public class TenantOverviewPersonTests
         var harness = new Harness(options);
 
         var person = await harness.Service.GetPersonAsync(
-            subjectId, Guid.NewGuid(), FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            subjectId, Guid.NewGuid(), FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         person.Should().BeNull();
         harness.Reads.Should().BeEmpty();
@@ -79,7 +79,7 @@ public class TenantOverviewPersonTests
         var harness = new Harness(options);
 
         var person = await harness.Service.GetPersonAsync(
-            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         person.Should().BeNull();
         harness.Reads.Should().BeEmpty();
@@ -93,7 +93,7 @@ public class TenantOverviewPersonTests
         var harness = new Harness(options);
 
         var person = await harness.Service.GetPersonAsync(
-            null, tenantId, FullTokenScopes, AuthType.Guest, OverviewFlagRules.Judge);
+            null, tenantId, FullTokenScopes, AuthType.Guest, OverviewRuleSet.All);
 
         person.Should().BeNull();
         harness.Reads.Should().BeEmpty();
@@ -112,13 +112,13 @@ public class TenantOverviewPersonTests
             Recent = Minutely(Now.AddHours(-3), Now),
         };
 
-        harness.Rules.Reasons[tenantId] = [RuleReason(NotificationUrgency.Warn)];
+        harness.Rules.Reasons[tenantId] = [RuleReason(NotificationUrgency.Warn, null)];
 
         var person = await harness.Service.GetPersonAsync(
-            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
         harness.Reads.Should().Contain((tenantId, "scope"));
         var overview = await harness.Service.GetOverviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         person!.Person.Should().BeEquivalentTo(overview.Tenants.Single());
         person.Person.Status.Should().Be(GlucoseStatus.Low);
@@ -134,10 +134,10 @@ public class TenantOverviewPersonTests
         var options = NewOptions();
         var tenantId = SeedMembership(options, subjectId, "family", Reader);
         var harness = new Harness(options);
-        harness.Rules.Reasons[tenantId] = [RuleReason(NotificationUrgency.Hazard)];
+        harness.Rules.Reasons[tenantId] = [RuleReason(NotificationUrgency.Hazard, null)];
 
         var person = await harness.Service.GetPersonAsync(
-            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.LeaveOut);
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.Fixed);
 
         harness.Rules.Begun.Should().Be(0);
         person!.Person.Attention.Should().NotContain(a => a.Kind == TenantOverviewAttentionKind.FlagRule);
@@ -155,7 +155,7 @@ public class TenantOverviewPersonTests
         harness.Data[tenantId] = new TenantData { Window = minutely };
 
         var person = (await harness.Service.GetPersonAsync(
-            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge))!;
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All))!;
 
         var timestamps = person.Readings.Select(r => r.Timestamp).ToList();
         timestamps.Should().BeInAscendingOrder();
@@ -183,7 +183,7 @@ public class TenantOverviewPersonTests
         };
 
         var person = (await harness.Service.GetPersonAsync(
-            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge))!;
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All))!;
 
         person.Entries.Should().BeNull();
         harness.Reads.Should().NotContain(r => r.Kind == "boluses" || r.Kind == "intakes");
@@ -199,7 +199,7 @@ public class TenantOverviewPersonTests
         harness.Data[tenantId] = new TenantData { Boluses = [Bolus(Now.AddMinutes(-5), 2)] };
 
         var person = (await harness.Service.GetPersonAsync(
-            subjectId, tenantId, new HashSet<string> { Scope.GlucoseRead }, AuthType.OAuthAccessToken, OverviewFlagRules.Judge))!;
+            subjectId, tenantId, new HashSet<string> { Scope.GlucoseRead }, AuthType.OAuthAccessToken, OverviewRuleSet.All))!;
 
         person.Entries.Should().BeNull();
         harness.Reads.Should().NotContain(r => r.Kind == "boluses" || r.Kind == "intakes");
@@ -219,7 +219,7 @@ public class TenantOverviewPersonTests
         };
 
         var person = (await harness.Service.GetPersonAsync(
-            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge))!;
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All))!;
 
         var entries = person.Entries!;
         entries.Should().HaveCount(10);
@@ -243,7 +243,7 @@ public class TenantOverviewPersonTests
         var harness = new Harness(options);
 
         var person = (await harness.Service.GetPersonAsync(
-            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge))!;
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All))!;
 
         person.Entries.Should().BeEmpty();
     }
@@ -264,7 +264,7 @@ public class TenantOverviewPersonTests
         };
 
         var person = (await harness.Service.GetPersonAsync(
-            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge))!;
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All))!;
 
         person.Entries.Should().Equal(
             new TenantPersonEntry(TenantPersonEntryKind.Bolus, Now.AddHours(-2), 4, null),
@@ -290,7 +290,7 @@ public class TenantOverviewPersonTests
         };
 
         var person = (await harness.Service.GetPersonAsync(
-            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge))!;
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All))!;
 
         person.Readings.Select(r => r.Mgdl).Should().Equal(100);
         person.Entries!.Select(e => e.Timestamp).Should().Equal(Now.AddMinutes(-2), Now.AddMinutes(-3));
@@ -304,7 +304,7 @@ public class TenantOverviewPersonTests
         var tenantId = SeedMembership(options, subjectId, "family", TreatmentReader);
         var harness = new Harness(options);
 
-        await harness.Service.GetPersonAsync(subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+        await harness.Service.GetPersonAsync(subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         harness.Bounds.Should().BeEquivalentTo(
             [("window", Now.AddHours(-24), Now), ("boluses", Now.AddHours(-24), Now), ("intakes", Now.AddHours(-24), Now)]);
@@ -320,8 +320,8 @@ public class TenantOverviewPersonTests
         var harness = new Harness(options);
 
         var person = (await harness.Service.GetPersonAsync(
-            subjectId, clamped, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge))!;
-        await harness.Service.GetPersonAsync(subjectId, full, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            subjectId, clamped, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All))!;
+        await harness.Service.GetPersonAsync(subjectId, full, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         harness.ClampsOf(clamped).Should().BeEquivalentTo(
             [("window", true), ("boluses", true), ("intakes", true)]);
@@ -340,7 +340,7 @@ public class TenantOverviewPersonTests
         var harness = new Harness(options);
 
         await harness.Service.GetPersonAsync(
-            subjectId, owner, FullTokenScopes, AuthType.OAuthAccessToken, OverviewFlagRules.Judge, credentialLimitTo24Hours: true);
+            subjectId, owner, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, credentialLimitTo24Hours: true);
 
         harness.ClampsOf(owner).Should().HaveCount(3).And.OnlyContain(c => c.Clamped);
     }
@@ -364,8 +364,8 @@ public class TenantOverviewPersonTests
             Intakes = [Intake(Now.AddMinutes(-4), 45)],
         };
 
-        var personA = (await harness.Service.GetPersonAsync(subjectId, a, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge))!;
-        var personB = (await harness.Service.GetPersonAsync(subjectId, b, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge))!;
+        var personA = (await harness.Service.GetPersonAsync(subjectId, a, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All))!;
+        var personB = (await harness.Service.GetPersonAsync(subjectId, b, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All))!;
 
         personA.Person.TenantId.Should().Be(a);
         personA.Readings.Select(r => r.Mgdl).Should().Equal(101);
@@ -384,7 +384,7 @@ public class TenantOverviewPersonTests
         var harness = new Harness(options) { Failing = tenantId };
 
         var read = () => harness.Service.GetPersonAsync(
-            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         await read.Should().ThrowAsync<InvalidOperationException>();
     }

@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import {
+  FlagRuleSource,
   GlucoseDirection,
   GlucoseStatus,
   NotificationUrgency,
@@ -11,6 +12,7 @@ import {
 } from "@nocturne/api-client";
 import AttentionReasons from "./AttentionReasons.svelte";
 import { makePerson } from "./people-fixtures.js";
+import { makeRuleReason, ruleAttention } from "./flag-rule-fixtures.js";
 
 async function renderReason(
   reason: TenantOverviewAttention,
@@ -23,6 +25,36 @@ async function renderReason(
 }
 
 describe("AttentionReasons", () => {
+  const ward = { id: "0193b6a0-0000-7000-8000-0000000000b1", name: "Ward 4" };
+  const teamReason = ruleAttention(makeRuleReason({ source: FlagRuleSource.Team, team: ward }));
+
+  it("names a team rule's team as a link to the team's page where it may link", async () => {
+    render(AttentionReasons, {
+      props: { person: makePerson({ attention: [teamReason] }), linkTeams: true },
+    });
+
+    const team = page.getByTestId("attention-rule-team");
+    await expect.element(team).toHaveTextContent("Team: Ward 4");
+    expect(team.element().getAttribute("href")).toBe(`/settings/teams/${ward.id}`);
+  });
+
+  it("names a team rule's team as text inside a row, which is a link already", async () => {
+    render(AttentionReasons, { props: { person: makePerson({ attention: [teamReason] }) } });
+
+    const team = page.getByTestId("attention-rule-team");
+    await expect.element(team).toHaveTextContent("Team: Ward 4");
+    expect(team.element().tagName).toBe("SPAN");
+  });
+
+  it("names no team for the viewer's own rule", async () => {
+    render(AttentionReasons, {
+      props: { person: makePerson({ attention: [ruleAttention(makeRuleReason())] }), linkTeams: true },
+    });
+
+    await expect.element(page.getByText("(your rule: above 4%)", { exact: false })).toBeVisible();
+    expect(page.getByTestId("attention-rule-team").elements()).toHaveLength(0);
+  });
+
   it("names the status and the direction of an out-of-range reading", async () => {
     await renderReason(
       {

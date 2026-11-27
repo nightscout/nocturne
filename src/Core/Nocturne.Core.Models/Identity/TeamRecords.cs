@@ -127,6 +127,14 @@ public sealed record TeamGroup(
 /// </param>
 public sealed record StaffGroup(Guid Id, string Name, string TeamName, bool SharesName);
 
+/// <summary>
+/// A team the caller is a member of whose end has not passed, with the people it follows: the sites its access to
+/// has not ended. Not the people the caller follows through it, since a site's block or decline of the caller and
+/// the groups that narrow the caller are not applied. A team's flag rules apply to these people for all its staff.
+/// </summary>
+/// <param name="CallerIsStaff">Whether the caller is the team's staff, rather than a manager of it.</param>
+public sealed record TeamAndItsPeople(Guid Id, string Name, bool CallerIsStaff, IReadOnlySet<Guid> People);
+
 /// <summary>What a manager's change to a team's groups, or to which people its staff reach, found.</summary>
 public enum TeamGroupChange
 {

@@ -11,6 +11,10 @@ const state = vi.hoisted(() => ({
   create: vi.fn(async (_request: unknown) => ({})),
   update: vi.fn(async (_args: unknown) => ({})),
   remove: vi.fn(async (_ruleId: unknown) => {}),
+  teamReads: [] as string[],
+  createTeam: vi.fn(async (_args: unknown) => ({})),
+  updateTeam: vi.fn(async (_args: unknown) => ({})),
+  removeTeam: vi.fn(async (_args: unknown) => {}),
 }));
 
 vi.mock("#lib/api/generated/flagRules.generated.remote.js", async () => {
@@ -31,10 +35,28 @@ vi.mock("#lib/api/generated/flagRules.generated.remote.js", async () => {
     createFlagRule: state.create,
     updateFlagRule: state.update,
     deleteFlagRule: state.remove,
+    getTeamFlagRules: (teamId: string) => {
+      state.teamReads.push(teamId);
+      return {
+        get current() {
+          return { rules: state.rules, limit: state.limit };
+        },
+        error: undefined,
+        refresh: async () => {},
+      };
+    },
+    createTeamFlagRule: state.createTeam,
+    updateTeamFlagRule: state.updateTeam,
+    deleteTeamFlagRule: state.removeTeam,
   };
 });
 
 import FlagRulesEditor from "./FlagRulesEditor.svelte";
+
+const personal = { owner: { kind: "personal" as const }, canEdit: true };
+const teamId = "0193b6a0-0000-7000-8000-0000000000b1";
+const managing = { owner: { kind: "team" as const, teamId }, canEdit: true };
+const staffing = { owner: { kind: "team" as const, teamId }, canEdit: false };
 
 function summary(cannotCheckCount: number, overrides: Parameters<typeof makeRule>[0] = {}): FlagRuleSummary {
   return { rule: makeRule(overrides), cannotCheckCount };
@@ -47,6 +69,10 @@ describe("FlagRulesEditor", () => {
     state.create.mockClear();
     state.update.mockClear();
     state.remove.mockClear();
+    state.teamReads = [];
+    state.createTeam.mockClear();
+    state.updateTeam.mockClear();
+    state.removeTeam.mockClear();
     glucoseUnits.current = "mg/dl";
   });
 
@@ -65,7 +91,7 @@ describe("FlagRulesEditor", () => {
         value: 2,
       }),
     ];
-    render(FlagRulesEditor);
+    render(FlagRulesEditor, { props: personal });
 
     const sentences = page.getByTestId("flag-rule-sentence");
     await expect.element(sentences.first()).toHaveTextContent("Time below consensus range in the last 14 days is above 4%");
@@ -76,7 +102,7 @@ describe("FlagRulesEditor", () => {
   });
 
   it("opens on the suggested rules and saves the one picked at warn", async () => {
-    render(FlagRulesEditor);
+    render(FlagRulesEditor, { props: personal });
     await expect.element(page.getByTestId("flag-rules-empty")).toBeVisible();
 
     await page.getByRole("button", { name: "Add a rule" }).click();
@@ -97,7 +123,7 @@ describe("FlagRulesEditor", () => {
   });
 
   it("shows every fact behind More facts, with its family and its unit", async () => {
-    render(FlagRulesEditor);
+    render(FlagRulesEditor, { props: personal });
     await page.getByRole("button", { name: "Add a rule" }).click();
     await expect.element(page.getByTestId("flag-rule-preset").first()).toBeVisible();
     expect(page.getByTestId("flag-rule-fact-picker").elements()).toHaveLength(0);
@@ -113,7 +139,7 @@ describe("FlagRulesEditor", () => {
 
   it("takes a glucose value in mmol/L and saves it in mg/dL", async () => {
     glucoseUnits.current = "mmol";
-    render(FlagRulesEditor);
+    render(FlagRulesEditor, { props: personal });
     await page.getByRole("button", { name: "Add a rule" }).click();
     await page.getByRole("button", { name: "More facts" }).click();
     await page.getByTestId("flag-rule-fact-picker").click();
@@ -134,7 +160,7 @@ describe("FlagRulesEditor", () => {
     glucoseUnits.current = "mmol";
     const id = "00000000-0000-7000-8000-000000000009";
     state.rules = [summary(0, { id, field: "mean", value: 180 })];
-    render(FlagRulesEditor);
+    render(FlagRulesEditor, { props: personal });
 
     await page.getByRole("button", { name: "Edit rule" }).click();
     const value = page.getByRole("spinbutton", { name: "Value" });
@@ -152,7 +178,7 @@ describe("FlagRulesEditor", () => {
   it("deletes a rule", async () => {
     const id = "00000000-0000-7000-8000-000000000007";
     state.rules = [summary(0, { id })];
-    render(FlagRulesEditor);
+    render(FlagRulesEditor, { props: personal });
 
     await page.getByRole("button", { name: "Delete rule" }).click();
 
@@ -165,7 +191,7 @@ describe("FlagRulesEditor", () => {
       summary(0),
       summary(0, { id: "00000000-0000-7000-8000-000000000002" }),
     ];
-    render(FlagRulesEditor);
+    render(FlagRulesEditor, { props: personal });
 
     await expect.element(page.getByRole("button", { name: "Add a rule" })).toBeDisabled();
     await expect
@@ -175,9 +201,63 @@ describe("FlagRulesEditor", () => {
 
   it("allows adding below the limit with no limit sentence", async () => {
     state.rules = [summary(0)];
-    render(FlagRulesEditor);
+    render(FlagRulesEditor, { props: personal });
 
     await expect.element(page.getByRole("button", { name: "Add a rule" })).toBeEnabled();
     expect(page.getByTestId("flag-rules-limit").elements()).toHaveLength(0);
+  });
+
+  describe("a team's rules", () => {
+    it("reads, adds, changes and deletes the team's rules for a manager", async () => {
+      const id = "00000000-0000-7000-8000-000000000005";
+      state.rules = [summary(0, { id })];
+      render(FlagRulesEditor, { props: managing });
+      await expect.element(page.getByTestId("flag-rule-sentence")).toBeVisible();
+
+      expect(state.teamReads).toContain(teamId);
+      await page.getByRole("button", { name: "Delete rule" }).click();
+      expect(state.removeTeam).toHaveBeenCalledWith({ teamId, ruleId: id });
+
+      await page.getByRole("button", { name: "Edit rule" }).click();
+      await page.getByRole("spinbutton", { name: "Value" }).fill("5");
+      await page.getByRole("button", { name: "Save rule" }).click();
+      expect(state.updateTeam).toHaveBeenCalledWith({ teamId, ruleId: id, request: expect.objectContaining({ value: 5 }) });
+
+      await page.getByRole("button", { name: "Add a rule" }).click();
+      await page.getByTestId("flag-rule-preset").first().click();
+      await page.getByRole("button", { name: "Save rule" }).click();
+      expect(state.createTeam).toHaveBeenCalledWith({ teamId, request: expect.objectContaining({ field: "timeBelow", value: 4 }) });
+      expect(state.create).not.toHaveBeenCalled();
+    });
+
+    it("lists the team's rules for staff with no control to change them", async () => {
+      state.rules = [summary(2)];
+      render(FlagRulesEditor, { props: staffing });
+
+      await expect
+        .element(page.getByTestId("flag-rule-sentence"))
+        .toHaveTextContent("Time below consensus range in the last 14 days is above 4%");
+      await expect
+        .element(page.getByTestId("flag-rule-cannot-check"))
+        .toHaveTextContent("Cannot be checked for 2 of the people this team follows that you can see");
+      expect(page.getByRole("button").elements()).toHaveLength(0);
+    });
+
+    it("says the team has no rules", async () => {
+      render(FlagRulesEditor, { props: staffing });
+
+      await expect.element(page.getByTestId("flag-rules-empty")).toHaveTextContent("This team has no flag rules.");
+    });
+
+    it("states the team's limit when it is reached", async () => {
+      state.limit = 2;
+      state.rules = [summary(0), summary(0, { id: "00000000-0000-7000-8000-000000000002" })];
+      render(FlagRulesEditor, { props: managing });
+
+      await expect.element(page.getByRole("button", { name: "Add a rule" })).toBeDisabled();
+      await expect
+        .element(page.getByTestId("flag-rules-limit"))
+        .toHaveTextContent("This team has 2 rules, the maximum. Delete a rule to add a new rule.");
+    });
   });
 });

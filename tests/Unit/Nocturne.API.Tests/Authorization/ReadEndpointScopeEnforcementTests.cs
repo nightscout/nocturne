@@ -114,6 +114,7 @@ public class ReadEndpointScopeEnforcementTests
             ["RecoveryEmailController.GetRecoveryEmail"] = V4Reason.OwnDataInteractiveOnly,
             ["FlagRulesController.GetFlagRules"] = V4Reason.OwnDataInteractiveOnly,
             ["FlagRulesController.GetFlagRuleFacts"] = V4Reason.OwnDataInteractiveOnly,
+            ["FlagRulesController.GetTeamFlagRules"] = V4Reason.OwnDataInteractiveOnly,
             ["RecoveryEmailPromptController.GetRecoveryEmailPrompt"] = V4Reason.OwnData,
             ["MembershipRequestController.GetMyRequest"] = V4Reason.OwnData,
             ["MyPermissionsController.GetMyPermissions"] = V4Reason.OwnData,

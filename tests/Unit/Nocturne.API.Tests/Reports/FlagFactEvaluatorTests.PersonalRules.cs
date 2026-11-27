@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Moq;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Reports;
 using Nocturne.API.Services.Identity;
@@ -13,7 +14,7 @@ using Xunit;
 namespace Nocturne.API.Tests.Reports;
 
 /// <summary>
-/// A viewer's own flag rules judged as the People overview judges them (<see cref="PersonalFlagRules"/>): the reason a
+/// A viewer's own flag rules judged as the People overview judges them (<see cref="ViewerFlagRules"/>): the reason a
 /// rule gives, what never flags, the first read that waits for nothing, a person whose background read fails, that no
 /// request waits on the background reads' limit, the pump facts judged on the overview's own snapshot, and the read
 /// audit.
@@ -287,8 +288,8 @@ public partial class FlagFactEvaluatorTests
         var gone = Rule("glucose_statistics", "removedField", 14, FlagRuleComparison.Above, 4);
 
         var reasons = await RulesJudgedAsync(harness, [gone, Rule("glucose_statistics", "timeBelow", 14, FlagRuleComparison.Above, 4)], [person]);
-        var run = await new PersonalFlagRules(new RulesOf([gone]), harness.Evaluator)
-            .BeginAsync(Viewer, false, CancellationToken.None);
+        var run = await Rules(harness, harness.Evaluator, [gone], [])
+            .BeginAsync(Viewer, OverviewRuleSet.All, [person], false, CancellationToken.None);
 
         reasons.Single().Should().ContainSingle().Which.Rule!.Field.Should().Be("timeBelow");
         run.Should().BeNull();
@@ -321,8 +322,26 @@ public partial class FlagFactEvaluatorTests
         IReadOnlyList<GlucoseReadTenant> people,
         bool credentialLimitTo24Hours)
     {
-        var personal = new PersonalFlagRules(new RulesOf(rules), evaluator);
-        var run = await personal.BeginAsync(Viewer, credentialLimitTo24Hours, CancellationToken.None);
+        var (reasons, pending, _) = await ViewerPassAsync(
+            harness, evaluator, OverviewRuleSet.All, rules, [], people, credentialLimitTo24Hours);
+        return (reasons, pending);
+    }
+
+    /// <summary>
+    /// One overview pass of <paramref name="set"/> over <paramref name="people"/> by the viewer of
+    /// <paramref name="evaluator"/>, who holds <paramref name="personal"/> and is a member of <paramref name="teams"/>.
+    /// </summary>
+    private static async Task<(IReadOnlyList<IReadOnlyList<TenantOverviewAttention>> Reasons, int Pending, IReadOnlyList<TenantOverviewRuleTeam> Teams)> ViewerPassAsync(
+        Harness harness,
+        FlagFactEvaluator evaluator,
+        OverviewRuleSet set,
+        IReadOnlyList<FlagRule> personal,
+        IReadOnlyList<(TeamAndItsPeople Team, IReadOnlyList<FlagRule> Rules)> teams,
+        IReadOnlyList<GlucoseReadTenant> people,
+        bool credentialLimitTo24Hours)
+    {
+        var run = await Rules(harness, evaluator, personal, teams)
+            .BeginAsync(Viewer, set, people, credentialLimitTo24Hours, CancellationToken.None);
         run.Should().NotBeNull();
         var reasons = new List<IReadOnlyList<TenantOverviewAttention>>();
         foreach (var person in people)
@@ -337,7 +356,28 @@ public partial class FlagFactEvaluatorTests
             reasons.Add(await run!.ReasonsAsync(person, scope.ServiceProvider, latest, [], pump, CancellationToken.None));
         }
         run!.Finish();
-        return (reasons, run.PeopleWithRulesPending);
+        return (reasons, run.PeopleWithRulesPending, run.Teams);
+    }
+
+    /// <summary>The rules of a viewer who holds <paramref name="personal"/> and is a member of <paramref name="teams"/>.</summary>
+    private static ViewerFlagRules Rules(
+        Harness harness,
+        FlagFactEvaluator evaluator,
+        IReadOnlyList<FlagRule> personal,
+        IReadOnlyList<(TeamAndItsPeople Team, IReadOnlyList<FlagRule> Rules)> teams)
+        => new(
+            new RulesOf(personal, teams.ToDictionary(t => t.Team.Id, t => t.Rules)),
+            TeamsOf(harness, [.. teams.Select(t => t.Team)]),
+            evaluator,
+            harness.Time);
+
+    /// <summary>The teams of the viewer, as the store gives them at the harness's time.</summary>
+    private static ITeamRepository TeamsOf(Harness harness, IReadOnlyList<TeamAndItsPeople> teams)
+    {
+        var repository = new Mock<ITeamRepository>(MockBehavior.Strict);
+        repository.Setup(t => t.GetTeamsAndTheirPeopleAsync(Viewer, harness.Time.GetUtcNow().UtcDateTime, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(teams);
+        return repository.Object;
     }
 
     /// <summary>Each person's rule reasons once the background reads a first pass started are kept.</summary>
@@ -361,9 +401,40 @@ public partial class FlagFactEvaluatorTests
         }
     }
 
-    private sealed class RulesOf(IReadOnlyList<FlagRule> rules) : IFlagRuleRepository
+    /// <summary>The viewer's own rules, and the rules of the teams they are a member of, as the store gives them.</summary>
+    private sealed class RulesOf(
+        IReadOnlyList<FlagRule> rules, IReadOnlyDictionary<Guid, IReadOnlyList<FlagRule>> ofTeams) : IFlagRuleRepository
     {
-        public Task<IReadOnlyList<FlagRule>> GetOfSubjectAsync(Guid subjectId, CancellationToken ct) => Task.FromResult(rules);
+        public List<IReadOnlyCollection<Guid>> TeamReads { get; } = [];
+
+        public int SubjectReads { get; private set; }
+
+        public Task<IReadOnlyList<FlagRule>> GetOfSubjectAsync(Guid subjectId, CancellationToken ct)
+        {
+            SubjectReads++;
+            return Task.FromResult(rules);
+        }
+
+        public Task<IReadOnlyDictionary<Guid, IReadOnlyList<FlagRule>>> GetOfTeamsAsync(
+            Guid subjectId, IReadOnlyCollection<Guid> teamIds, CancellationToken ct)
+        {
+            TeamReads.Add(teamIds);
+            return Task.FromResult<IReadOnlyDictionary<Guid, IReadOnlyList<FlagRule>>>(
+                ofTeams.Where(t => teamIds.Contains(t.Key)).ToDictionary());
+        }
+
+        public Task<IReadOnlyList<FlagRule>?> GetOfTeamAsync(Guid teamId, Guid callerSubjectId, DateTime now, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task<TeamFlagRuleWrite> CreateForTeamAsync(Guid teamId, Guid callerSubjectId, FlagRuleDraft draft, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task<TeamFlagRuleWrite> UpdateForTeamAsync(
+            Guid teamId, Guid callerSubjectId, Guid ruleId, FlagRuleDraft draft, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task<TeamFlagRuleChange> DeleteForTeamAsync(Guid teamId, Guid callerSubjectId, Guid ruleId, CancellationToken ct) =>
+            throw new NotSupportedException();
 
         public Task<FlagRule?> CreateAsync(Guid subjectId, FlagRuleDraft draft, CancellationToken ct) => throw new NotSupportedException();
 

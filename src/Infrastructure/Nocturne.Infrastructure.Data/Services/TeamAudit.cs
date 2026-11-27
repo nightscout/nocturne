@@ -47,6 +47,11 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// reasons they change are (<see cref="Repositories.TeamReasonChanges"/>), so the site never reads which manager made it,
 /// and name no group, so no site reads another site's group.
 /// </para>
+/// <para>
+/// A flag rule added, changed or deleted is a <c>team</c> row holding the rule under <c>flag_rule</c>: its id, dataset,
+/// field, days, comparison, value and level as the table stores them. A change holds the rule before it under
+/// <c>old_flag_rule</c>. No site has a row for it, since a rule changes nobody's access.
+/// </para>
 /// </remarks>
 internal static class TeamAudit
 {
@@ -68,6 +73,8 @@ internal static class TeamAudit
     internal const string StaffReachKey = "staff_reach";
     internal const string GroupKey = "group";
     internal const string SiteKey = "site";
+    internal const string FlagRuleKey = "flag_rule";
+    internal const string OldFlagRuleKey = "old_flag_rule";
 
     /// <summary>The key of the rule's rows written before it had three values: true for <see cref="TeamStaffRule.TeamDecides"/>, false for <see cref="TeamStaffRule.OwnerApproves"/>.</summary>
     internal const string TeamManagesStaffKey = "team_manages_staff";
@@ -230,6 +237,30 @@ internal static class TeamAudit
         Stage(db, AuthAuditEventType.TeamStaffReachChanged, teamId, null, new() { [StaffReachKey] = staffReach });
         StageAtSites(db, AuthAuditEventType.TeamStaffReachChanged, sites, teamId, teamName, targetSubjectId: null, staffReach);
     }
+
+    public static void StageFlagRuleCreated(NocturneDbContext db, Guid teamId, FlagRuleEntity rule) =>
+        Stage(db, AuthAuditEventType.TeamFlagRuleCreated, teamId, null, new() { [FlagRuleKey] = FlagRuleDetails(rule) });
+
+    /// <param name="before">The rule as <see cref="FlagRuleDetails"/> read it before the change.</param>
+    public static void StageFlagRuleChanged(
+        NocturneDbContext db, Guid teamId, IReadOnlyDictionary<string, object?> before, FlagRuleEntity rule) =>
+        Stage(db, AuthAuditEventType.TeamFlagRuleChanged, teamId, null,
+            new() { [OldFlagRuleKey] = before, [FlagRuleKey] = FlagRuleDetails(rule) });
+
+    public static void StageFlagRuleDeleted(NocturneDbContext db, Guid teamId, FlagRuleEntity rule) =>
+        Stage(db, AuthAuditEventType.TeamFlagRuleDeleted, teamId, null, new() { [FlagRuleKey] = FlagRuleDetails(rule) });
+
+    /// <summary>What a flag rule row of the team's history holds of the rule.</summary>
+    public static IReadOnlyDictionary<string, object?> FlagRuleDetails(FlagRuleEntity rule) => new Dictionary<string, object?>
+    {
+        ["id"] = rule.Id.ToString(),
+        ["dataset"] = rule.Dataset,
+        ["field"] = rule.Field,
+        ["days"] = rule.Days,
+        ["comparison"] = rule.Comparison,
+        ["value"] = rule.Value,
+        ["level"] = rule.Level,
+    };
 
     private static void StageAtSites(
         NocturneDbContext db, string eventType, IEnumerable<Guid> sites, Guid teamId, string teamName, Guid? targetSubjectId,

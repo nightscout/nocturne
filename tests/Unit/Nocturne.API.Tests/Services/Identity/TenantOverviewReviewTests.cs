@@ -393,7 +393,7 @@ public class TenantOverviewReviewTests
                 provider.CreateScope().ServiceProvider,
                 new GlucoseStatusClassifier(
                     new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
-                Mock.Of<IPersonalFlagRules>(),
+                Mock.Of<IViewerFlagRules>(),
                 new FakeTimeProvider(new DateTimeOffset(Now)),
                 NullLogger<TenantOverviewService>.Instance);
         }

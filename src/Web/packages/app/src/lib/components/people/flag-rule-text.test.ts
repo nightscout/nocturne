@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { FlagRuleComparison } from "@nocturne/api-client";
+import { FlagRuleComparison, FlagRuleSource } from "@nocturne/api-client";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { makeRule, makeRuleReason } from "./flag-rule-fixtures.js";
 import { ruleReasonDetails, ruleReasonPhrase, ruleSentence } from "./flag-rule-text.svelte.js";
@@ -22,6 +22,31 @@ describe("rule reason phrases", () => {
     expect(ruleReasonPhrase(makeRuleReason())).toBe(
       "Time below consensus range: 6.5% in the last 14 days (your rule: above 4%)"
     );
+  });
+
+  it("says a team's rule is a team rule, with a period and without one", () => {
+    const team = { id: "0193b6a0-0000-7000-8000-0000000000b1", name: "Ward 4" };
+
+    expect(ruleReasonPhrase(makeRuleReason({ source: FlagRuleSource.Team, team }))).toBe(
+      "Time below consensus range: 6.5% in the last 14 days (team rule: above 4%)"
+    );
+    expect(
+      ruleReasonPhrase(
+        makeRuleReason({
+          source: FlagRuleSource.Team,
+          team,
+          dataset: "current_status",
+          field: "hoursSinceReading",
+          label: "Hours since the last reading",
+          unit: "h",
+          range: undefined,
+          value: 3,
+          comparison: FlagRuleComparison.Below,
+          ruleValue: 5,
+          days: undefined,
+        })
+      )
+    ).toBe("Hours since the last reading: 3 h (team rule: below 5 h)");
   });
 
   it("states a glucose figure and the rule's value in mg/dL", () => {

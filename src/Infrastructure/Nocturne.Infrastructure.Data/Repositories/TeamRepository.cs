@@ -74,6 +74,31 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
         return first;
     }
 
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<TeamAndItsPeople>> GetTeamsAndTheirPeopleAsync(Guid subjectId, DateTime now, CancellationToken ct)
+    {
+        await using var db = await contexts.CreateForSubjectAsync(subjectId, ct);
+        var teams = await db.TeamMembers.AsNoTracking()
+            .Where(m => m.SubjectId == subjectId && (m.EndsAt == null || m.EndsAt > now))
+            .Select(m => new
+            {
+                m.Team!.Id,
+                m.Team.Name,
+                m.Kind,
+                People = db.TeamTenantAccess
+                    .Where(a => a.TeamId == m.TeamId && (a.AccessEndsAt == null || a.AccessEndsAt > now))
+                    .Select(a => a.TenantId)
+                    .ToList(),
+            })
+            .ToListAsync(ct);
+
+        return teams
+            .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(t => t.Id)
+            .Select(t => new TeamAndItsPeople(t.Id, t.Name, t.Kind == TeamMemberKind.Staff, t.People.ToHashSet()))
+            .ToList();
+    }
+
     /// <summary>A site in one of a staff member's groups, with the group's name key, which orders their groups.</summary>
     private sealed class StaffGroupPerson
     {
@@ -364,7 +389,18 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
         Func<NocturneDbContext, CancellationToken, Task<T>> write, CancellationToken ct)
     {
         await using var db = await contexts.CreatePlatformAsync(ct);
-        return await db.ExecuteInTransactionAsync(async token =>
+        return await AsManagerOnAsync(db, teamId, callerSubjectId, notManager, write, ct);
+    }
+
+    /// <summary>
+    /// <see cref="AsManagerAsync"/> on a context the caller opened, for a write to a table its own context must
+    /// read, such as one under the subject pin. Locks taken inside <paramref name="write"/> come after the
+    /// subject row and the team's manager lock.
+    /// </summary>
+    internal static Task<T> AsManagerOnAsync<T>(
+        NocturneDbContext db, Guid teamId, Guid callerSubjectId, T notManager,
+        Func<NocturneDbContext, CancellationToken, Task<T>> write, CancellationToken ct) =>
+        db.ExecuteInTransactionAsync(async token =>
         {
             await db.LockSubjectRowSharedAsync(callerSubjectId, token);
             await db.LockTeamManagersAsync(teamId, token);
@@ -372,7 +408,6 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
                 ? await write(db, token)
                 : notManager;
         }, ct: ct);
-    }
 
     /// <summary>
     /// Revokes the team's link <paramref name="linkId"/> as a manager of the team, once: a link already
