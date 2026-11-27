@@ -104,7 +104,7 @@ public class SessionServiceTests
         var act = () => service.IssueSessionAsync(unknownId, _context);
 
         // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
+        await act.Should().ThrowExactlyAsync<SubjectNotFoundException>()
             .WithMessage($"*{unknownId}*");
     }
 

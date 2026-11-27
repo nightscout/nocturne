@@ -261,35 +261,29 @@ public class PasskeyController : ControllerBase
 
         var tenantId = _tenantAccessor.TenantId;
 
-        PasskeyCredentialResult result;
-        try
+        Task<PasskeyCredentialResult?> CompleteAsync(Guid expectedSubjectId) =>
+            TryCompleteRegistrationAsync(
+                request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, tenantId,
+                expectedSubjectId, request.Label);
+
+        PasskeyCredentialResult? result;
+        if (registering.SignedIn)
         {
-            if (registering.SignedIn)
-            {
-                result = await _passkeyService.CompleteRegistrationAsync(
-                    request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, tenantId,
-                    expectedSubjectId: registering.SubjectId, request.Label);
+            result = await CompleteAsync(registering.SubjectId);
+            if (result is not null)
                 await _recoverySession.EndAsync(HttpContext, registering.SubjectId, ct);
-            }
-            else
-            {
-                var enrolment = await _recoverySession.EnrolAsync(
-                    HttpContext,
-                    (sessionSubjectId, _) => _passkeyService.CompleteRegistrationAsync(
-                        request.AttestationResponseJson, request.ChallengeToken, PasskeyRegistrationFlow.OwnAccount, tenantId,
-                        expectedSubjectId: sessionSubjectId, request.Label),
-                    _ => true,
-                    ct);
-                if (enrolment.State != RecoveryEnrolmentState.Enrolled)
-                    return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
-                result = enrolment.Result!;
-            }
         }
-        catch (Exception ex) when (IsRegistrationRefusal(ex))
+        else
         {
-            _logger.LogWarning(ex, "Passkey registration completion failed");
-            return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Bad Request");
+            var enrolment = await _recoverySession.EnrolAsync(
+                HttpContext, (sessionSubjectId, _) => CompleteAsync(sessionSubjectId), outcome => outcome is not null, ct);
+            if (enrolment.State == RecoveryEnrolmentState.NoSession)
+                return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
+            result = enrolment.Result;
         }
+
+        if (result is null)
+            return Problem(detail: "Passkey registration failed", statusCode: 400, title: "Bad Request");
 
         return Ok(new PasskeyRegisterCompleteResponse
         {
@@ -1146,12 +1140,12 @@ public class PasskeyController : ControllerBase
     /// </remarks>
     private async Task<PasskeyCredentialResult?> TryCompleteRegistrationAsync(
         string attestationResponseJson, string challengeToken, PasskeyRegistrationFlow flow, Guid tenantId,
-        Guid enrollingSubjectId)
+        Guid enrollingSubjectId, string? label = null)
     {
         try
         {
             return await _passkeyService.CompleteRegistrationAsync(
-                attestationResponseJson, challengeToken, flow, tenantId, expectedSubjectId: enrollingSubjectId);
+                attestationResponseJson, challengeToken, flow, tenantId, expectedSubjectId: enrollingSubjectId, label);
         }
         catch (Exception ex) when (IsRegistrationRefusal(ex))
         {

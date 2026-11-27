@@ -438,6 +438,28 @@ public class MembershipReasonsPostgresTests(MembershipReasonsPostgresTests.Datab
         logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error);
     }
 
+    [Fact]
+    public async Task TheStartupCheck_OverADefectInTheTeamReasonWrite_LogsOneErrorAndDoesNotThrow()
+    {
+        var (app, migrator) = await FreshDatabaseAsync("reasons_defect");
+        var s = await SeedTenantAsync("defect", app);
+        var subject = await NewSubjectAsync(s, "defect-member");
+        await s.Members.AddMemberAsync(new NewTenantMember(s.Tenant, subject, [s.ViewerRole]) { How = MembershipJoinHow.Direct, By = null }, Ct);
+        var (accessSql, access) = TeamReasonSql.NewAccess(s.Tenant, "Clinic");
+        await NpgsqlTestCommands.ExecuteAsync(migrator, $"""
+            {accessSql}
+            {TeamReasonSql.Staff(access, subject, s.CaretakerRole, false, null)}
+            """);
+
+        var logger = new RecordingLogger();
+        var check = () => DatabaseInitializationExtensions.ReconcileMembershipReasonsAsync(
+            migrator, Now, (_, _, _) => throw new NullReferenceException(), logger, Ct);
+
+        await check.Should().NotThrowAsync();
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error)
+            .Which.Message.Should().StartWith("Could not check memberships against their reasons");
+    }
+
     private static async Task<List<Guid>> AuditIdsAsync(Seeded seeded, Guid subject)
     {
         await using var db = await seeded.Factory.CreateForTenantAsync(seeded.Tenant);

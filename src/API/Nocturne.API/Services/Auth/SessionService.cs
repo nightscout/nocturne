@@ -28,7 +28,7 @@ public class SessionService : ISessionService
         Guid subjectId, SessionContext context, CancellationToken ct = default)
     {
         var subject = await _subjectService.GetSubjectByIdAsync(subjectId)
-            ?? throw new InvalidOperationException($"Subject {subjectId} not found.");
+            ?? throw new SubjectNotFoundException(subjectId);
 
         var roles = await _subjectService.GetSubjectRolesAsync(subjectId);
         var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId);

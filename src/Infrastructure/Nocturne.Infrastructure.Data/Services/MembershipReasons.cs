@@ -1,6 +1,4 @@
-using System.Data.Common;
 using System.Linq.Expressions;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging;
@@ -556,12 +554,14 @@ internal static class MembershipReasons
 
     /// <summary>
     /// What reading or writing one membership can meet that need not stop the others: the database or
-    /// the save failing, and a malformed row (a <c>jsonb</c> value that is not a list of strings fails
-    /// to read as a <see cref="JsonException"/>, a cast or a format error).
+    /// the save failing (<see cref="StoreFailure"/>), and a malformed row. The framework throws for a
+    /// malformed row without naming it, so neither arm can be typed at its source: a <c>jsonb</c> value that is not a
+    /// list of strings reads back as an <see cref="InvalidOperationException"/> from the JSON reader, and
+    /// a stored enum value no member has as an <see cref="ArgumentException"/> from
+    /// <see cref="Enum.Parse{TEnum}(string, bool)"/> in <c>EnumMemberValueConverter</c>.
     /// </summary>
     internal static bool IsMembershipFailure(Exception ex) =>
-        ex is DbException or DbUpdateException or InvalidOperationException or TimeoutException
-            or JsonException or InvalidCastException or FormatException or NotSupportedException or ArgumentException;
+        StoreFailure.Is(ex) || ex is InvalidOperationException or ArgumentException;
 
     /// <summary>
     /// Brings every member row and its reasons together by <see cref="AlignWithRow"/> at
