@@ -70,11 +70,11 @@ internal static class StateSpanSupersessionExtensions
 
                 var touchedAt = ctx.NowAtStoredPrecision();
                 var kept = superseded
-                    .Where(r => r.Span.DeletedAt == null && r.Span.EndTimestamp != r.SupersederStart)
+                    .Where(r => r.Span.DeletedAt == null && !StateSpanSuccession.EndsAtSuperseder(r.Span, r.SupersederStart))
                     .Select(r => r.Span)
                     .ToList();
                 var deletedReopened = superseded
-                    .Where(r => r.Span.DeletedAt != null && r.Span.EndTimestamp == r.SupersederStart)
+                    .Where(r => r.Span.DeletedAt != null && StateSpanSuccession.EndsAtSuperseder(r.Span, r.SupersederStart))
                     .Select(r => r.Span)
                     .ToList();
                 await ClearAsync(kept, s => s.SetProperty(e => e.SupersededById, (Guid?)null));
@@ -82,7 +82,7 @@ internal static class StateSpanSupersessionExtensions
                     .SetProperty(e => e.EndTimestamp, (DateTime?)null)
                     .SetProperty(e => e.SupersededById, (Guid?)null));
                 var reopened = superseded
-                    .Where(r => r.Span.DeletedAt == null && r.Span.EndTimestamp == r.SupersederStart)
+                    .Where(r => r.Span.DeletedAt == null && StateSpanSuccession.EndsAtSuperseder(r.Span, r.SupersederStart))
                     .Select(r => r.Span)
                     .ToList();
                 var written = await EndAtSuccessorsAsync(
@@ -152,7 +152,7 @@ internal static class StateSpanSupersessionExtensions
                 var superseders = await ctx.SupersedersAsync(spans.Values, token);
                 var movable = spans.Values
                     .Where(s => !(asGiven && arrivedIdSet.Contains(s.Id)))
-                    .Where(s => s.EndTimestamp == null || SupersededEnd(s, superseders) is not null)
+                    .Where(s => StateSpanSuccession.IsMovable(s, superseders))
                     .ToList();
                 return await EndAtSuccessorsAsync(
                     ctx, movable, _ => true, writeUnchanged: false, ctx.NowAtStoredPrecision(), token);
@@ -324,12 +324,7 @@ internal static class StateSpanSupersessionExtensions
         var found = new Dictionary<Guid, StateSpanEntity>();
         foreach (var category in arrived.GroupBy(s => s.Category))
         {
-            var starts = category
-                .GroupBy(s => StateSpanSuccession.Key(s.Category, s.State, default).State)
-                .ToDictionary(
-                    line => line.Key ?? string.Empty,
-                    line => line.Select(s => s.StartTimestamp).Distinct().Order().ToArray());
-            var sameStateOnly = StateSpanSuccession.SameStateOnly(category.Key);
+            var reaches = StateSpanSuccession.Reaches(category);
             var earliest = category.Min(s => s.StartTimestamp);
             var latest = category.Max(s => s.StartTimestamp);
             var name = category.Key;
@@ -339,21 +334,12 @@ internal static class StateSpanSupersessionExtensions
                     s => s.StartTimestamp, s => s.EndTimestamp, earliest, latest, OverlapEdges.BothExcluded);
             await foreach (var span in spans.AsAsyncEnumerable().WithCancellation(ct))
             {
-                if (starts.TryGetValue(sameStateOnly ? span.State : string.Empty, out var lineStarts)
-                    && StartsWithin(lineStarts, span.StartTimestamp, span.EndTimestamp))
+                if (reaches(span))
                     found.TryAdd(span.Id, span);
             }
         }
 
         return found;
-    }
-
-    /// <summary>Whether a start in the sorted <paramref name="starts"/> lies after <paramref name="after"/> and before <paramref name="before"/>, if any.</summary>
-    private static bool StartsWithin(DateTime[] starts, DateTime after, DateTime? before)
-    {
-        var index = Array.BinarySearch(starts, after);
-        var next = index >= 0 ? index + 1 : ~index;
-        return next < starts.Length && (before is null || starts[next] < before);
     }
 
     /// <summary>
@@ -369,9 +355,7 @@ internal static class StateSpanSupersessionExtensions
         var successors = await SuccessorsAsync(ctx, spans, eligible, ct);
         var moves = spans
             .Select(s => (s.Id, Was: (s.EndTimestamp, s.SupersededById),
-                Target: successors.TryGetValue(s.Id, out var next)
-                    ? ((DateTime?)next.StartTimestamp, (Guid?)next.Id)
-                    : (null, null)))
+                Target: StateSpanSuccession.EndAt(successors.GetValueOrDefault(s.Id))))
             .Where(s => writeUnchanged || s.Target != s.Was)
             .ToList();
         if (moves.Count == 0)
