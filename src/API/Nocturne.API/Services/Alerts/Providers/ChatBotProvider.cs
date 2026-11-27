@@ -144,19 +144,9 @@ internal sealed class ChatBotProvider(
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            logger.LogError(
-                "Chat bot dispatch for delivery {DeliveryId} via {ChannelType} timed out after {Timeout} seconds",
-                deliveryId, channelType, AlertDeliveryClient.Timeout.TotalSeconds);
             throw new TimeoutException(
                 $"The chat bot did not answer within {AlertDeliveryClient.Timeout.TotalSeconds} seconds",
                 ex);
-        }
-        catch (HttpRequestException ex)
-        {
-            logger.LogError(ex,
-                "Failed to dispatch chat bot alert for delivery {DeliveryId} via {ChannelType}",
-                deliveryId, channelType);
-            throw;
         }
     }
 }

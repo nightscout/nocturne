@@ -1,12 +1,9 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Nocturne.API.Extensions;
 using Nocturne.API.Reports;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Multitenancy;
 using Npgsql;
 
 namespace Nocturne.API.Tests.Reports;
@@ -18,12 +15,16 @@ public class ReportReadAuditTests
     {
         new NpgsqlException("connection refused"),
         new RetryLimitExceededException("retries exhausted", new NpgsqlException("connection refused")),
+    };
+
+    public static TheoryData<Exception> Defects => new()
+    {
+        new InvalidOperationException("no tenant"),
+        new NullReferenceException(),
         new TimeoutException(),
     };
 
-    [Theory]
-    [MemberData(nameof(UnreadableSettings))]
-    public async Task WriteAsync_WhenTheAuditSettingCannotBeRead_SkipsTheRowAndTheRun(Exception failure)
+    private static Task<bool> WriteWhenTheSettingThrowsAsync(Exception failure, Action onBuilt)
     {
         var cache = new Mock<ITenantAuditConfigCache>();
         cache.Setup(c => c.GetConfigAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
@@ -31,21 +32,37 @@ public class ReportReadAuditTests
             .AddSingleton(cache.Object)
             .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
             .BuildServiceProvider();
-        var http = new DefaultHttpContext();
-        http.SetTenantContext(new TenantContext(Guid.CreateVersion7(), "acme", "Acme", true, false));
-        var built = false;
 
-        await ReportReadAudit.WriteAsync(
+        return ReportReadAudit.WriteAsync(
             services,
-            http,
+            Guid.CreateVersion7(),
             "POST /api/v4/reports/run",
             _ =>
             {
-                built = true;
+                onBuilt();
                 return new();
             },
             CancellationToken.None);
+    }
 
+    [Theory]
+    [MemberData(nameof(UnreadableSettings))]
+    public async Task WriteAsync_WhenTheAuditSettingCannotBeRead_SkipsTheRowAndTheRun(Exception failure)
+    {
+        var built = false;
+
+        var audited = await WriteWhenTheSettingThrowsAsync(failure, () => built = true);
+
+        audited.Should().BeFalse();
         built.Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(Defects))]
+    public async Task WriteAsync_WhenTheSettingReadHitsADefect_ItReachesTheCaller(Exception defect)
+    {
+        var thrown = await Assert.ThrowsAnyAsync<Exception>(() => WriteWhenTheSettingThrowsAsync(defect, () => { }));
+
+        thrown.Should().BeSameAs(defect);
     }
 }

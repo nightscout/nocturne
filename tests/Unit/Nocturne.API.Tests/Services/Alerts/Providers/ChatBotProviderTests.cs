@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Alerts.Providers;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -39,11 +40,12 @@ public class ChatBotProviderTests
     private const string TestTenantSlug = "acme";
 
     private static ChatBotProvider CreateProvider(
-        MockHttpMessageHandler handler,
+        HttpMessageHandler handler,
         string? webUrl = "https://web.example.com",
         string? baseDomain = null,
         string? instanceKey = TestInstanceKey,
-        string? tenantSlug = TestTenantSlug)
+        string? tenantSlug = TestTenantSlug,
+        ILogger<ChatBotProvider>? logger = null)
     {
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
 
@@ -61,7 +63,7 @@ public class ChatBotProviderTests
             ? new SettableTenantAccessor()
             : SettableTenantAccessor.Resolved(Guid.NewGuid(), tenantSlug, "Acme");
 
-        var logger = NullLoggerFactory.Instance.CreateLogger<ChatBotProvider>();
+        logger ??= NullLoggerFactory.Instance.CreateLogger<ChatBotProvider>();
 
         return new ChatBotProvider(
             httpClientFactoryMock.Object,
@@ -279,6 +281,38 @@ public class ChatBotProviderTests
 
         // Assert
         await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    [Fact]
+    public async Task SendAsync_LogsNoFailureItRethrows_ForAnHttpFailure()
+    {
+        var logger = new ListLogger<ChatBotProvider>();
+        var provider = CreateProvider(new MockHttpMessageHandler(HttpStatusCode.InternalServerError), logger: logger);
+
+        var act = () => provider.SendAsync(
+            Guid.NewGuid(), ChannelType.TelegramDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning, "the delivery service logs the failure once");
+    }
+
+    [Fact]
+    public async Task SendAsync_LogsNoFailureItRethrows_ForATimeout()
+    {
+        var logger = new ListLogger<ChatBotProvider>();
+        var provider = CreateProvider(new TimesOut(), logger: logger);
+
+        var act = () => provider.SendAsync(
+            Guid.NewGuid(), ChannelType.TelegramDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        (await act.Should().ThrowAsync<TimeoutException>()).WithMessage("*did not answer*");
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning, "the delivery service logs the failure once");
+    }
+
+    private sealed class TimesOut : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new TaskCanceledException("The request timed out");
     }
 
     /// <summary>

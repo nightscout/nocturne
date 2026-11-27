@@ -16,8 +16,9 @@ namespace Nocturne.API.Services.Realtime;
 /// All broadcasts are scoped to the current tenant's SignalR groups to enforce isolation.
 /// </summary>
 /// <remarks>
-/// Every method logs its own failure and returns, so a caller does not wrap it in a try: a SignalR
-/// outage must not break the write that broadcasts.
+/// Every method logs its own failure at error and returns, so a caller does not wrap it in a try. A
+/// broadcast announces a write that has already committed, so a hub or backplane outage, and a defect
+/// in the broadcast itself, must not fail the caller that wrote.
 /// </remarks>
 /// <seealso cref="SignalRBroadcastService"/>
 /// <seealso cref="DataHub"/>
@@ -266,10 +267,23 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     private string TenantGroup(string groupName)
         => TenantAwareHub.FormatTenantGroup(GetTenantId(), groupName);
 
+    /// <summary>Isolates one broadcast, for the reason in the remarks of <see cref="ISignalRBroadcastService"/>.</summary>
+    private async Task IsolatedAsync(Func<Task> broadcast, string failure, params object?[] args)
+    {
+        try
+        {
+            await broadcast();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, failure, args);
+        }
+    }
+
     /// <inheritdoc />
     public async Task BroadcastDataUpdateAsync(object data)
     {
-        try
+        await IsolatedAsync(async () =>
         {
             var group = TenantGroup(RealtimeGroups.Authorized);
             _logger.LogInformation(
@@ -281,166 +295,99 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 .Clients.Group(group)
                 .SendCoreAsync("dataUpdate", new[] { data });
             _logger.LogInformation("Data update broadcast completed successfully");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting data update");
-        }
+        }, "Error broadcasting data update");
 
         // Tenant-tagged ping to cross-tenant overview subscribers. Same "{tenantId}:" group
         // scheme but on OverviewHub, so no collision with DataHub groups. Minimal payload:
         // clients refetch the overview endpoint.
-        try
+        await IsolatedAsync(async () =>
         {
             var tenantId = GetTenantId();
             await _overviewHubContext
                 .Clients.Group(TenantAwareHub.FormatTenantGroup(tenantId, OverviewHub.GroupName))
                 .SendCoreAsync("overviewUpdate", new object[] { new { tenantId } });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting overview update");
-        }
+        }, "Error broadcasting overview update");
     }
 
     /// <inheritdoc />
-    public async Task BroadcastRetroUpdateAsync(string connectionId, object retroData)
-    {
-        try
+    public Task BroadcastRetroUpdateAsync(string connectionId, object retroData) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug("Broadcasting retro update to client {ConnectionId}", connectionId);
             await _dataHubContext
                 .Clients.Client(connectionId)
                 .SendCoreAsync("retroUpdate", new[] { retroData });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error broadcasting retro update to client {ConnectionId}",
-                connectionId
-            );
-        }
-    }
+        }, "Error broadcasting retro update to client {ConnectionId}", connectionId);
 
     /// <inheritdoc />
-    public async Task BroadcastNotificationAsync(NotificationBase notification)
-    {
-        try
+    public Task BroadcastNotificationAsync(NotificationBase notification) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug("Broadcasting notification: {Title}", notification.Title);
             await _alarmHubContext
                 .Clients.Group(TenantGroup("alarm-subscribers"))
                 .SendCoreAsync("notification", new[] { notification });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting notification");
-        }
-    }
+        }, "Error broadcasting notification");
 
     /// <inheritdoc />
-    public async Task BroadcastAnnouncementAsync(NotificationBase announcement)
-    {
-        try
+    public Task BroadcastAnnouncementAsync(NotificationBase announcement) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug("Broadcasting announcement: {Title}", announcement.Title);
             await _alarmHubContext
                 .Clients.Group(TenantGroup("alarm-subscribers"))
                 .SendCoreAsync("announcement", new[] { announcement });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting announcement");
-        }
-    }
+        }, "Error broadcasting announcement");
 
     /// <inheritdoc />
-    public async Task BroadcastAlarmAsync(NotificationBase alarm)
-    {
-        try
+    public Task BroadcastAlarmAsync(NotificationBase alarm) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug("Broadcasting alarm: {Title}", alarm.Title);
             await _alarmHubContext
                 .Clients.Group(TenantGroup("alarm-subscribers"))
                 .SendCoreAsync("alarm", new[] { alarm });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting alarm");
-        }
-    }
+        }, "Error broadcasting alarm");
 
     /// <inheritdoc />
-    public async Task BroadcastUrgentAlarmAsync(NotificationBase urgentAlarm)
-    {
-        try
+    public Task BroadcastUrgentAlarmAsync(NotificationBase urgentAlarm) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug("Broadcasting urgent alarm: {Title}", urgentAlarm.Title);
             await _alarmHubContext
                 .Clients.Group(TenantGroup("alarm-subscribers"))
                 .SendCoreAsync("urgent_alarm", new[] { urgentAlarm });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting urgent alarm");
-        }
-    }
+        }, "Error broadcasting urgent alarm");
 
     /// <inheritdoc />
-    public async Task BroadcastClearAlarmAsync(NotificationBase clearAlarm)
-    {
-        try
+    public Task BroadcastClearAlarmAsync(NotificationBase clearAlarm) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug("Broadcasting clear alarm: {Title}", clearAlarm.Title);
             await _alarmHubContext
                 .Clients.Group(TenantGroup("alarm-subscribers"))
                 .SendCoreAsync("clear_alarm", new[] { clearAlarm });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting clear alarm");
-        }
-    }
+        }, "Error broadcasting clear alarm");
 
     /// <inheritdoc />
-    public async Task BroadcastEngineAlarmAsync(string eventName, NotificationBase notify)
-    {
-        try
-        {
-            await _alarmHubContext
+    public Task BroadcastEngineAlarmAsync(string eventName, NotificationBase notify) =>
+        IsolatedAsync(
+            () => _alarmHubContext
                 .Clients.Group(TenantGroup("alarm-subscribers"))
-                .SendCoreAsync(eventName, new[] { notify });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting {EventName}", eventName);
-        }
-    }
+                .SendCoreAsync(eventName, new[] { notify }),
+            "Error broadcasting {EventName}", eventName);
 
     /// <inheritdoc />
-    public async Task BroadcastStorageCreateAsync(string collectionName, object data)
-    {
-        try
-        {
-            await _dataHubContext
+    public Task BroadcastStorageCreateAsync(string collectionName, object data) =>
+        IsolatedAsync(
+            () => _dataHubContext
                 .Clients.Group(TenantGroup(collectionName))
-                .SendCoreAsync("create", new[] { WithWireDocument(data) });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error broadcasting storage create event for collection {Collection}",
-                collectionName
-            );
-        }
-    }
+                .SendCoreAsync("create", new[] { WithWireDocument(data) }),
+            "Error broadcasting storage create event for collection {Collection}", collectionName);
 
     /// <inheritdoc />
-    public async Task BroadcastStorageUpdateAsync(string collectionName, object data)
-    {
-        try
+    public Task BroadcastStorageUpdateAsync(string collectionName, object data) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug(
                 "Broadcasting storage update event for collection {Collection}",
@@ -449,21 +396,11 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             await _dataHubContext
                 .Clients.Group(TenantGroup(collectionName))
                 .SendCoreAsync("update", new[] { WithWireDocument(data) });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error broadcasting storage update event for collection {Collection}",
-                collectionName
-            );
-        }
-    }
+        }, "Error broadcasting storage update event for collection {Collection}", collectionName);
 
     /// <inheritdoc />
-    public async Task BroadcastStorageDeleteAsync(string collectionName, object data)
-    {
-        try
+    public Task BroadcastStorageDeleteAsync(string collectionName, object data) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug(
                 "Broadcasting storage delete event for collection {Collection}",
@@ -472,16 +409,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             await _dataHubContext
                 .Clients.Group(TenantGroup(collectionName))
                 .SendCoreAsync("delete", new[] { WithWireIdentifier(data) });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error broadcasting storage delete event for collection {Collection}",
-                collectionName
-            );
-        }
-    }
+        }, "Error broadcasting storage delete event for collection {Collection}", collectionName);
 
     /// <summary>
     /// Resolves a <see cref="StorageDocumentEvent"/> against the payload serializer this hub sends
@@ -513,9 +441,8 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     }
 
     /// <inheritdoc />
-    public async Task BroadcastTrackerUpdateAsync(TrackerRealtimeAction action, TrackerInstanceDto trackerInstance)
-    {
-        try
+    public Task BroadcastTrackerUpdateAsync(TrackerRealtimeAction action, TrackerInstanceDto trackerInstance) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogInformation(
                 "Broadcasting tracker update event: {Action}",
@@ -526,32 +453,19 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 .Clients.Group(TenantGroup(RealtimeGroups.Authorized))
                 .SendCoreAsync("trackerUpdate", new[] { payload });
             _logger.LogDebug("Tracker update broadcast completed for action {Action}", action);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting tracker update event");
-        }
-    }
+        }, "Error broadcasting tracker update event");
 
     /// <inheritdoc />
-    public async Task BroadcastTrackerDefinitionUpdateAsync(Guid definitionId)
-    {
-        try
-        {
-            await _dataHubContext
+    public Task BroadcastTrackerDefinitionUpdateAsync(Guid definitionId) =>
+        IsolatedAsync(
+            () => _dataHubContext
                 .Clients.Group(TenantGroup(RealtimeGroups.Authorized))
-                .SendCoreAsync("trackerDefinitionUpdate", new object[] { new { definitionId } });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting tracker definition update event");
-        }
-    }
+                .SendCoreAsync("trackerDefinitionUpdate", new object[] { new { definitionId } }),
+            "Error broadcasting tracker definition update event");
 
     /// <inheritdoc />
-    public async Task BroadcastConfigChangeAsync(ConfigurationChangeEvent change)
-    {
-        try
+    public Task BroadcastConfigChangeAsync(ConfigurationChangeEvent change) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogInformation(
                 "Broadcasting config change for {ConnectorName}: {ChangeType}",
@@ -571,21 +485,11 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 .SendCoreAsync("configChanged", new[] { change });
 
             _logger.LogDebug("Config change broadcast completed for {ConnectorName}", change.ConnectorName);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error broadcasting config change for {ConnectorName}",
-                change.ConnectorName
-            );
-        }
-    }
+        }, "Error broadcasting config change for {ConnectorName}", change.ConnectorName);
 
     /// <inheritdoc />
-    public async Task BroadcastNotificationCreatedAsync(string userId, InAppNotificationDto notification)
-    {
-        try
+    public Task BroadcastNotificationCreatedAsync(string userId, InAppNotificationDto notification) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug(
                 "Broadcasting notification created to user {UserId}: {NotificationId}",
@@ -607,21 +511,11 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                     new object[] { notification, RealtimeGroups.NormalizeSubjectId(userId) });
 
             _logger.LogDebug("Notification created broadcast completed for user {UserId}", userId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error broadcasting notification created to user {UserId}",
-                userId
-            );
-        }
-    }
+        }, "Error broadcasting notification created to user {UserId}", userId);
 
     /// <inheritdoc />
-    public async Task BroadcastNotificationArchivedAsync(string userId, InAppNotificationDto notification, NotificationArchiveReason archiveReason)
-    {
-        try
+    public Task BroadcastNotificationArchivedAsync(string userId, InAppNotificationDto notification, NotificationArchiveReason archiveReason) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug(
                 "Broadcasting notification archived to user {UserId}: {NotificationId}, reason: {Reason}",
@@ -646,21 +540,11 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                     new object[] { payload, RealtimeGroups.NormalizeSubjectId(userId) });
 
             _logger.LogDebug("Notification archived broadcast completed for user {UserId}", userId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error broadcasting notification archived to user {UserId}",
-                userId
-            );
-        }
-    }
+        }, "Error broadcasting notification archived to user {UserId}", userId);
 
     /// <inheritdoc />
-    public async Task BroadcastNotificationUpdatedAsync(string userId, InAppNotificationDto notification)
-    {
-        try
+    public Task BroadcastNotificationUpdatedAsync(string userId, InAppNotificationDto notification) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug(
                 "Broadcasting notification updated to user {UserId}: {NotificationId}",
@@ -683,54 +567,32 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                     new object[] { notification, RealtimeGroups.NormalizeSubjectId(userId) });
 
             _logger.LogDebug("Notification updated broadcast completed for user {UserId}", userId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error broadcasting notification updated to user {UserId}",
-                userId
-            );
-        }
-    }
+        }, "Error broadcasting notification updated to user {UserId}", userId);
 
     /// <inheritdoc />
-    public async Task BroadcastAlertEventAsync(string eventName, object payload)
-    {
-        try
+    public Task BroadcastAlertEventAsync(string eventName, object payload) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug("Broadcasting alert event {EventName}", eventName);
             await _alertHubContext
                 .Clients.Group(TenantGroup("alert-subscribers"))
                 .SendCoreAsync(eventName, new[] { payload });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting alert event {EventName}", eventName);
-        }
-    }
+        }, "Error broadcasting alert event {EventName}", eventName);
 
     /// <inheritdoc />
     public Task BroadcastAlertResolvedAsync(AlertResolvedEvent resolved) =>
         BroadcastAlertEventWithHomeAssistantAsync("alert_resolved", resolved);
 
     /// <inheritdoc />
-    public async Task BroadcastAlertResolvedToHomeAssistantAsync(
-        AlertResolvedEvent resolved, IReadOnlyCollection<string> instances)
-    {
-        if (instances.Count == 0) return;
-
-        try
-        {
-            await _homeAssistantHubContext
-                .Clients.Groups([.. instances.Select(instance => TenantGroup($"ha:{instance}"))])
-                .SendCoreAsync("alert_resolved", new object[] { resolved });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error relaying alert_resolved to {Count} HA instances", instances.Count);
-        }
-    }
+    public Task BroadcastAlertResolvedToHomeAssistantAsync(
+        AlertResolvedEvent resolved, IReadOnlyCollection<string> instances) =>
+        instances.Count == 0
+            ? Task.CompletedTask
+            : IsolatedAsync(
+                () => _homeAssistantHubContext
+                    .Clients.Groups([.. instances.Select(instance => TenantGroup($"ha:{instance}"))])
+                    .SendCoreAsync("alert_resolved", new object[] { resolved }),
+                "Error relaying alert_resolved to {Count} HA instances", instances.Count);
 
     /// <inheritdoc />
     public Task BroadcastAlertAcknowledgedAsync(AlertAcknowledgedEvent acknowledged) =>
@@ -742,22 +604,16 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     {
         await BroadcastAlertEventAsync(eventName, payload);
 
-        try
-        {
-            await _homeAssistantHubContext
+        await IsolatedAsync(
+            () => _homeAssistantHubContext
                 .Clients.Group(TenantGroup("ha-alerts"))
-                .SendCoreAsync(eventName, new[] { payload });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error relaying alert event {EventName} to HA", eventName);
-        }
+                .SendCoreAsync(eventName, new[] { payload }),
+            "Error relaying alert event {EventName} to HA", eventName);
     }
 
     /// <inheritdoc />
-    public async Task BroadcastDeviceActionAsync(DeviceActionIntent intent)
-    {
-        try
+    public Task BroadcastDeviceActionAsync(DeviceActionIntent intent) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug(
                 "Broadcasting device_action {Intent} for excursion {ExcursionId} (kind {Kind})",
@@ -766,33 +622,20 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             await _dataHubContext
                 .Clients.Group(TenantGroup(RealtimeGroups.Authorized))
                 .SendCoreAsync("device_action", new object[] { intent });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting device_action for excursion {ExcursionId}", intent.ExcursionId);
-        }
-    }
+        }, "Error broadcasting device_action for excursion {ExcursionId}", intent.ExcursionId);
 
     /// <inheritdoc />
-    public async Task BroadcastDeviceActionToSubjectAsync(Guid subjectId, DeviceActionIntent intent)
-    {
-        try
-        {
-            await _dataHubContext
+    public Task BroadcastDeviceActionToSubjectAsync(Guid subjectId, DeviceActionIntent intent) =>
+        IsolatedAsync(
+            () => _dataHubContext
                 .Clients.Group(TenantGroup(RealtimeGroups.ForSubject(subjectId)))
-                .SendCoreAsync("device_action", new object[] { intent });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error sending device_action for excursion {ExcursionId} to subject {SubjectId}",
-                intent.ExcursionId, subjectId);
-        }
-    }
+                .SendCoreAsync("device_action", new object[] { intent }),
+            "Error sending device_action for excursion {ExcursionId} to subject {SubjectId}",
+            intent.ExcursionId, subjectId);
 
     /// <inheritdoc />
-    public async Task BroadcastDeviceNotificationAsync(DeviceNotificationMirror mirror)
-    {
-        try
+    public Task BroadcastDeviceNotificationAsync(DeviceNotificationMirror mirror) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug(
                 "Broadcasting device_notification mirror for user {UserId}: {NotificationId}",
@@ -808,33 +651,21 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             await _dataHubContext
                 .Clients.Group(TenantGroup(RealtimeGroups.Relay))
                 .SendCoreAsync("device_notification", new object[] { mirror });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting device_notification for user {UserId}", mirror.UserId);
-        }
-    }
+        }, "Error broadcasting device_notification for user {UserId}", mirror.UserId);
 
     /// <inheritdoc />
-    public async Task BroadcastHomeAssistantGlucoseAsync(GlucoseReadingEvent reading)
-    {
-        try
+    public Task BroadcastHomeAssistantGlucoseAsync(GlucoseReadingEvent reading) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug("Broadcasting glucose_reading to HA subscribers");
             await _homeAssistantHubContext
                 .Clients.Group(TenantGroup("ha-glucose"))
                 .SendCoreAsync("glucose_reading", new object[] { reading });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error broadcasting glucose_reading to HA");
-        }
-    }
+        }, "Error broadcasting glucose_reading to HA");
 
     /// <inheritdoc />
-    public async Task BroadcastSyncProgressAsync(SyncProgressEvent progress)
-    {
-        try
+    public Task BroadcastSyncProgressAsync(SyncProgressEvent progress) =>
+        IsolatedAsync(async () =>
         {
             _logger.LogDebug(
                 "Broadcasting sync progress for {ConnectorId}: {Phase}",
@@ -845,14 +676,5 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             await _configHubContext
                 .Clients.Group(TenantGroup("config:all"))
                 .SendCoreAsync("syncProgress", [progress]);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error broadcasting sync progress for {ConnectorId}",
-                progress.ConnectorId
-            );
-        }
-    }
+        }, "Error broadcasting sync progress for {ConnectorId}", progress.ConnectorId);
 }

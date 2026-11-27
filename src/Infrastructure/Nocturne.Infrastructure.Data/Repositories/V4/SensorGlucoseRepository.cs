@@ -70,9 +70,9 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                 .Select(t => t.LastReadingAt)
                 .FirstOrDefaultAsync(ct);
         }
-        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException or TimeoutException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
+            Logger.LogError(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
             return;
         }
 
@@ -165,6 +165,13 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// dedup, so it reads the flags both left. Failures fail open: a broadcast is better than a silent
     /// drop.
     /// </summary>
+    /// <remarks>
+    /// This read and the one in <see cref="OnLiveVisibleCreatedAsync"/> run after the write has
+    /// committed, from <c>RaiseBroadcastAsync</c>. A failure of either, a defect included, is logged at
+    /// error and isolated, as a broadcast is (<c>ISignalRBroadcastService</c>): it must not fail the
+    /// committed write or skip <see cref="AdvanceTenantLastReadingAsync"/>. Only the caller's
+    /// cancellation propagates.
+    /// </remarks>
     protected override async Task<IReadOnlyList<SensorGlucose>> FilterLegacyProjectionAsync(
         IReadOnlyList<SensorGlucose> models, CancellationToken ct)
     {
@@ -180,10 +187,9 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
                 .ToHashSet();
             return models.Where(m => shown.Contains(m.Id)).ToList();
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException or TimeoutException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
+            Logger.LogError(ex, "Canonical stream gate failed; broadcasting unfiltered");
             return models;
         }
     }

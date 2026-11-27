@@ -101,6 +101,9 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
         /// <summary>When set, reading a target range schedule fails as the database fails.</summary>
         public bool ScheduleFails { get; set; }
 
+        /// <summary>When set, reading a target range schedule throws this, which is no failure of the database.</summary>
+        public Exception? ScheduleDefect { get; set; }
+
         /// <summary>Whether the people audit reads.</summary>
         public bool ReadAuditEnabled { get; set; } = true;
 
@@ -276,6 +279,8 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
                 Interlocked.Increment(ref _roundTrips);
                 if (ScheduleFails)
                     throw new NpgsqlException("connection refused");
+                if (ScheduleDefect is { } defect)
+                    throw defect;
                 return Data.TryGetValue(tenant, out var person) && person.Schedule is { } schedule
                     ? new TargetRangeSchedule
                     {
@@ -572,6 +577,20 @@ public class FlagFactEvaluatorTests(ITestOutputHelper output)
         judged[1].Outcome.Should().Be(FlagOutcome.Matched);
         judged[1].Value.Should().BeApproximately(10, 1);
         harness.ScheduleReads.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(NullReferenceException))]
+    [InlineData(typeof(TimeoutException))]
+    public async Task A_defect_reading_the_schedule_reaches_the_caller_rather_than_emptying_the_own_range_fact(Type defect)
+    {
+        var harness = new Harness { ScheduleDefect = (Exception)Activator.CreateInstance(defect)! };
+        var person = harness.Follow(new Person(Pattern, TimeSpan.FromDays(15), AllDay(80, 160)), Therapy);
+
+        var judge = () => harness.JudgeAsync(person, TimeBelowOwnRange(harness));
+
+        await judge.Should().ThrowAsync<Exception>().Where(e => e.GetType() == defect);
     }
 
     [Fact]

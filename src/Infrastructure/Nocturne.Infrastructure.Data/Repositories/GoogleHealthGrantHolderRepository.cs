@@ -19,7 +19,7 @@ public sealed class GoogleHealthGrantHolderRepository(INocturneDbContextFactory 
         if (await UpdateAsync(db, tenantId, accountKey, ct) > 0) return;
         if (!await TryInsertAsync(db, tenantId, accountKey, ct) &&
             await UpdateAsync(db, tenantId, accountKey, ct) == 0)
-            throw new InvalidOperationException($"Google Health could not record the grant holder state of tenant {tenantId}");
+            throw new GoogleHealthGrantHolderNotRecordedException(tenantId);
     }
 
     /// <inheritdoc />

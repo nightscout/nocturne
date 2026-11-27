@@ -18,6 +18,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Health;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Services.Health.GoogleHealth;
 
@@ -334,8 +335,13 @@ public sealed class GoogleHealthService(
         {
             await sessions.ReleaseUnstoredAsync(CancellationToken.None);
         }
-        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
+            logger.LogWarning(ex, "Google Health could not release the hold of tenant {TenantId} on an unstored grant", TenantId);
+        }
+        catch (GoogleHealthGrantHolderNotRecordedException ex)
+        {
+            // The unstored grant is revoked below whatever happens to the hold, and the sign-in keeps its own refusal.
             logger.LogWarning(ex, "Google Health could not release the hold of tenant {TenantId} on an unstored grant", TenantId);
         }
         account ??= await AccountOfUnstoredGrantAsync(token.AccessToken!);

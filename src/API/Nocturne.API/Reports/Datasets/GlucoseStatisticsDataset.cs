@@ -231,7 +231,7 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
                 services.GetRequiredService<TimeProvider>(),
                 cancellationToken);
         }
-        catch (Exception ex) when (StoreFailure.Is(ex) || ex is TimeoutException)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             services.GetRequiredService<ILoggerFactory>().CreateLogger<GlucoseStatisticsDataset>()
                 .LogWarning(ex, "Could not read the target range schedule; the own-range figures are left empty");

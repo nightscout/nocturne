@@ -29,23 +29,13 @@ internal sealed class HomeAssistantProvider(
 
         var group = TenantAwareHub.FormatTenantGroup(tenantId.ToString(), $"ha:{destination}");
 
-        try
-        {
-            await hubContext.Clients.Group(group)
-                .SendCoreAsync("alert_dispatch", new object[] { payload }, ct);
+        await hubContext.Clients.Group(group)
+            .SendCoreAsync("alert_dispatch", new object[] { payload }, ct);
 
-            logger.LogDebug(
-                "HA alert dispatched to instance {Destination} for alert instance {InstanceId}",
-                destination, payload.InstanceId);
+        logger.LogDebug(
+            "HA alert dispatched to instance {Destination} for alert instance {InstanceId}",
+            destination, payload.InstanceId);
 
-            return true;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
-        {
-            logger.LogError(ex,
-                "Failed to dispatch HA alert to instance {Destination} for alert instance {InstanceId}",
-                destination, payload.InstanceId);
-            throw;
-        }
+        return true;
     }
 }

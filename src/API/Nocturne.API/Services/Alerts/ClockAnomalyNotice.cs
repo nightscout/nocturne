@@ -287,8 +287,9 @@ internal sealed class ClockAnomalyNotice(
 }
 
 /// <summary>
-/// Reports to <see cref="IClockAnomalyNotice"/> so that its failure (the store down, a lock
-/// timeout) is logged and never stops the alert evaluation around it.
+/// Reports to <see cref="IClockAnomalyNotice"/> so that no failure of it, a defect included, stops the
+/// alert evaluation around it. A report runs after the evaluation it describes, so a failure that
+/// escaped would fail a pass whose rules were all decided. It is logged at error.
 /// </summary>
 internal static class ClockAnomalyNoticeIsolation
 {
@@ -301,7 +302,7 @@ internal static class ClockAnomalyNoticeIsolation
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "The clock-anomaly notice could not be updated for a reading selection");
+            logger.LogError(ex, "The clock-anomaly notice could not be updated for a reading selection");
         }
     }
 
@@ -315,7 +316,7 @@ internal static class ClockAnomalyNoticeIsolation
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "The clock-anomaly notice could not be updated for an evaluation pass");
+            logger.LogError(ex, "The clock-anomaly notice could not be updated for an evaluation pass");
         }
     }
 }

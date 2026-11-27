@@ -101,31 +101,21 @@ internal sealed class InAppProvider(
         var notice = payload.Kind.IsNotice();
         var urgency = MapSeverity(payload);
 
-        try
-        {
-            await notificationService.CreateNotificationAsync(
-                userId: userId,
-                type: NotificationTypeFor(payload.Kind),
-                title: payload.RuleName,
-                category: NotificationCategory.Alert,
-                urgency: urgency,
-                subtitle: notice ? NoticeSubtitle(payload.Kind) : BuildSubtitle(payload),
-                sourceId: payload.ExcursionId.ToString(),
-                actions: notice ? null : AlertActions,
-                cancellationToken: ct);
+        await notificationService.CreateNotificationAsync(
+            userId: userId,
+            type: NotificationTypeFor(payload.Kind),
+            title: payload.RuleName,
+            category: NotificationCategory.Alert,
+            urgency: urgency,
+            subtitle: notice ? NoticeSubtitle(payload.Kind) : BuildSubtitle(payload),
+            sourceId: payload.ExcursionId.ToString(),
+            actions: notice ? null : AlertActions,
+            cancellationToken: ct);
 
-            logger.LogDebug(
-                "InApp notification created for instance {InstanceId} (user {UserId}, urgency {Urgency})",
-                payload.InstanceId, userId, urgency);
-            return true;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
-        {
-            logger.LogError(ex,
-                "Failed to create InApp notification for instance {InstanceId}, user {UserId}",
-                payload.InstanceId, userId);
-            throw;
-        }
+        logger.LogDebug(
+            "InApp notification created for instance {InstanceId} (user {UserId}, urgency {Urgency})",
+            payload.InstanceId, userId, urgency);
+        return true;
     }
 
     private static NotificationUrgency MapSeverity(AlertPayload payload) => payload.Severity switch
