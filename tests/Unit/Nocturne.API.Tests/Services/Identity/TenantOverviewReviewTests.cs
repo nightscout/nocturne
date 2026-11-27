@@ -1,3 +1,4 @@
+using Nocturne.Core.Models.Identity;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
@@ -13,6 +14,8 @@ using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -32,7 +35,7 @@ using static Nocturne.API.Tests.Services.Identity.TenantOverviewTestKit;
 namespace Nocturne.API.Tests.Services.Identity;
 
 [Trait("Category", "Unit")]
-public class TenantOverviewReviewTests
+public partial class TenantOverviewReviewTests
 {
     private static readonly DateTime Now = new(2026, 11, 20, 12, 0, 0, DateTimeKind.Utc);
 
@@ -49,7 +52,7 @@ public class TenantOverviewReviewTests
         var harness = new Harness(options);
 
         var review = await harness.Service.GetReviewAsync(
-            null, FullTokenScopes, AuthType.Guest, days: 14);
+            null, FullTokenScopes, AuthType.Guest, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         review.People.Should().BeEmpty();
         review.To.Should().Be(Now);
@@ -68,7 +71,7 @@ public class TenantOverviewReviewTests
         var harness = new Harness(options);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         var person = review.People.Should().ContainSingle().Subject;
         person.TenantId.Should().Be(tenantId);
@@ -86,7 +89,7 @@ public class TenantOverviewReviewTests
         var harness = new Harness(options);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, new HashSet<string> { Scope.GlucoseRead }, AuthType.OAuthAccessToken, days: 14);
+            subjectId, new HashSet<string> { Scope.GlucoseRead }, AuthType.OAuthAccessToken, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         review.People.Should().ContainSingle().Which.Unavailable
             .Should().Be(TenantReviewUnavailable.NoReportAccess);
@@ -102,7 +105,7 @@ public class TenantOverviewReviewTests
         var harness = new Harness(options);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         var person = review.People.Should().ContainSingle().Subject;
         person.Unavailable.Should().Be(TenantReviewUnavailable.HistoryLimited);
@@ -120,7 +123,7 @@ public class TenantOverviewReviewTests
         var harness = new Harness(options);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, FullTokenScopes, AuthType.OAuthAccessToken, days: 14,
+            subjectId, FullTokenScopes, AuthType.OAuthAccessToken, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty,
             credentialLimitTo24Hours: true);
 
         review.People.Should().HaveCount(2).And.OnlyContain(p =>
@@ -138,7 +141,7 @@ public class TenantOverviewReviewTests
         harness.Series[tenantId] = Harness.Period(current: 3, previous: 1);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         var statistics = review.People.Single().Statistics!;
         statistics.TimeInRange!.Target.Should().BeApproximately(75, 2);
@@ -155,7 +158,7 @@ public class TenantOverviewReviewTests
         harness.Series[tenantId] = Harness.Period(current: 1, previous: 3);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         review.People.Single().Statistics!.TimeInRangeChange.Should().BeApproximately(-50, 2);
     }
@@ -170,7 +173,7 @@ public class TenantOverviewReviewTests
         harness.Series[tenantId] = Harness.Period(current: 3, previous: 1, previousDaysOfData: 2);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         var statistics = review.People.Single().Statistics!;
         statistics.TimeInRange.Should().NotBeNull();
@@ -187,7 +190,7 @@ public class TenantOverviewReviewTests
         harness.Series[tenantId] = Harness.Period(current: 3, previous: 1, previousDaysOfData: 0);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         review.People.Single().Statistics!.TimeInRangeChange.Should().BeNull();
     }
@@ -201,7 +204,7 @@ public class TenantOverviewReviewTests
         var harness = new Harness(options);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         var person = review.People.Single();
         person.Unavailable.Should().BeNull();
@@ -224,7 +227,7 @@ public class TenantOverviewReviewTests
         harness.Series[okTenant] = Harness.Period(current: 3, previous: 3);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         review.People.Should().HaveCount(2);
         var bad = review.People.Single(p => p.TenantId == badTenant);
@@ -247,7 +250,7 @@ public class TenantOverviewReviewTests
         harness.Series[high] = Harness.Period(current: 0, previous: 0);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         var a = review.People.Single(p => p.TenantId == inRange).Statistics!;
         var b = review.People.Single(p => p.TenantId == high).Statistics!;
@@ -265,7 +268,7 @@ public class TenantOverviewReviewTests
         var harness = new Harness(options);
 
         var review = await harness.Service.GetReviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 30);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, days: 30, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         review.To.Should().Be(Now);
         review.From.Should().Be(Now.AddDays(-30));
@@ -283,11 +286,11 @@ public class TenantOverviewReviewTests
         SeedMembership(options, subjectId, "family", ReportReader);
         var harness = new Harness(options);
 
-        await harness.Service.GetReviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14);
-        await harness.Service.GetReviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14);
+        await harness.Service.GetReviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
+        await harness.Service.GetReviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty);
         harness.Reads.Should().HaveCount(2);
 
-        await harness.Service.GetReviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, days: 30);
+        await harness.Service.GetReviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, days: 30, OverviewRuleSet.Fixed, PeopleQuery.Empty);
         harness.Reads.Should().HaveCount(4, "a different period is a different key");
     }
 
@@ -305,11 +308,11 @@ public class TenantOverviewReviewTests
             .ReturnsAsync(new HashSet<Guid> { inGroup, Guid.NewGuid() });
 
         var review = await harness.Service.GetGroupReviewAsync(
-            subjectId, group, FullTokenScopes, AuthType.SessionCookie, 14, false, CancellationToken.None);
+            subjectId, group, FullTokenScopes, AuthType.SessionCookie, 14, OverviewRuleSet.Fixed, PeopleQuery.Empty, false, CancellationToken.None);
 
         review!.People.Select(p => p.TenantId).Should().Equal(inGroup);
         harness.Reads.Select(r => r.Tenant).Should().OnlyContain(t => t == inGroup).And.NotBeEmpty();
-        (await harness.Service.GetReviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14))
+        (await harness.Service.GetReviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, days: 14, OverviewRuleSet.Fixed, PeopleQuery.Empty))
             .People.Select(p => p.TenantId).Should().BeEquivalentTo([inGroup, outside]);
     }
 
@@ -323,7 +326,7 @@ public class TenantOverviewReviewTests
         public Mock<ITeamRepository> Teams { get; } = new();
         public TenantOverviewService Service { get; }
 
-        public Harness(Microsoft.EntityFrameworkCore.DbContextOptions<NocturneDbContext> options)
+        public Harness(Microsoft.EntityFrameworkCore.DbContextOptions<NocturneDbContext> options, IViewerFlagRules? rules = null)
         {
             var local = new MemoryCache(new MemoryCacheOptions());
             var distributed = TestTenantCache.Distributed(local);
@@ -334,6 +337,17 @@ public class TenantOverviewReviewTests
             var services = new ServiceCollection();
             services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
             services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
+            services.AddScoped<INocturneDbContextFactory>(sp =>
+                new ScopeContextFactory(options, () => sp.GetRequiredService<ITenantAccessor>().TenantId));
+            services.AddScoped<IAlertRepository>(sp => new AlertRepository(sp.GetRequiredService<INocturneDbContextFactory>()));
+            services.AddScoped(_ =>
+            {
+                var canonical = new Mock<ICanonicalGlucoseService>();
+                canonical.Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(new SensorGlucose { Mgdl = 120, Timestamp = Now.AddMinutes(-1) });
+                canonical.Setup(c => c.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+                return canonical.Object;
+            });
             services.AddScoped(sp => TestTenantCache.Create(
                 local, distributed, sp.GetRequiredService<ITenantAccessor>().TenantId));
             services.AddScoped(sp =>
@@ -393,7 +407,7 @@ public class TenantOverviewReviewTests
                 provider.CreateScope().ServiceProvider,
                 new GlucoseStatusClassifier(
                     new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
-                Mock.Of<IViewerFlagRules>(),
+                rules ?? Mock.Of<IViewerFlagRules>(),
                 new FakeTimeProvider(new DateTimeOffset(Now)),
                 NullLogger<TenantOverviewService>.Instance);
         }

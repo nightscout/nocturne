@@ -24,6 +24,9 @@ public class SubjectForeignKeyCoverageTests
         ["flag_rules.subject_id"] =
             "a rule is made only from its owner's own sign-in, which no unclaimed subject has had, and its strict "
             + "subject_pin hides every rule from the unpinned context the predicates run in, so a read there would always pass",
+        ["people_views.subject_id"] =
+            "a view is made only from its owner's own sign-in, which no unclaimed subject has had, and its strict "
+            + "subject_pin hides every view from the unpinned context the predicates run in, so a read there would always pass",
     };
 
     [Fact]

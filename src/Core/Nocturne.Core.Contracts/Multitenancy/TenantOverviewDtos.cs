@@ -14,8 +14,10 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 /// everyone the caller follows.
 /// </param>
 /// <param name="PeopleWithRulesPending">
-/// How many people the flag rules the read judges are still being checked for. Those people carry only the fixed
-/// reasons until a later read; a page re-reads sooner while this is above zero. Zero when the read judges no rules.
+/// How many people the flag rules or the fact filters the read judges are still being checked for. Those people carry
+/// only the fixed reasons until a later read, and while the query has a fact filter they are left out of it, since a
+/// person still being checked matches none. A page re-reads sooner while this is above zero. Zero when the read judges
+/// neither.
 /// </param>
 /// <param name="RuleTeams">
 /// The teams whose flag rules the read judged for at least one of its people, by name: each holds a rule and follows

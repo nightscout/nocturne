@@ -39,6 +39,25 @@ public sealed record FlagRule(
     DateTime CreatedAt,
     DateTime UpdatedAt);
 
+/// <summary>
+/// A flag fact compared with a value, as a request names it: a rule's, or a filter's, which has no level. Nullable, so a
+/// request that leaves a part out is refused rather than read as a default.
+/// </summary>
+public interface IFlagFactFields
+{
+    string? Dataset { get; }
+
+    string? Field { get; }
+
+    /// <summary>The last N days a period fact covers; null for a fact as it is now.</summary>
+    int? Days { get; }
+
+    FlagRuleComparison? Comparison { get; }
+
+    /// <summary>In the fact's unit; a glucose value is in mg/dL.</summary>
+    double? Value { get; }
+}
+
 /// <summary>A flag rule as it is created or changed.</summary>
 public sealed record FlagRuleDraft(
     string Dataset,

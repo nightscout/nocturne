@@ -18,6 +18,13 @@ public interface IPatientRecordRepository
     /// <summary>Returns the patient record for the current tenant, or null if none exists.</summary>
     Task<PatientRecord?> GetAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// The facts of the current tenant's person a People query filters by, on one context: the record's date of birth
+    /// and "no insulin" answer, and with <paramref name="withTherapy"/> the current devices, in their order, and whether
+    /// a current insulin is on record.
+    /// </summary>
+    Task<PatientFacts> GetFactsAsync(bool withTherapy, CancellationToken ct);
+
     /// <summary>Returns the patient record for the current tenant, creating a default one if none exists.</summary>
     Task<PatientRecord> GetOrCreateAsync(CancellationToken ct = default);
 

@@ -157,8 +157,9 @@ public class FlagRulesIntegrationTests(ApiIntegrationTestFixture fixture, ITestO
             new { dataset = "current_status", field = "hoursSinceReading", comparison = "Below", value = 100_000 }))
             .StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var unnamed = await client.GetAsync("/api/v4/me/tenants/overview");
-        var all = await client.GetFromJsonAsync<JsonElement>("/api/v4/me/tenants/overview?rules=All");
+        var unnamed = await client.PostAsJsonAsync("/api/v4/me/tenants/overview", new { });
+        var all = await (await client.PostAsJsonAsync("/api/v4/me/tenants/overview", new { rules = "All" }))
+            .Content.ReadFromJsonAsync<JsonElement>();
 
         unnamed.StatusCode.Should().Be(HttpStatusCode.OK, "a caller that names no rule set is answered, not refused");
         ReasonKinds(await unnamed.Content.ReadFromJsonAsync<JsonElement>()).Should().NotContain("FlagRule");

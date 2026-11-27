@@ -28,10 +28,18 @@ public interface IFlagRuleCatalogue
     IReadOnlyList<FlagRulePreset> Presets { get; }
 
     /// <summary>
-    /// What is wrong with <paramref name="draft"/>'s fact, keyed <c>dataset</c>, <c>field</c>, <c>days</c> or
-    /// <c>value</c>, by the reports validator's rules; empty when it checks.
+    /// What is wrong with a fact compared with a value, a rule's or a filter's, keyed <c>dataset</c>, <c>field</c>,
+    /// <c>days</c> or <c>value</c>, by the reports validator's rules; empty when it checks.
     /// </summary>
-    IReadOnlyDictionary<string, string[]> Check(FlagRuleDraft draft);
+    IReadOnlyDictionary<string, string[]> Check(
+        string dataset, string field, int? days, FlagRuleComparison comparison, double value);
+
+    /// <summary>
+    /// What is wrong with the fact of each fact filter of <paramref name="query"/>, as <see cref="Check"/> finds it, keyed
+    /// <c>query.filters[i].</c> and its key; empty when they all check. A filter whose fields its validator refuses is
+    /// left to it.
+    /// </summary>
+    IReadOnlyDictionary<string, string[]> CheckFacts(PeopleQuery query);
 
     /// <summary>
     /// For each of <paramref name="rules"/>, how many of <paramref name="people"/> it cannot be checked for: limited to
@@ -70,13 +78,24 @@ internal sealed class FlagRuleCatalogue(IReportDatasetRegistry registry, FlagFac
 
     public IReadOnlyList<FlagRulePreset> Presets => PresetRules;
 
-    public IReadOnlyDictionary<string, string[]> Check(FlagRuleDraft draft)
+    public IReadOnlyDictionary<string, string[]> Check(
+        string dataset, string field, int? days, FlagRuleComparison comparison, double value)
     {
-        var (_, errors) = evaluator.CheckRule(draft.Dataset, draft.Field, draft.Days, draft.Comparison, draft.Value);
+        var (_, errors) = evaluator.CheckRule(dataset, field, days, comparison, value);
         return errors
             .GroupBy(e => KeyOf(e.Path))
             .ToDictionary(g => g.Key, g => g.Select(e => e.Message).Distinct().ToArray());
     }
+
+    public IReadOnlyDictionary<string, string[]> CheckFacts(PeopleQuery query) =>
+        query.AllFilters
+            .Select((filter, i) => (Filter: filter, Index: i))
+            .Where(f => f.Filter.Kind == PeopleFilterKind.Fact)
+            .SelectMany(f => f.Filter is { Dataset: { } dataset, Field: { } field, Comparison: { } comparison, Value: { } value }
+                ? Check(dataset, field, f.Filter.Days, comparison, value)
+                    .Select(e => KeyValuePair.Create($"query.filters[{f.Index}].{e.Key}", e.Value))
+                : [])
+            .ToDictionary(e => e.Key, e => e.Value);
 
     public IReadOnlyList<int> CannotCheckCounts(
         IReadOnlyList<FlagRule> rules, IReadOnlyList<GlucoseReadTenant> people, bool credentialLimitTo24Hours) =>

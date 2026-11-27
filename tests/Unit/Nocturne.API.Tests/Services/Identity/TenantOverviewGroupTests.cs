@@ -1,3 +1,4 @@
+using Nocturne.Core.Models.Identity;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -56,7 +57,7 @@ public class TenantOverviewGroupTests
         InGroup(cy, zed, bo, noGlucose, inactive, stranger);
 
         var group = await Service().GetGroupOverviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, false, CancellationToken.None);
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty, false, CancellationToken.None);
 
         group.Should().NotBeNull();
         _errors.Errors.Should().BeEmpty();
@@ -65,7 +66,7 @@ public class TenantOverviewGroupTests
         group.Tenants.Skip(1).Should().OnlyContain(t => t.Attention.Count == 0);
         group.HiddenCount.Should().Be(3);
 
-        var everyone = await Service().GetOverviewAsync(_subject, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+        var everyone = await Service().GetOverviewAsync(_subject, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
         everyone.Tenants.Select(t => t.Slug).Should().Equal("zed", "bo", "cy", "dee");
         everyone.HiddenCount.Should().BeNull();
     }
@@ -79,9 +80,9 @@ public class TenantOverviewGroupTests
         InGroup(read, narrowed, stranger);
 
         var group = await Service().GetGroupOverviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, false, CancellationToken.None);
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty, false, CancellationToken.None);
         var review = await Service().GetGroupReviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, 14, false, CancellationToken.None);
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, 14, OverviewRuleSet.Fixed, PeopleQuery.Empty, false, CancellationToken.None);
 
         group!.HiddenCount.Should().Be(2);
         foreach (var json in new[] { JsonSerializer.Serialize(group), JsonSerializer.Serialize(review) })
@@ -100,9 +101,9 @@ public class TenantOverviewGroupTests
             .ReturnsAsync((IReadOnlySet<Guid>?)null);
 
         (await Service().GetGroupOverviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, false, CancellationToken.None)).Should().BeNull();
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty, false, CancellationToken.None)).Should().BeNull();
         (await Service().GetGroupReviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, 14, false, CancellationToken.None)).Should().BeNull();
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, 14, OverviewRuleSet.Fixed, PeopleQuery.Empty, false, CancellationToken.None)).Should().BeNull();
     }
 
     [Fact]
@@ -112,7 +113,7 @@ public class TenantOverviewGroupTests
         InGroup(Guid.NewGuid(), Guid.NewGuid());
 
         var group = await Service().GetGroupOverviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, false, CancellationToken.None);
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty, false, CancellationToken.None);
 
         group!.Tenants.Should().BeEmpty();
         group.HiddenCount.Should().Be(2);
@@ -128,12 +129,12 @@ public class TenantOverviewGroupTests
             .ReturnsAsync(new Dictionary<Guid, Guid> { [amy] = birch, [Guid.NewGuid()] = Guid.NewGuid() });
         InGroup(amy, bo);
 
-        var everyone = await Service().GetOverviewAsync(_subject, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+        var everyone = await Service().GetOverviewAsync(_subject, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
         everyone.Tenants.ToDictionary(t => t.Slug, t => t.FirstGroupId).Should().BeEquivalentTo(
             new Dictionary<string, Guid?> { ["amy"] = birch, ["bo"] = null });
 
         var group = await Service().GetGroupOverviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, false, CancellationToken.None);
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty, false, CancellationToken.None);
         group!.Tenants.Should().HaveCount(2).And.OnlyContain(t => t.FirstGroupId == null);
     }
 
@@ -148,7 +149,7 @@ public class TenantOverviewGroupTests
         _rules.Reasons[ruled] = [RuleReason(NotificationUrgency.Hazard, null)];
 
         var group = await Service().GetGroupOverviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, flagRules, false, CancellationToken.None);
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, flagRules, PeopleQuery.Empty, false, CancellationToken.None);
 
         var judged = flagRules != OverviewRuleSet.Fixed;
         _rules.Begun.Should().Be(judged ? 1 : 0);

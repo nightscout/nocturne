@@ -17,6 +17,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -118,7 +119,7 @@ public class TenantOverviewPersonTests
             subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
         harness.Reads.Should().Contain((tenantId, "scope"));
         var overview = await harness.Service.GetOverviewAsync(
-            subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+            subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
 
         person!.Person.Should().BeEquivalentTo(overview.Tenants.Single());
         person.Person.Status.Should().Be(GlucoseStatus.Low);

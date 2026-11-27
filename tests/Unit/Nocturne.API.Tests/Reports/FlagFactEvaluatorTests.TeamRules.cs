@@ -73,9 +73,9 @@ public partial class FlagFactEvaluatorTests
 
         var reasons = await JudgedTwiceAsync(harness, OverviewRuleSet.Team, personal, [(ward, ofTeam)], [person]);
         var onlyPersonal = await Rules(harness, harness.Evaluator, personal, [])
-            .BeginAsync(Viewer, OverviewRuleSet.Team, [person], false, CancellationToken.None);
+            .BeginAsync(Viewer, OverviewRuleSet.Team, [], [person], false, CancellationToken.None);
         await new ViewerFlagRules(rules, TeamsOf(harness, [ward]), harness.Evaluator, harness.Time)
-            .BeginAsync(Viewer, OverviewRuleSet.Team, [person], false, CancellationToken.None);
+            .BeginAsync(Viewer, OverviewRuleSet.Team, [], [person], false, CancellationToken.None);
 
         reasons.Single().Should().ContainSingle().Which.Rule!.Source.Should().Be(FlagRuleSource.Team);
         onlyPersonal.Should().BeNull("a team read with no team rule judges nothing");
@@ -160,7 +160,7 @@ public partial class FlagFactEvaluatorTests
 
         var run = await Rules(harness, harness.Evaluator, NoRules,
                 [(managed, [Rule("glucose_statistics", "timeBelow", 14, FlagRuleComparison.Above, 4)])])
-            .BeginAsync(Viewer, OverviewRuleSet.Team, [person], false, CancellationToken.None);
+            .BeginAsync(Viewer, OverviewRuleSet.Team, [], [person], false, CancellationToken.None);
 
         run.Should().BeNull();
     }

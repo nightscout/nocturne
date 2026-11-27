@@ -38,7 +38,7 @@ public class FlagRulesControllerTests
     private static readonly FlagRuleRequest Request = new("glucose_statistics", "timeBelow", 14, FlagRuleComparison.Above, 4, null);
 
     public FlagRulesControllerTests() =>
-        _catalogue.Setup(c => c.Check(It.IsAny<FlagRuleDraft>())).Returns(new Dictionary<string, string[]>());
+        _catalogue.Setup(c => c.Check(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<FlagRuleComparison>(), It.IsAny<double>())).Returns(new Dictionary<string, string[]>());
 
     [Fact]
     public async Task A_rule_is_created_for_the_caller_at_warn_when_no_level_is_sent()
@@ -57,7 +57,7 @@ public class FlagRulesControllerTests
     [Fact]
     public async Task A_rule_the_catalogue_refuses_is_a_validation_problem_and_is_not_stored()
     {
-        _catalogue.Setup(c => c.Check(It.IsAny<FlagRuleDraft>()))
+        _catalogue.Setup(c => c.Check(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<FlagRuleComparison>(), It.IsAny<double>()))
             .Returns(new Dictionary<string, string[]> { ["days"] = ["Send at most 90 days."] });
 
         var created = await Controller().CreateFlagRule(Request, CancellationToken.None);
@@ -229,7 +229,7 @@ public class FlagRulesControllerTests
     [Fact]
     public async Task A_team_rule_the_catalogue_refuses_is_a_validation_problem_and_is_not_stored()
     {
-        _catalogue.Setup(c => c.Check(It.IsAny<FlagRuleDraft>()))
+        _catalogue.Setup(c => c.Check(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<FlagRuleComparison>(), It.IsAny<double>()))
             .Returns(new Dictionary<string, string[]> { ["field"] = ["Send a fact a flag rule can name."] });
 
         var created = await Controller().CreateTeamFlagRule(_teamId, Request, CancellationToken.None);

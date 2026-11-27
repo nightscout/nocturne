@@ -54,6 +54,8 @@ public class EndOnlyMembershipReadGuardTests
             "which reasons the member list's note on a lifted limit names, not whether the row is a member",
         [$"{Repositories}/TenantMembershipRepository.cs: TenantMembershipRepository.IsDirectMemberAsync"] =
             "whether the direct reason itself is in force, so a person is not let in directly twice; access checks keep IsMemberAsync",
+        [$"{Repositories}/TenantMembershipRepository.cs: TenantMembershipRepository.ListSourcesOfSubjectAsync"] =
+            "which reasons in force say where a live membership comes from, for a People query's source filter, not whether the row is a member",
         [$"{Repositories}/TenantMembershipRepository.cs: TenantMembershipRepository.StageSetTeamReasonAsync"] =
             "whether one team reason's own end had passed and its new grant's has not, which the history states as access again, not whether the row is a member",
         [$"{Repositories}/MembershipReasonColumns.cs: MembershipReasonColumns.DirectAccess"] =

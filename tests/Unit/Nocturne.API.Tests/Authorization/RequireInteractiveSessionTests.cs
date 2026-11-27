@@ -86,6 +86,11 @@ public class RequireInteractiveSessionTests
         { typeof(FlagRulesController), nameof(FlagRulesController.CreateTeamFlagRule) },
         { typeof(FlagRulesController), nameof(FlagRulesController.UpdateTeamFlagRule) },
         { typeof(FlagRulesController), nameof(FlagRulesController.DeleteTeamFlagRule) },
+        { typeof(PeopleViewsController), nameof(PeopleViewsController.GetPeopleViews) },
+        { typeof(PeopleViewsController), nameof(PeopleViewsController.CreatePeopleView) },
+        { typeof(PeopleViewsController), nameof(PeopleViewsController.UpdatePeopleView) },
+        { typeof(PeopleViewsController), nameof(PeopleViewsController.DeletePeopleView) },
+        { typeof(PeopleViewsController), nameof(PeopleViewsController.ReorderPeopleViews) },
 
         // A team is run by a person, never by a key or a device token.
         { typeof(TeamsController), nameof(TeamsController.GetMyTeams) },

@@ -32,8 +32,8 @@ public class FlagRuleCatalogueTests
         foreach (var preset in Catalogue.Presets)
         {
             Catalogue.Facts.Should().Contain(f => f.Dataset == preset.Dataset && f.Field.Name == preset.Field, preset.ToString());
-            Catalogue.Check(new FlagRuleDraft(preset.Dataset, preset.Field, preset.Days, preset.Comparison, preset.Value,
-                NotificationUrgency.Warn)).Should().BeEmpty(preset.ToString());
+            Catalogue.Check(preset.Dataset, preset.Field, preset.Days, preset.Comparison, preset.Value)
+                .Should().BeEmpty(preset.ToString());
         }
     }
 
@@ -75,7 +75,7 @@ public class FlagRuleCatalogueTests
     [MemberData(nameof(Refusals))]
     public void A_rule_the_reports_validator_refuses_is_refused_under_its_key(string dataset, string field, int? days, string key)
     {
-        var errors = Catalogue.Check(new FlagRuleDraft(dataset, field, days, FlagRuleComparison.Above, 4, NotificationUrgency.Warn));
+        var errors = Catalogue.Check(dataset, field, days, FlagRuleComparison.Above, 4);
 
         errors.Keys.Should().Equal(key);
         errors[key].Should().NotBeEmpty();

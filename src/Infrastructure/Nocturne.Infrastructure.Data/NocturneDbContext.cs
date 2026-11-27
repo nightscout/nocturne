@@ -327,6 +327,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<FlagRuleEntity> FlagRules { get; set; } = null!;
 
+    public DbSet<PeopleViewEntity> PeopleViews { get; set; } = null!;
+
     public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
 
     public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }

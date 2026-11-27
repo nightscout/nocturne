@@ -121,10 +121,15 @@ internal static class TenantOverviewTestKit
                 6.5, FlagRuleComparison.Above, 4, 14, DateTime.UtcNow.AddDays(-14), DateTime.UtcNow, null, null),
         };
 
-    /// <summary>A run that gives each person the reasons scripted for them, and records what the overview passed it.</summary>
+    /// <summary>
+    /// A run that gives each person the reasons scripted for them, matches the fact filters for everyone but
+    /// <see cref="FailingFilters"/>, and records what the overview passed it.
+    /// </summary>
     public sealed class ScriptedRules : IViewerFlagRules
     {
         public Dictionary<Guid, IReadOnlyList<TenantOverviewAttention>> Reasons { get; } = [];
+        public HashSet<Guid> FailingFilters { get; } = [];
+        public List<IReadOnlyList<PeopleFilter>> FactsBegunFor { get; } = [];
         public int Pending { get; init; }
         public bool None { get; init; }
         public IReadOnlyList<TenantOverviewRuleTeam> Teams { get; init; } = [];
@@ -137,10 +142,11 @@ internal static class TenantOverviewTestKit
         public int? FinishedAfter { get; private set; }
 
         public Task<IViewerFlagRuleRun?> BeginAsync(
-            Guid subjectId, OverviewRuleSet rules, IReadOnlyList<GlucoseReadTenant> people, bool credentialLimitTo24Hours,
-            CancellationToken ct)
+            Guid subjectId, OverviewRuleSet rules, IReadOnlyList<PeopleFilter> facts, IReadOnlyList<GlucoseReadTenant> people,
+            bool credentialLimitTo24Hours, CancellationToken ct)
         {
             Begun++;
+            FactsBegunFor.Add(facts);
             Subjects.Add(subjectId);
             RuleSets.Add(rules);
             PeopleBegunFor.Add([.. people.Select(p => p.Tenant.Id)]);
@@ -154,13 +160,15 @@ internal static class TenantOverviewTestKit
 
             public IReadOnlyList<TenantOverviewRuleTeam> Teams => owner.Teams;
 
-            public Task<IReadOnlyList<TenantOverviewAttention>> ReasonsAsync(
+            public Task<ViewerJudgement> JudgeAsync(
                 GlucoseReadTenant person, IServiceProvider personScope, SensorGlucose? latest,
                 IReadOnlyList<TrackerInstance>? activeTrackers, PumpSnapshot? pump, CancellationToken ct)
             {
                 lock (owner.Judged)
                     owner.Judged.Add((person, latest, activeTrackers, pump));
-                return Task.FromResult(owner.Reasons.GetValueOrDefault(person.Tenant.Id) ?? []);
+                return Task.FromResult(new ViewerJudgement(
+                    owner.Reasons.GetValueOrDefault(person.Tenant.Id) ?? [],
+                    !owner.FailingFilters.Contains(person.Tenant.Id)));
             }
 
             public void Finish() => owner.FinishedAfter = owner.Judged.Count;

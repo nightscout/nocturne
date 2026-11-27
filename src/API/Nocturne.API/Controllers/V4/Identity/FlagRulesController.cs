@@ -27,7 +27,7 @@ public sealed record FlagRuleRequest(
     int? Days,
     [property: Required] FlagRuleComparison? Comparison,
     [property: Required] double? Value,
-    NotificationUrgency? Level);
+    NotificationUrgency? Level) : IFlagFactFields;
 
 /// <summary>A flag rule, and how many of the people it applies to it cannot be checked for by the caller.</summary>
 /// <param name="CannotCheckCount">
@@ -262,7 +262,7 @@ public class FlagRulesController(
 
     /// <summary>What is wrong with the fact <paramref name="draft"/> names (<see cref="IFlagRuleCatalogue.Check"/>); null when it checks.</summary>
     private IActionResult? Refusal(FlagRuleDraft draft) =>
-        catalogue.Check(draft) is { Count: > 0 } errors
+        catalogue.Check(draft.Dataset, draft.Field, draft.Days, draft.Comparison, draft.Value) is { Count: > 0 } errors
             ? ValidationProblem(new ValidationProblemDetails(errors.ToDictionary(e => e.Key, e => e.Value)))
             : null;
 

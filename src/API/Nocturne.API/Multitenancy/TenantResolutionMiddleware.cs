@@ -93,7 +93,7 @@ public class TenantResolutionMiddleware
         // service pins each tenant itself and never reads as the request's tenant.
         "/api/v4/me/tenants/overview",
         // The same aggregation over a period, reached from the same host.
-        new TenantlessPath("/api/v4/me/tenants/overview/review", HttpMethods.Get),
+        new TenantlessPath("/api/v4/me/tenants/overview/review", HttpMethods.Post),
         // One person of the same aggregation, read for the panel beside the list.
         new TenantlessPath("/api/v4/me/tenants/overview/person", HttpMethods.Get),
         // The tenants whose live changes the same page hears about, which the web app signs into
@@ -121,6 +121,12 @@ public class TenantResolutionMiddleware
         new TenantlessPath("/api/v4/me/flag-rules/", HttpMethods.Get, Prefix: true),
         new TenantlessPath("/api/v4/me/flag-rules/", HttpMethods.Put, Prefix: true),
         new TenantlessPath("/api/v4/me/flag-rules/", HttpMethods.Delete, Prefix: true),
+        // The subject's own saved views of the People page, which belong to no site, on the same terms.
+        new TenantlessPath("/api/v4/me/people-views", HttpMethods.Get),
+        new TenantlessPath("/api/v4/me/people-views", HttpMethods.Post),
+        new TenantlessPath("/api/v4/me/people-views/", HttpMethods.Post, Prefix: true),
+        new TenantlessPath("/api/v4/me/people-views/", HttpMethods.Put, Prefix: true),
+        new TenantlessPath("/api/v4/me/people-views/", HttpMethods.Delete, Prefix: true),
         // The caller's own global subject-role scopes. Tenantless, MemberScopeMiddleware
         // returns before applying tenant-derived scopes, so this reports whatever the JWT
         // carries — empty for an ordinary subject, non-empty for one holding global roles.

@@ -82,6 +82,9 @@ public static class MembershipSum
     }
 }
 
+/// <summary>Where a subject's membership of a site comes from: a reason of its own there, the teams whose access gives it one, or both.</summary>
+public sealed record MembershipSources(bool Direct, IReadOnlySet<Guid> Teams);
+
 /// <summary>The kinds of reason a subject holds a membership for.</summary>
 public static class MembershipReasonKind
 {

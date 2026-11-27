@@ -192,7 +192,7 @@ public partial class DeviceSetupService(
             return;
 
         var role = group == InsulinGroup.LongActing ? InsulinRole.Basal
-            : (await devices.GetCurrentAsync(ct)).Any(d => d.DeviceCategory == DeviceCategory.InsulinPump)
+            : TherapyTypes.PumpOf(await devices.GetCurrentAsync(ct)) is not null
                 ? InsulinRole.Both
                 : InsulinRole.Bolus;
 
@@ -422,7 +422,7 @@ public partial class DeviceSetupService(
                 : (TrackerOfferKind.Sensor, name, true, typical));
         }
 
-        if (current.FirstOrDefault(d => d.DeviceCategory == DeviceCategory.InsulinPump) is { } pump)
+        if (TherapyTypes.PumpOf(current) is { } pump)
         {
             var entry = pump.CatalogId is null ? null : DeviceCatalog.GetById(pump.CatalogId);
             var name = entry?.Name ?? pump.Model;

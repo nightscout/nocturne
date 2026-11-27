@@ -22,11 +22,13 @@ public interface ITenantOverviewService
     /// same resolution <c>MemberScopeMiddleware</c> applies per request. A tenant whose
     /// membership, or <paramref name="credentialLimitTo24Hours"/>, limits the caller to the last
     /// 24 hours is read under that clamp. The flag rules <paramref name="rules"/> names are judged for each person
-    /// (<see cref="IViewerFlagRules"/>), and their reasons merged into the person's.
+    /// (<see cref="IViewerFlagRules"/>), and their reasons merged into the person's. Only the people
+    /// <paramref name="query"/> keeps are listed, in its order; an empty query keeps everyone in the order above.
     /// </summary>
     Task<TenantOverviewResponse> GetOverviewAsync(
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
         OverviewRuleSet rules,
+        PeopleQuery query,
         bool credentialLimitTo24Hours = false,
         CancellationToken ct = default);
 
@@ -44,15 +46,15 @@ public interface ITenantOverviewService
     /// </summary>
     Task<TenantOverviewResponse?> GetGroupOverviewAsync(
         Guid subjectId, Guid groupId, IReadOnlySet<string> tokenScopes, AuthType authType,
-        OverviewRuleSet rules, bool credentialLimitTo24Hours, CancellationToken ct);
+        OverviewRuleSet rules, PeopleQuery query, bool credentialLimitTo24Hours, CancellationToken ct);
 
     /// <summary>
-    /// <see cref="GetReviewAsync"/> for only the people <see cref="GetGroupOverviewAsync"/> lists. Null when
-    /// the subject is not in the group as current staff.
+    /// <see cref="GetReviewAsync"/> for only the people of <paramref name="groupId"/> whose team's access has not
+    /// ended. Null when the subject is not in the group as current staff.
     /// </summary>
     Task<TenantReviewResponse?> GetGroupReviewAsync(
         Guid subjectId, Guid groupId, IReadOnlySet<string> tokenScopes, AuthType authType, int days,
-        bool credentialLimitTo24Hours, CancellationToken ct);
+        OverviewRuleSet rules, PeopleQuery query, bool credentialLimitTo24Hours, CancellationToken ct);
 
     /// <summary>
     /// Returns the statistics of the last <paramref name="days"/> days, and the change in time in
@@ -61,10 +63,14 @@ public interface ITenantOverviewService
     /// <paramref name="credentialLimitTo24Hours"/> limits the caller to the last 24 hours, is
     /// returned unavailable and read not at all. A period is the span ending now, as
     /// <c>GET /api/v4/statistics/periods</c> reads it. A caller with no subject of its own has no
-    /// memberships, and gets the periods with no people.
+    /// memberships, and gets the periods with no people. Only the people <paramref name="query"/> keeps are returned,
+    /// judged as <see cref="GetOverviewAsync"/> judges them with <paramref name="rules"/>, so the two reads of one query
+    /// list the same people.
     /// </summary>
     Task<TenantReviewResponse> GetReviewAsync(
         Guid? subjectId, IReadOnlySet<string> tokenScopes, AuthType authType, int days,
+        OverviewRuleSet rules,
+        PeopleQuery query,
         bool credentialLimitTo24Hours = false,
         CancellationToken ct = default);
 
