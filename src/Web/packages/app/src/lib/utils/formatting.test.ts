@@ -39,6 +39,7 @@ const {
 	formatGlucoseRange,
 	formatLocale,
 	formatList,
+	listSeparators,
 	prefersHour12,
 	formatLongDate,
 	formatMediumDate,
@@ -129,6 +130,33 @@ describe("formatList", () => {
 	it("returns one item as it is and no items as empty", () => {
 		expect(formatList(["a"])).toBe("a");
 		expect(formatList([])).toBe("");
+	});
+
+	it("gives the unit list its English commas", () => {
+		expect(formatList(["a", "b", "c"], "unit")).toBe("a, b, c");
+	});
+});
+
+describe("listSeparators", () => {
+	it("gives the text between each item and the next, as formatList writes it", () => {
+		expect(listSeparators(["a", "b", "c"], "unit")).toEqual([", ", ", "]);
+		expect(listSeparators(["a", "b", "c"], "conjunction")).toEqual([", ", ", and "]);
+	});
+
+	it("follows the interface language, one separator for each pair of items", () => {
+		const previous = store.preferredLanguage.current;
+		store.preferredLanguage.current = "de";
+		try {
+			expect(listSeparators(["a", "b", "c"], "conjunction")).toEqual([", ", " und "]);
+			expect(listSeparators(["a", "b"], "unit")).toHaveLength(1);
+		} finally {
+			store.preferredLanguage.current = previous;
+		}
+	});
+
+	it("gives none for fewer than two items", () => {
+		expect(listSeparators(["a"])).toEqual([]);
+		expect(listSeparators([])).toEqual([]);
 	});
 });
 

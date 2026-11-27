@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formatNumber } from "#lib/utils/formatting.js";
-  import { getDataTypeCountLabel } from "#lib/utils/data-type-labels.js";
+  import { dataTypeCount } from "#lib/utils/data-type-labels.svelte.js";
   import type { ConnectorDataSummary } from "@nocturne/api-client";
   import { deleteConfiguration } from "#lib/api/generated/configurations.generated.remote.js";
   import { deleteConnectorData } from "#lib/api/generated/services.generated.remote.js";
@@ -177,8 +177,7 @@
                 {#each Object.entries(dataSummary.recordCounts ?? {}) as [key, count], i (key)}
                   <span class="flex items-center gap-1">
                     {#if i === 0}<Database class="h-3 w-3" />{/if}
-                    {formatNumber(count)}
-                    {getDataTypeCountLabel(key)}
+                    {dataTypeCount(key, count)}
                   </span>
                 {/each}
               </div>
@@ -282,7 +281,7 @@
           <p class="text-sm font-medium mb-2">Data to be deleted:</p>
           <ul class="text-sm text-muted-foreground space-y-1">
             {#each Object.entries(dataSummary.recordCounts ?? {}) as [key, count] (key)}
-              <li>{formatNumber(count)} {getDataTypeCountLabel(key)}</li>
+              <li>{dataTypeCount(key, count)}</li>
             {/each}
           </ul>
           <p class="text-sm font-medium mt-2">
@@ -308,7 +307,7 @@
               class="text-sm text-success mt-2 space-y-1"
             >
               {#each Object.entries(deleteDataResult.deletedCounts ?? {}) as [key, count] (key)}
-                <li>{formatNumber(count)} {getDataTypeCountLabel(key)}</li>
+                <li>{dataTypeCount(key, count)}</li>
               {/each}
             </ul>
             <p

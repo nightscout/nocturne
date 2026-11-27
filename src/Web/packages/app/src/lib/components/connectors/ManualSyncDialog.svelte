@@ -10,7 +10,7 @@
   import { EmptyState } from "#lib/components/shared/index.js";
   import type { SyncResult } from "@nocturne/api-client";
   import type { SyncProgressEvent } from "#lib/websocket/types.js";
-  import { formatSyncMessage } from "#lib/utils/sync-messages.js";
+  import { formatSyncMessage } from "#lib/utils/sync-messages.svelte.js";
   import { tick } from "svelte";
 
   interface LogEntry {

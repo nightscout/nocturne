@@ -16,7 +16,7 @@
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Separator } from "#lib/components/ui/separator/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
-  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
+  import { dataTypeLabel } from "#lib/utils/data-type-labels.svelte.js";
   import { triggerConnectorSync } from "#lib/api/generated/services.generated.remote.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { canSetUpConnectors } from "#lib/authorization/connector-setup.js";
@@ -309,7 +309,7 @@
                       </div>
                       {#each Object.entries(selectedConnector.totalItemsBreakdown) as [type, count] (type)}
                         <div class="flex justify-between gap-4 text-xs">
-                          <span>{getDataTypeLabel(type)}</span>
+                          <span>{dataTypeLabel(type)}</span>
                           <span class="font-mono">
                             {formatNumber(count)}
                           </span>
@@ -345,7 +345,7 @@
                       </div>
                       {#each Object.entries(selectedConnector.itemsLast24HoursBreakdown) as [type, count] (type)}
                         <div class="flex justify-between gap-4 text-xs">
-                          <span>{getDataTypeLabel(type)}</span>
+                          <span>{dataTypeLabel(type)}</span>
                           <span class="font-mono">
                             {formatNumber(count)}
                           </span>
