@@ -46753,7 +46753,7 @@ msgstr ""
 msgid "You do not follow anyone."
 msgstr ""
 
-#. 0: time(lastRead.at)
+#. 0: time(kept.at)
 #: src/lib/components/people/PeopleWall.svelte
 msgid "Connection lost. Showing readings from {0}."
 msgstr ""
@@ -51245,15 +51245,15 @@ msgstr ""
 msgid "Yes, this one"
 msgstr ""
 
-#: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/TabFallback.svelte
 msgid "You are not in that group. The list shows everyone you follow."
 msgstr ""
 
-#: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/TabFallback.svelte
 msgid "Your groups did not load. The list shows everyone you follow."
 msgstr ""
 
-#: src/lib/components/people/PeoplePage.svelte
+#: src/lib/components/people/HiddenInGroup.svelte
 msgid "You cannot see # person in this group."
 msgid_plural "You cannot see # people in this group."
 msgstr[0] ""
@@ -51285,4 +51285,20 @@ msgstr ""
 
 #: src/routes/(legal)/privacy/+page.svelte
 msgid "2. Data we do not collect"
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "You cannot see anyone in this group."
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "You can see no people in this group."
+msgstr ""
+
+#: src/lib/components/people/PeopleWall.svelte
+msgid "Flagged by Nocturne's fixed rules."
+msgstr ""
+
+#: src/lib/components/people/WallGroupHeading.svelte
+msgid "Not in your groups"
 msgstr ""
