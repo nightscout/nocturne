@@ -3,9 +3,15 @@ import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { page } from "$app/state";
 
-const { clientInfo, consent } = vi.hoisted(() => ({
+const { clientInfo, consent, goto } = vi.hoisted(() => ({
   clientInfo: { current: undefined as unknown, error: undefined as unknown },
   consent: vi.fn(),
+  goto: vi.fn(),
+}));
+
+vi.mock("$app/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("$app/navigation")>()),
+  goto,
 }));
 
 vi.mock("../oauth.remote", async () => {
@@ -17,6 +23,25 @@ import ConsentPage from "./+page.svelte";
 import { confirmIdentity } from "#lib/components/auth/confirm-identity.svelte.js";
 
 const approve = () => browserPage.getByRole("button", { name: "Approve" });
+
+describe("consent without a session", () => {
+  it("goes to sign in, returning to the consent request with its query", async () => {
+    page.data.isAuthenticated = false;
+    const search =
+      "?client_id=trio&redirect_uri=trio%3A%2F%2Fcb&scope=treatments.readwrite&code_challenge=abc";
+    page.url = new URL(`http://localhost/oauth/consent${search}`) as typeof page.url;
+    goto.mockClear();
+
+    render(ConsentPage);
+
+    await vi.waitFor(() =>
+      expect(goto).toHaveBeenCalledWith(
+        `/auth/login?returnUrl=${encodeURIComponent(`/oauth/consent${search}`)}`,
+        { replace: true }
+      )
+    );
+  });
+});
 
 describe("consent approval", () => {
   beforeEach(() => {

@@ -35,7 +35,7 @@
   import Activity from "@lucide/svelte/icons/activity";
   import { untrack } from "svelte";
   import { goto } from "$app/navigation";
-  import { resolve } from "$app/paths";
+  import { signInAddress } from "#lib/navigation/sign-in-address.js";
   import { page } from "$app/state";
   import * as trackersRemote from "#lib/api/generated/trackers.generated.remote.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
@@ -229,8 +229,8 @@
   // Redirect to login if not authenticated
   function requireAuth(): boolean {
     if (!isAuthenticated) {
-      const returnUrl = encodeURIComponent(window.location.pathname);
-      goto(resolve(`auth/login?returnUrl=${returnUrl}`));
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- the sign-in address is a same-origin path
+      goto(signInAddress(window.location.pathname + window.location.search));
       return false;
     }
     return true;

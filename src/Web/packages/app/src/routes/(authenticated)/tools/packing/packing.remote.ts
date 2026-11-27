@@ -14,7 +14,7 @@ export const getPackingHints = query(async () => {
   const { locals } = getRequestEvent();
 
   if (!locals.isAuthenticated) {
-    throw redirect(303, "/auth/login");
+    throw redirect(303, locals.signInAddress());
   }
 
   const { apiClient } = locals;

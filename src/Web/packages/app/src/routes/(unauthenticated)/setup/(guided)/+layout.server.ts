@@ -1,11 +1,12 @@
 import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
 import { setupStageFor } from "#lib/server/setup-hub.js";
+import { signInAddress } from "#lib/navigation/sign-in-address.js";
 
 /** A guided item belongs to the hub, so it has the hub's audience: an owner past the core. */
 export const load: LayoutServerLoad = async ({ locals, url }) => {
   if (!locals.isAuthenticated) {
-    redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname)}`);
+    redirect(302, signInAddress(url.pathname + url.search));
   }
   const stage = await setupStageFor(locals);
   if (stage === "core") redirect(302, "/setup");

@@ -194,7 +194,7 @@ export const consentForm = form(consentSchema, async (data, issue) => {
   }
 
   if (response.status === 401) {
-    throw redirect(303, "/auth/login");
+    throw redirect(303, locals.signInAddress());
   }
 
   throw error(502, `The authorization server sent an unexpected response (status ${response.status}).`);

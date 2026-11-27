@@ -13,6 +13,7 @@ import {
 } from "../forms/submit-error";
 import { missingItemError, rateLimitedError } from "../forms/submit-messages.svelte";
 import { remoteErrorMessage } from "./remote-error";
+import { signInAddressForRequest } from "#lib/server/request-sign-in.js";
 import { parseCode, parseErrorBody, parseIssues } from "./error-body";
 import {
   EmailConfirmationClient,
@@ -392,10 +393,11 @@ describe("the problem code a generated remote function forwards", () => {
 
 /**
  * What a generated query answers a 401 with. The event carries only what the
- * hooks leave on it, so the arm has to take the share-host decision from
- * `locals` rather than reading the host again.
+ * hooks leave on it, so the arm has to take the share-host decision and the
+ * sign-in address from `locals` rather than reading the host or `event.url`.
+ * `referer` is the page the browser says made the call.
  */
-async function queryAnswerTo401(isShareHost: boolean): Promise<unknown> {
+async function queryAnswerTo401(isShareHost: boolean, referer?: string): Promise<unknown> {
   const compiled = await transformWithEsbuild(
     `(getRequestEvent, error, redirect) => { ${config.errorHandling.on401("query")}; }`,
     "on401.ts",
@@ -404,13 +406,24 @@ async function queryAnswerTo401(isShareHost: boolean): Promise<unknown> {
   const source = compiled.code.trim().replace(/;$/, "");
 
   const answer: (
-    getRequestEvent: () => { locals: { isShareHost: boolean }; url: URL },
+    getRequestEvent: () => {
+      locals: { isShareHost: boolean; signInAddress: () => string };
+      url: URL;
+    },
     error: typeof import("@sveltejs/kit").error,
     redirect: typeof import("@sveltejs/kit").redirect
   ) => never = new Function(`return ${source}`)();
 
+  const endpoint = "https://nocturne.test/_app/remote/abc123/getThing";
+  const request = new Request(endpoint, {
+    headers: { "x-forwarded-host": "nocturne.test", ...(referer === undefined ? {} : { referer }) },
+  });
+  const hookEvent = { isRemoteRequest: true, request, url: new URL(endpoint) };
   const event = {
-    locals: { isShareHost },
+    locals: {
+      isShareHost,
+      signInAddress: () => signInAddressForRequest(hookEvent),
+    },
     // SvelteKit throws here inside a query.
     get url(): never {
       throw new Error("a query cannot read event.url");
@@ -434,14 +447,23 @@ describe("a generated query refused as unauthenticated", () => {
     expect(answer).not.toHaveProperty("location");
   });
 
-  it("sends an expired session to the login route", async () => {
-    const answer = await queryAnswerTo401(false);
+  it("sends an expired session to sign in, returning to the page it was on", async () => {
+    const answer = await queryAnswerTo401(
+      false,
+      "https://nocturne.test/people/wall?group=family"
+    );
 
     expect(isRedirect(answer)).toBe(true);
     expect(answer).toMatchObject({
       status: 302,
-      location: "/auth/login",
+      location: `/auth/login?returnUrl=${encodeURIComponent("/people/wall?group=family")}`,
     });
+  });
+
+  it("sends an expired session to the bare sign-in address when the page is not known", async () => {
+    const answer = await queryAnswerTo401(false, "https://evil.test/steal");
+
+    expect(answer).toMatchObject({ status: 302, location: "/auth/login" });
   });
 });
 

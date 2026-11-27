@@ -18,7 +18,7 @@ export const getCurrentTenantId = query(async () => {
   const { locals, request } = getRequestEvent();
 
   if (!locals.isAuthenticated) {
-    throw redirect(302, "/auth/login");
+    throw redirect(302, locals.signInAddress());
   }
 
   const apiClient = locals.apiClient;
@@ -30,7 +30,7 @@ export const getCurrentTenantId = query(async () => {
   } catch (err) {
     const status = errorStatus(err);
     if (status === 401) {
-      throw redirect(302, "/auth/login");
+      throw redirect(302, locals.signInAddress());
     }
     if (status === 403) throw error(403, "Forbidden");
     console.error("Error in getCurrentTenantId:", err);

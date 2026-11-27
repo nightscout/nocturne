@@ -19,7 +19,7 @@
     validateSetupUsername,
   } from "../setup.remote";
   import { getAuthStatus } from "#lib/api/generated/passkeys.generated.remote.js";
-  import { resolve } from "$app/paths";
+  import { signInAddress } from "#lib/navigation/sign-in-address.js";
   import {
     describeSubmitError,
     errorStatus,
@@ -111,7 +111,7 @@
   let recoveryCodes = $state<string[]>([]);
   let passkeyError = $state<string | null>(null);
   let ownerSignInNeeded = $state(false);
-  const loginUrl = resolve(`auth/login?${new URLSearchParams({ returnUrl: "/setup" })}`);
+  const loginUrl = signInAddress("/setup");
 
   /**
    * Setup closes when the owner's passkey is stored, and the API refuses another owner after that.

@@ -3,6 +3,7 @@ import { browser } from "$app/env";
 import type { LayoutLoad } from "./$types";
 import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
 import { isTenantlessRoute } from "#lib/navigation/tenantless-navigation.js";
+import { signInAddress } from "#lib/navigation/sign-in-address.js";
 import { isShareHost } from "#lib/share-host.js";
 
 /**
@@ -29,7 +30,7 @@ export const load: LayoutLoad = async ({ data, url, parent }) => {
       ? guestLinkExpired(data.guestExpiresAt)
       : !hasSessionCookie();
     if (ended) {
-      redirect(303, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`);
+      redirect(303, signInAddress(url.pathname + url.search));
     }
   }
 

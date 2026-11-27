@@ -2,6 +2,7 @@
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
+	import { signInAddress } from "#lib/navigation/sign-in-address.js";
 	import Loader2 from "@lucide/svelte/icons/loader-circle";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { Input } from "#lib/components/ui/input/index.js";
@@ -56,6 +57,7 @@
 	const returnUrl = $derived(
 		mode === "confirm" ? `/auth/bot/authorize?state=${stateToken}` : "/",
 	);
+	const signInUrl = $derived(signInAddress(returnUrl));
 
 	async function handlePickTenant() {
 		isSubmittingSlug = true;
@@ -141,12 +143,14 @@
 			<p class="text-muted-foreground max-w-md text-center">
 				Sign in to your Nocturne account to finish connecting your chat account.
 			</p>
+			<!-- eslint-disable svelte/no-navigation-without-resolve -- the sign-in address is a same-origin path -->
 			<a
-				href={resolve(`auth/login?returnUrl=${encodeURIComponent(returnUrl)}`)}
+				href={signInUrl}
 				class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
 			>
 				Sign in
 			</a>
+			<!-- eslint-enable svelte/no-navigation-without-resolve -->
 		{:else}
 			<p class="text-muted-foreground max-w-md text-center">
 				{#if pending?.platformUserName}

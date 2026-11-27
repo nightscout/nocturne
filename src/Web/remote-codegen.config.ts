@@ -61,14 +61,13 @@ export default {
     // may not redirect; the browser sends the person to sign in from there
     // (`createRemoteSignInFetch` in `#lib/api/auth-interceptor`).
     //
-    // The redirect carries no return address: a query cannot read `event.url`.
-    // The (authenticated) layout already sends an anonymous page load to login
-    // with one, so this arm only meets a session that lapsed after the page loaded.
+    // The redirect returns to the page the call was made from, taken from
+    // `locals.signInAddress` (`signInAddressForRequest`).
     on401: (kind: string) =>
       kind === 'query'
         ? `const { locals } = getRequestEvent();\n` +
           `    if (locals.isShareHost) throw error(401, 'Unauthorized');\n` +
-          `    throw redirect(302, '/auth/login')`
+          `    throw redirect(302, locals.signInAddress())`
         : `throw error(401, 'Unauthorized')`,
 
     // Forward the server's actual error message for 403 so the FE can show

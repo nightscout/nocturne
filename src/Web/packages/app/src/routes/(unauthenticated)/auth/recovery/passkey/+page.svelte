@@ -1,5 +1,6 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
+  import { signInAddress } from "#lib/navigation/sign-in-address.js";
   import * as Card from "#lib/components/ui/card/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { FormError } from "#lib/forms/index.js";
@@ -64,7 +65,7 @@
   let stepUpToken = $state("");
 
   const destination = $derived(recoveredDestination(passkeyId));
-  const loginUrl = $derived(resolve(`auth/login?${new URLSearchParams({ returnUrl: destination })}`));
+  const loginUrl = $derived(signInAddress(destination));
 
   /** A 401 here means this screen's ten minutes ran out or its one enrolment was spent, whatever the call was. */
   function refusalMessage(err: unknown, fallback: string): string {
