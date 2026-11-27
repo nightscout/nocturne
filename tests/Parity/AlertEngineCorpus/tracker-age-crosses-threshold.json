@@ -1,15 +1,16 @@
 {
   "schema_version": 1,
   "name": "tracker-age-crosses-threshold",
-  "description": "tracker_age \u003E= 2880 opens once the active instance\u0027s age crosses 48h and continues while active",
+  "description": "tracker_age >= 2880 opens once the active instance's age crosses 48h and continues while active",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "tracker_age",
       "condition_params": {
+        "schema_version": 2,
         "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
-        "operator": "\u003E=",
+        "operator": ">=",
         "minutes": 2880
       },
       "auto_resolve_enabled": false

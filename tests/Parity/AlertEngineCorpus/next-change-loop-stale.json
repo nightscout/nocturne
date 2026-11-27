@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "loop_stale",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">=",
         "minutes": 20
       },

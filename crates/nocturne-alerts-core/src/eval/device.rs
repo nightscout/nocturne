@@ -2,47 +2,34 @@
 //! loop_enaction_stale, pump_suspended, pump_battery, uploader_battery,
 //! transmitter_battery, sensitivity_ratio.
 
-use chrono::{DateTime, TimeDelta, Utc};
+use chrono::{DateTime, Utc};
 
-use super::elapsed::{ClockLeaf, active_for, decimal};
+use super::elapsed::{ClockLeaf, active_for, minutes, whole_minutes};
 use super::{Env, Held, unknown_by};
 use crate::clock_anomaly::ClockAnchor;
-use crate::compare::Unit;
 use crate::context::{SensorContext, TrackerReference};
 use crate::enums::{CmpOp, TransmitterBatteryMetric, holds};
 use crate::facts::{ContextFact, ContextFact as F};
 use crate::model::{
-    ActiveForPayload, AgeComparePayload, ComparePayload, MinutesComparePayload, TrackerAgePayload,
+    ActiveForPayload, ComparePayload, MinutesComparePayload, TrackerAgePayload,
     TransmitterBatteryPayload,
 };
 use crate::truth::Truth;
 use crate::unknown::UnknownReason as R;
 
-/// Site age in hours; no site change is unknown.
-pub(super) fn site_age(p: &AgeComparePayload, ctx: &SensorContext) -> ClockLeaf {
+/// The time since the site change; no site change is unknown.
+pub(super) fn site_age(p: &MinutesComparePayload, ctx: &SensorContext) -> ClockLeaf {
     ctx.last_site_change_at
         .map_or(ClockLeaf::Unknown(F::DeviceAges, R::Absent), |at| {
-            decimal(
-                at,
-                Some(ClockAnchor::LastSiteChangeAt),
-                Unit::Hours,
-                p.operator,
-                p.value,
-            )
+            minutes(at, Some(ClockAnchor::LastSiteChangeAt), p.operator, p.minutes.get())
         })
 }
 
-/// Sensor age in days; no sensor start is unknown.
-pub(super) fn sensor_age(p: &AgeComparePayload, ctx: &SensorContext) -> ClockLeaf {
+/// The time since the sensor start; no sensor start is unknown.
+pub(super) fn sensor_age(p: &MinutesComparePayload, ctx: &SensorContext) -> ClockLeaf {
     ctx.last_sensor_start_at
         .map_or(ClockLeaf::Unknown(F::DeviceAges, R::Absent), |at| {
-            decimal(
-                at,
-                Some(ClockAnchor::LastSensorStartAt),
-                Unit::Days,
-                p.operator,
-                p.value,
-            )
+            minutes(at, Some(ClockAnchor::LastSensorStartAt), p.operator, p.minutes.get())
         })
 }
 
@@ -62,10 +49,9 @@ pub(super) fn tracker_age(
     let Some(t) = ctx.active_trackers.get(&p.tracker_definition_id) else {
         return ClockLeaf::Fixed(Truth::False);
     };
-    let leaf = decimal(
+    let leaf = minutes(
         t.reference_at,
         (!t.scheduled).then_some(ClockAnchor::ActiveTrackers),
-        Unit::Minutes,
         p.operator,
         p.minutes,
     );
@@ -88,10 +74,7 @@ fn held_when_recorded(p: &TrackerAgePayload, t: &TrackerReference) -> bool {
     let Some(recorded) = t.recorded_at else {
         return false;
     };
-    let Some(due) = t
-        .reference_at
-        .checked_add_signed(TimeDelta::minutes(i64::from(p.minutes)))
-    else {
+    let Some(due) = t.reference_at.checked_add_signed(whole_minutes(p.minutes)) else {
         return false;
     };
     match p.operator {
@@ -101,19 +84,18 @@ fn held_when_recorded(p: &TrackerAgePayload, t: &TrackerReference) -> bool {
     }
 }
 
-/// loop_stale against the last cycle, loop_enaction_stale against the last
-/// enactment; both guarded by `has_ever_aps_cycled`. The guard false or a null
-/// anchor is unknown (no infinity convention, unlike staleness).
+/// loop_stale against the last cycle, guarded by `has_ever_aps_cycled`;
+/// loop_enaction_stale against the last enactment, unguarded (`guard` true). The
+/// guard false or a null anchor is unknown (no infinity convention, unlike
+/// staleness).
 pub(super) fn loop_stale(
     p: &MinutesComparePayload,
     anchor: Option<DateTime<Utc>>,
     source: ClockAnchor,
-    ctx: &SensorContext,
+    guard: bool,
 ) -> ClockLeaf {
     match anchor {
-        Some(at) if ctx.has_ever_aps_cycled => {
-            decimal(at, Some(source), Unit::Minutes, p.operator, p.minutes.get())
-        }
+        Some(at) if guard => minutes(at, Some(source), p.operator, p.minutes.get()),
         _ => ClockLeaf::Unknown(F::Aps, R::Absent),
     }
 }

@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
   "name": "time-since-last-carb-cold-start-infinity",
-  "description": "a missing carb anchor reads as \u002Binfinity minutes: \u003E and \u003E= fire on cold start, \u003C, \u003C= and == never do",
+  "description": "a missing carb anchor reads as +infinity minutes: > and >= fire on cold start, <, <= and == never do",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "time_since_last_carb",
       "condition_params": {
-        "operator": "\u003E",
+        "schema_version": 2,
+        "operator": ">",
         "minutes": 120
       },
       "auto_resolve_enabled": false
@@ -18,7 +19,8 @@
       "name": "rule-2",
       "condition_type": "time_since_last_carb",
       "condition_params": {
-        "operator": "\u003E=",
+        "schema_version": 2,
+        "operator": ">=",
         "minutes": 120
       },
       "auto_resolve_enabled": false
@@ -28,7 +30,8 @@
       "name": "rule-3",
       "condition_type": "time_since_last_carb",
       "condition_params": {
-        "operator": "\u003C",
+        "schema_version": 2,
+        "operator": "<",
         "minutes": 120
       },
       "auto_resolve_enabled": false
@@ -38,7 +41,8 @@
       "name": "rule-4",
       "condition_type": "time_since_last_carb",
       "condition_params": {
-        "operator": "\u003C=",
+        "schema_version": 2,
+        "operator": "<=",
         "minutes": 120
       },
       "auto_resolve_enabled": false
@@ -48,6 +52,7 @@
       "name": "rule-5",
       "condition_type": "time_since_last_carb",
       "condition_params": {
+        "schema_version": 2,
         "operator": "==",
         "minutes": 120
       },

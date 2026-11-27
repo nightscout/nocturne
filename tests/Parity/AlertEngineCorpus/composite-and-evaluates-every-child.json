@@ -1,20 +1,21 @@
 {
   "schema_version": 1,
   "name": "composite-and-evaluates-every-child",
-  "description": "an AND evaluates every child whatever an earlier one returned, so a sustained child\u0027s timer runs and clears behind a false sibling, and both row orders fire on the same tick",
+  "description": "an AND evaluates every child whatever an earlier one returned, so a sustained child's timer runs and clears behind a false sibling, and both row orders fire on the same tick",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": [
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           },
           {
@@ -38,6 +39,7 @@
       "name": "rule-2",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": [
           {
@@ -55,8 +57,8 @@
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           }
         ]

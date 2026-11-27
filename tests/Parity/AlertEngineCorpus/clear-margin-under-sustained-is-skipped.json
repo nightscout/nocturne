@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "sustained",
       "condition_params": {
+        "schema_version": 2,
         "minutes": 10,
         "child": {
           "type": "composite",
@@ -17,9 +18,9 @@
               {
                 "type": "threshold",
                 "threshold": {
-                  "direction": "below",
                   "value": 70,
-                  "clear_margin": 5
+                  "clear_margin": 5,
+                  "operator": "<"
                 }
               },
               {
@@ -39,13 +40,14 @@
       "name": "rule-2",
       "condition_type": "sustained",
       "condition_params": {
+        "schema_version": 2,
         "minutes": 10,
         "child": {
           "type": "threshold",
           "threshold": {
-            "direction": "below",
             "value": 70,
-            "clear_margin": 0
+            "clear_margin": 0,
+            "operator": "<"
           }
         }
       }

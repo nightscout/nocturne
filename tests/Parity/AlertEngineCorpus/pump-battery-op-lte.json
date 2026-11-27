@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
   "name": "pump-battery-op-lte",
-  "description": "pump_battery with operator \u0027\u003C=\u0027 at value below/at/above the 25 threshold, then with the fact absent",
+  "description": "pump_battery with operator '<=' at value below/at/above the 25 threshold, then with the fact absent",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "pump_battery",
       "condition_params": {
-        "operator": "\u003C=",
+        "schema_version": 2,
+        "operator": "<=",
         "value": 25
       },
       "auto_resolve_enabled": false

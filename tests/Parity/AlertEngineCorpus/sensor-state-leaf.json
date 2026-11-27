@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "sensor_state",
       "condition_params": {
+        "schema_version": 2,
         "states": [
           "warming_up"
         ]
@@ -19,6 +20,7 @@
       "name": "rule-2",
       "condition_type": "sensor_state",
       "condition_params": {
+        "schema_version": 2,
         "states": [
           "warming_up"
         ],
@@ -31,6 +33,7 @@
       "name": "rule-3",
       "condition_type": "sensor_state",
       "condition_params": {
+        "schema_version": 2,
         "states": [
           "error",
           "expired"

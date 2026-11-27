@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
   "name": "cob-op-lt",
-  "description": "cob with operator \u0027\u003C\u0027 at value below/at/above the 30 threshold, then with the fact absent",
+  "description": "cob with operator '<' at value below/at/above the 30 threshold, then with the fact absent",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "cob",
       "condition_params": {
-        "operator": "\u003C",
+        "schema_version": 2,
+        "operator": "<",
         "value": 30
       },
       "auto_resolve_enabled": false

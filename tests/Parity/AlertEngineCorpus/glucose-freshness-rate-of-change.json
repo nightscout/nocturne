@@ -8,8 +8,9 @@
       "name": "rule-1",
       "condition_type": "rate_of_change",
       "condition_params": {
-        "direction": "falling",
-        "rate": 2
+        "schema_version": 2,
+        "operator": "<=",
+        "value": -2
       },
       "auto_resolve_enabled": false
     }

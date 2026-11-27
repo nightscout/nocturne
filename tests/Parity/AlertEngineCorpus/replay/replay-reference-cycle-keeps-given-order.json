@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
   "name": "replay-reference-cycle-keeps-given-order",
-  "description": "a cycle of alert_state references keeps the rules in the order given, so a child listed before its parent sees the parent\u0027s fire a tick late",
+  "description": "a cycle of alert_state references keeps the rules in the order given, so a child listed before its parent sees the parent's fire a tick late",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000004",
       "name": "rule-4",
       "condition_type": "alert_state",
       "condition_params": {
+        "schema_version": 2,
         "alert_id": "00000000-0000-0000-0000-000000000003",
         "state": "firing"
       },
@@ -18,6 +19,7 @@
       "name": "rule-1",
       "condition_type": "alert_state",
       "condition_params": {
+        "schema_version": 2,
         "alert_id": "00000000-0000-0000-0000-000000000002",
         "state": "firing"
       },
@@ -28,6 +30,7 @@
       "name": "rule-2",
       "condition_type": "alert_state",
       "condition_params": {
+        "schema_version": 2,
         "alert_id": "00000000-0000-0000-0000-000000000001",
         "state": "firing"
       },
@@ -38,8 +41,9 @@
       "name": "rule-3",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     }

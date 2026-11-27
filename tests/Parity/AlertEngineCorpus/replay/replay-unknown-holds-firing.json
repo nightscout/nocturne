@@ -1,15 +1,16 @@
 {
   "schema_version": 1,
   "name": "replay-unknown-holds-firing",
-  "description": "an unknown met under hold leaves the firing state as it is and clears no timers: rule 1 keeps firing through the gap at 12:05 and clears on the known false at 12:15; rule 2\u0027s sustained run survives the gap and holds at 12:10; rule 3 (not_met) clears at the gap, and rule 4 (met) fires at it",
+  "description": "an unknown met under hold leaves the firing state as it is and clears no timers: rule 1 keeps firing through the gap at 12:05 and clears on the known false at 12:15; rule 2's sustained run survives the gap and holds at 12:10; rule 3 (not_met) clears at the gap, and rule 4 (met) fires at it",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     },
@@ -18,12 +19,13 @@
       "name": "rule-2",
       "condition_type": "sustained",
       "condition_params": {
+        "schema_version": 2,
         "minutes": 10,
         "child": {
           "type": "threshold",
           "threshold": {
-            "direction": "below",
-            "value": 70
+            "value": 70,
+            "operator": "<"
           }
         }
       },
@@ -34,8 +36,9 @@
       "name": "rule-3",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": false,
       "on_unknown": "not_met"
@@ -45,8 +48,9 @@
       "name": "rule-4",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "above",
-        "value": 180
+        "schema_version": 2,
+        "value": 180,
+        "operator": ">"
       },
       "auto_resolve_enabled": false,
       "on_unknown": "met"

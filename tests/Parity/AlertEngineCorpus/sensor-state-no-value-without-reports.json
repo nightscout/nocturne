@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "sensor_state",
       "condition_params": {
+        "schema_version": 2,
         "states": [
           "no_value"
         ],

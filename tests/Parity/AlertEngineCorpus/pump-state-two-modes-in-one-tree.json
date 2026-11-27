@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": [
           {
@@ -35,6 +36,7 @@
       "name": "rule-2",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": [
           {

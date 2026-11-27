@@ -5,7 +5,10 @@
 //! handler through the same panic guard: panics and unusable requests come
 //! back as the error envelope, never as a foreign exception.
 
-use crate::{envelope, envelope_string, replay_envelope, tracker_envelope, validate_envelope};
+use crate::{
+    envelope, envelope_string, migrate_envelope, replay_envelope, tracker_envelope,
+    validate_envelope,
+};
 
 /// `nocturne_alerts_evaluate`.
 #[uniffi::export]
@@ -68,6 +71,13 @@ pub(crate) fn describe(request_json: &str) -> String {
 #[must_use]
 pub(crate) fn validate(request_json: &str) -> String {
     envelope_string(|| validate_envelope::validate(request_json))
+}
+
+/// `nocturne_alerts_migrate`.
+#[uniffi::export]
+#[must_use]
+pub(crate) fn migrate(request_json: &str) -> String {
+    envelope_string(|| migrate_envelope::migrate(request_json))
 }
 
 /// `nocturne_alerts_tracker_process`.

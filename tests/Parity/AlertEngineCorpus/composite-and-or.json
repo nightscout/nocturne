@@ -8,13 +8,14 @@
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": [
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           },
           {
@@ -32,13 +33,14 @@
       "name": "rule-2",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "or",
         "conditions": [
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           },
           {
@@ -56,6 +58,7 @@
       "name": "rule-3",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": []
       },
@@ -66,13 +69,14 @@
       "name": "rule-4",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "xor",
         "conditions": [
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 200
+              "value": 200,
+              "operator": "<"
             }
           }
         ]

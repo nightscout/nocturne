@@ -8,11 +8,13 @@
       "name": "rule-1",
       "condition_type": "iob",
       "condition_params": {
-        "operator": "\u003E=",
+        "schema_version": 2,
+        "operator": ">=",
         "value": 3
       },
       "auto_resolve_enabled": true,
       "auto_resolve_params": {
+        "schema_version": 2,
         "type": "trend",
         "trend": {
           "bucket": "flat"

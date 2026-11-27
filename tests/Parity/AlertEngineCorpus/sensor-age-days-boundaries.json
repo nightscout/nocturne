@@ -8,8 +8,9 @@
       "name": "rule-1",
       "condition_type": "sensor_age",
       "condition_params": {
-        "operator": "\u003E=",
-        "value": 10
+        "schema_version": 2,
+        "operator": ">=",
+        "minutes": 14400
       },
       "auto_resolve_enabled": false
     },
@@ -18,8 +19,9 @@
       "name": "rule-2",
       "condition_type": "sensor_age",
       "condition_params": {
-        "operator": "\u003C",
-        "value": 10
+        "schema_version": 2,
+        "operator": "<",
+        "minutes": 14400
       },
       "auto_resolve_enabled": false
     }

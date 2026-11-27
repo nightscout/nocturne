@@ -8,16 +8,18 @@
       "name": "rule-1",
       "condition_type": "iob",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">",
         "value": 1
       },
       "auto_resolve_enabled": true,
       "auto_resolve_params": {
+        "schema_version": 2,
         "type": "threshold",
         "threshold": {
-          "direction": "above",
           "value": 80,
-          "clear_margin": 10
+          "clear_margin": 10,
+          "operator": ">"
         }
       }
     }

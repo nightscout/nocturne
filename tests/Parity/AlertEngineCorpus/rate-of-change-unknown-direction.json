@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "rate_of_change",
       "condition_params": {
+        "schema_version": 2,
         "direction": "diagonal",
         "rate": 1
       },

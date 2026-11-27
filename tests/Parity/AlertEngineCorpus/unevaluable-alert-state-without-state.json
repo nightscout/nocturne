@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "alert_state",
       "condition_params": {
+        "schema_version": 2,
         "alert_id": "00000000-0000-0000-0000-000000000900"
       },
       "auto_resolve_enabled": false

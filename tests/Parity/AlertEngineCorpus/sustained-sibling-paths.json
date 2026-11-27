@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "or",
         "conditions": [
           {
@@ -17,8 +18,8 @@
               "child": {
                 "type": "threshold",
                 "threshold": {
-                  "direction": "below",
-                  "value": 70
+                  "value": 70,
+                  "operator": "<"
                 }
               }
             }
@@ -30,7 +31,7 @@
               "child": {
                 "type": "iob",
                 "iob": {
-                  "operator": "\u003E=",
+                  "operator": ">=",
                   "value": 3
                 }
               }

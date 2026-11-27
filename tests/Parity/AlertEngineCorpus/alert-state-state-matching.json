@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "alert_state",
       "condition_params": {
+        "schema_version": 2,
         "alert_id": "00000000-0000-0000-0000-000000000900",
         "state": "firing",
         "for_minutes": null
@@ -19,6 +20,7 @@
       "name": "rule-2",
       "condition_type": "alert_state",
       "condition_params": {
+        "schema_version": 2,
         "alert_id": "00000000-0000-0000-0000-000000000900",
         "state": "unacknowledged",
         "for_minutes": null
@@ -30,6 +32,7 @@
       "name": "rule-3",
       "condition_type": "alert_state",
       "condition_params": {
+        "schema_version": 2,
         "alert_id": "00000000-0000-0000-0000-000000000900",
         "state": "acknowledged",
         "for_minutes": null
@@ -41,6 +44,7 @@
       "name": "rule-4",
       "condition_type": "alert_state",
       "condition_params": {
+        "schema_version": 2,
         "alert_id": "00000000-0000-0000-0000-000000000900",
         "state": "escalated",
         "for_minutes": null

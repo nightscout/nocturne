@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "trend",
       "condition_params": {
+        "schema_version": 2,
         "bucket": "flat"
       },
       "auto_resolve_enabled": false
@@ -17,6 +18,7 @@
       "name": "rule-2",
       "condition_type": "not",
       "condition_params": {
+        "schema_version": 2,
         "child": {
           "type": "trend",
           "trend": {

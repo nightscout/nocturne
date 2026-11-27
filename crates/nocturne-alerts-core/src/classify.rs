@@ -5,9 +5,8 @@
 //! `lows`/`highs` mute can decide whether it silences the rule.
 //!
 //! Directional leaves and their low/high side:
-//! - `threshold.direction`      `below` → low,       `above` → high
-//! - `rate_of_change.direction` `falling` → low,     `rising` → high
-//! - `predicted.operator`       `<` `<=` → low,      `>` `>=` → high  (`==` → none)
+//! - `threshold`, `rate_of_change` and `predicted` by their `operator`:
+//!   `<` `<=` → low, `>` `>=` → high (`==` → none)
 //! - `glucose_bucket.buckets`   very_low/low → low,  high/very_high → high
 //!   (in_range/tight_range → neither; a set leaf can span both)
 //!
@@ -17,7 +16,7 @@
 
 use serde_json::Value;
 
-use crate::enums::{CmpOp, GlucoseBucket, RateDirection, ThresholdDirection};
+use crate::enums::{CmpOp, GlucoseBucket};
 use crate::model::{ConditionKind, Container, Node, Payload, parse_payload};
 
 /// A rule's low/high classification.
@@ -98,34 +97,23 @@ fn walk(node: &Node, under_not: bool, acc: &mut Acc) {
         return;
     }
     match node.payload() {
-        Payload::Threshold(p) => acc.mark(
-            Some(match p.direction {
-                ThresholdDirection::Below => Side::Low,
-                ThresholdDirection::Above => Side::High,
-            }),
-            under_not,
-        ),
-        Payload::RateOfChange(p) => acc.mark(
-            Some(match p.direction {
-                RateDirection::Falling => Side::Low,
-                RateDirection::Rising => Side::High,
-            }),
-            under_not,
-        ),
-        Payload::Predicted(p) => acc.mark(
-            match p.operator {
-                CmpOp::Lt | CmpOp::Le => Some(Side::Low),
-                CmpOp::Gt | CmpOp::Ge => Some(Side::High),
-                CmpOp::Eq => None,
-            },
-            under_not,
-        ),
+        Payload::Threshold(p) => acc.mark(operator_side(p.operator), under_not),
+        Payload::RateOfChange(p) => acc.mark(operator_side(p.operator), under_not),
+        Payload::Predicted(p) => acc.mark(operator_side(p.operator), under_not),
         Payload::GlucoseBucket(p) => {
             for &bucket in &p.buckets {
                 acc.mark(bucket_side(bucket), under_not);
             }
         }
         _ => {}
+    }
+}
+
+fn operator_side(operator: CmpOp) -> Option<Side> {
+    match operator {
+        CmpOp::Lt | CmpOp::Le => Some(Side::Low),
+        CmpOp::Gt | CmpOp::Ge => Some(Side::High),
+        CmpOp::Eq => None,
     }
 }
 

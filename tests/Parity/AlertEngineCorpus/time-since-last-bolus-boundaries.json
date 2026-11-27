@@ -8,7 +8,8 @@
       "name": "rule-1",
       "condition_type": "time_since_last_bolus",
       "condition_params": {
-        "operator": "\u003E=",
+        "schema_version": 2,
+        "operator": ">=",
         "minutes": 180
       },
       "auto_resolve_enabled": false
@@ -18,7 +19,8 @@
       "name": "rule-2",
       "condition_type": "time_since_last_bolus",
       "condition_params": {
-        "operator": "\u003C",
+        "schema_version": 2,
+        "operator": "<",
         "minutes": 180
       },
       "auto_resolve_enabled": false

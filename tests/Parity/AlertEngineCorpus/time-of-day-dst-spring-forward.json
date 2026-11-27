@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
   "name": "time-of-day-dst-spring-forward",
-  "description": "Europe/London on 2026-03-29: 01:30 local does not exist; 00:30 UTC is 01:30 GMT pre-jump? No \u2014 at 00:30 UTC it is 00:30 GMT (window outside); at 01:30 UTC it is 02:30 BST (inside the 02:00-03:00 window even though only 30 utc-minutes after the 01:00-02:00 check)",
+  "description": "Europe/London on 2026-03-29: 01:30 local does not exist; 00:30 UTC is 01:30 GMT pre-jump? No — at 00:30 UTC it is 00:30 GMT (window outside); at 01:30 UTC it is 02:30 BST (inside the 02:00-03:00 window even though only 30 utc-minutes after the 01:00-02:00 check)",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "time_of_day",
       "condition_params": {
+        "schema_version": 2,
         "from": "01:00",
         "to": "02:00",
         "timezone": "Europe/London"
@@ -19,6 +20,7 @@
       "name": "rule-2",
       "condition_type": "time_of_day",
       "condition_params": {
+        "schema_version": 2,
         "from": "02:00",
         "to": "03:00",
         "timezone": "Europe/London"

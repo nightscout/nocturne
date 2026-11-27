@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "pump_state",
       "condition_params": {
+        "schema_version": 2,
         "mode": "Suspended",
         "is_active": true,
         "for_minutes": 10
@@ -19,6 +20,7 @@
       "name": "rule-2",
       "condition_type": "pump_state",
       "condition_params": {
+        "schema_version": 2,
         "mode": "Automatic",
         "is_active": true,
         "for_minutes": 10
@@ -30,6 +32,7 @@
       "name": "rule-3",
       "condition_type": "pump_state",
       "condition_params": {
+        "schema_version": 2,
         "mode": "Suspended",
         "is_active": true,
         "for_minutes": null

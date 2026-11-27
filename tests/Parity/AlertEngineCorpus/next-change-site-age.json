@@ -8,8 +8,9 @@
       "name": "rule-1",
       "condition_type": "site_age",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">=",
-        "value": 72
+        "minutes": 4320
       },
       "auto_resolve_enabled": false
     }

@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "time_of_day",
       "condition_params": {
+        "schema_version": 2,
         "from": "14:00",
         "to": "15:00",
         "timezone": "ETC/GMT-2"
@@ -19,6 +20,7 @@
       "name": "rule-2",
       "condition_type": "time_of_day",
       "condition_params": {
+        "schema_version": 2,
         "from": "14:00",
         "to": "15:00",
         "timezone": null

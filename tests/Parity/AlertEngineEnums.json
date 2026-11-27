@@ -232,8 +232,8 @@
     ],
     "rate_of_change": [
       "clear_margin",
-      "direction",
-      "rate"
+      "operator",
+      "value"
     ],
     "reservoir": [
       "clear_margin",
@@ -246,8 +246,8 @@
       "value"
     ],
     "sensor_age": [
-      "operator",
-      "value"
+      "minutes",
+      "operator"
     ],
     "sensor_state": [
       "for_minutes",
@@ -257,15 +257,15 @@
       "timeout_minutes"
     ],
     "site_age": [
-      "operator",
-      "value"
+      "minutes",
+      "operator"
     ],
     "sleep_session_active": [
       "is_active"
     ],
     "staleness": [
-      "operator",
-      "value"
+      "minutes",
+      "operator"
     ],
     "state_span_active": [
       "category",
@@ -285,7 +285,7 @@
     ],
     "threshold": [
       "clear_margin",
-      "direction",
+      "operator",
       "value",
       "value_from"
     ],

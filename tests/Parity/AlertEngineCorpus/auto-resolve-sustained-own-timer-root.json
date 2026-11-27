@@ -8,25 +8,27 @@
       "name": "rule-1",
       "condition_type": "sustained",
       "condition_params": {
+        "schema_version": 2,
         "minutes": 5,
         "child": {
           "type": "threshold",
           "threshold": {
-            "direction": "below",
-            "value": 70
+            "value": 70,
+            "operator": "<"
           }
         }
       },
       "auto_resolve_enabled": true,
       "auto_resolve_params": {
+        "schema_version": 2,
         "type": "sustained",
         "sustained": {
           "minutes": 10,
           "child": {
             "type": "threshold",
             "threshold": {
-              "direction": "above",
-              "value": 60
+              "value": 60,
+              "operator": ">"
             }
           }
         }

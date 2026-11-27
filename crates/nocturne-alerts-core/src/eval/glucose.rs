@@ -6,11 +6,10 @@ use std::collections::BTreeSet;
 use chrono::{DateTime, TimeDelta, Utc};
 use rust_decimal::Decimal;
 
-use super::elapsed::{ClockLeaf, Elapsed, Measure, decimal};
+use super::elapsed::{ClockLeaf, Elapsed, Measure, minutes};
 use super::signal::{DataStopped, data_stopped};
 use super::{Env, Held, MetPoint};
 use crate::clock_anomaly::ClockAnchor;
-use crate::compare::Unit;
 use crate::context::{PredictedPoint, SensorContext};
 use crate::enums::{CmpOp, ForecastCurve, LimitFact, SensorState};
 use crate::facts::ContextFact;
@@ -59,7 +58,7 @@ fn expiry(ctx: &SensorContext, bound: TimeDelta) -> Option<Elapsed> {
     Some(Elapsed {
         anchor,
         source,
-        measure: Measure::Over(bound),
+        measure: Measure::over(bound),
     })
 }
 
@@ -387,13 +386,7 @@ pub(super) fn staleness(
     enabled_at: Option<DateTime<Utc>>,
 ) -> ClockLeaf {
     match data_stopped(ctx, enabled_at) {
-        DataStopped::At(anchor, source) => decimal(
-            anchor,
-            Some(source),
-            Unit::Minutes,
-            p.operator,
-            p.value.get(),
-        ),
+        DataStopped::At(anchor, source) => minutes(anchor, Some(source), p.operator, p.minutes.get()),
         DataStopped::Forever => {
             ClockLeaf::Fixed(matches!(p.operator, CmpOp::Gt | CmpOp::Ge).into())
         }

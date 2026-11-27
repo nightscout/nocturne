@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use nocturne_alerts_core::model::ParseError;
 use nocturne_alerts_core::paths::{AUTO_RESOLVE_ROOT, SNOOZE_ROOT};
-use nocturne_alerts_core::validate::{validate_node, validate_rule};
+use nocturne_alerts_core::validate::{snooze_tree, validate_node, validate_rule};
 
 use crate::envelope::{ok, read_request};
 
@@ -20,7 +20,7 @@ struct ValidateRequest {
     #[serde(default)]
     auto_resolve_params: Option<Value>,
     /// Smart-snooze conditions, checked as the `composite{and}` they
-    /// evaluate as.
+    /// evaluate as ([`snooze_tree`]).
     #[serde(default)]
     snooze_conditions: Option<Vec<Value>>,
 }
@@ -42,11 +42,11 @@ pub(crate) fn validate(request_json: &str) -> Result<Value, String> {
         );
     }
     if let Some(conditions) = req.snooze_conditions.filter(|c| !c.is_empty()) {
-        let node = json!({
-            "type": "composite",
-            "composite": { "operator": "and", "conditions": conditions },
-        });
-        push(&mut issues, "snooze", validate_node(&node, SNOOZE_ROOT));
+        push(
+            &mut issues,
+            "snooze",
+            validate_node(&snooze_tree(&conditions), SNOOZE_ROOT),
+        );
     }
 
     Ok(ok(json!({ "valid": issues.is_empty(), "issues": issues })))

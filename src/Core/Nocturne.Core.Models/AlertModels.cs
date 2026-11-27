@@ -378,9 +378,9 @@ public record ActiveAlertSnapshot(string State, DateTime TriggeredAt, DateTime? 
 // ----- Condition parameter records (deserialized from JSONB) -----
 
 /// <summary>
-/// Threshold-based alert condition. Triggers when glucose crosses its limit in the specified <paramref name="Direction"/>.
+/// Threshold-based alert condition: the latest glucose compared with its limit.
 /// </summary>
-/// <param name="Direction">Comparison direction: "above" or "below".</param>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
 /// <param name="Value">Glucose threshold in mg/dL; exactly one of it and <paramref name="ValueFrom"/>.</param>
 /// <param name="ClearMargin">How far past its limit the condition stays true while the rule's alert
 /// is open, in the unit of its value; absent or 0 for none (docs/alerts/engine-semantics.md §3).</param>
@@ -388,20 +388,21 @@ public record ActiveAlertSnapshot(string State, DateTime TriggeredAt, DateTime? 
 /// §3, a limit from a fact). Never <see cref="AlertLimitFact.LatestGlucose"/>, which would compare the
 /// reading with itself.</param>
 public record ThresholdCondition(
-    string Direction,
+    string Operator,
     decimal? Value,
     [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null,
     [property: JsonPropertyName("value_from")] AlertLimitReference? ValueFrom = null);
 
 /// <summary>
-/// Rate-of-change alert condition. Triggers when glucose change rate exceeds <paramref name="Rate"/> in the specified <paramref name="Direction"/>.
+/// Rate-of-change alert condition: the glucose trend rate compared with <paramref name="Value"/>.
 /// </summary>
-/// <param name="Direction">Rate direction: "rising" or "falling".</param>
-/// <param name="Rate">Rate threshold in mg/dL per minute.</param>
-/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>, in mg/dL per minute.</param>
+/// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
+/// <param name="Value">Rate in mg/dL per minute, signed: a fall is negative.</param>
+/// <param name="ClearMargin">As <see cref="ThresholdCondition.ClearMargin"/>, in mg/dL per minute; at most
+/// the size of <paramref name="Value"/>.</param>
 public record RateOfChangeCondition(
-    string Direction,
-    decimal Rate,
+    string Operator,
+    decimal Value,
     [property: JsonPropertyName("clear_margin")] decimal? ClearMargin = null);
 
 /// <summary>
@@ -431,11 +432,11 @@ public record NotCondition(ConditionNode Child);
 public record SustainedCondition(int Minutes, ConditionNode Child);
 
 /// <summary>
-/// Generalised signal-loss condition. Compares minutes since the last reading against <paramref name="Value"/>.
+/// Generalised signal-loss condition. Compares the time since the last reading against <paramref name="Minutes"/>.
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
-/// <param name="Value">Minutes since last reading to compare against.</param>
-public record StalenessCondition(string Operator, int Value);
+/// <param name="Minutes">Whole minutes since the last reading to compare against.</param>
+public record StalenessCondition(string Operator, int Minutes);
 
 /// <summary>
 /// Predicted glucose comparison within a forecast horizon, over the series at most one of
@@ -587,15 +588,15 @@ public record ReservoirCondition(
 /// Infusion-site age comparison.
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
-/// <param name="Value">Site age in hours to compare against.</param>
-public record SiteAgeCondition(string Operator, decimal Value);
+/// <param name="Minutes">Site age in whole minutes to compare against.</param>
+public record SiteAgeCondition(string Operator, int Minutes);
 
 /// <summary>
 /// CGM sensor age comparison.
 /// </summary>
 /// <param name="Operator">Comparison operator: "&lt;", "&lt;=", "&gt;", "&gt;=", or "==".</param>
-/// <param name="Value">Sensor age in days to compare against.</param>
-public record SensorAgeCondition(string Operator, decimal Value);
+/// <param name="Minutes">Sensor age in whole minutes to compare against.</param>
+public record SensorAgeCondition(string Operator, int Minutes);
 
 /// <summary>
 /// Cross-alert state condition. True when the referenced alert is in the given state, optionally for at least <paramref name="ForMinutes"/>.

@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "predicted",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "value": 70,
         "within_minutes": 30
@@ -19,6 +20,7 @@
       "name": "rule-2",
       "condition_type": "predicted",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "value": 70,
         "within_minutes": 30,
@@ -31,6 +33,7 @@
       "name": "rule-3",
       "condition_type": "predicted",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "value": 70,
         "within_minutes": 30,
@@ -43,6 +46,7 @@
       "name": "rule-4",
       "condition_type": "predicted",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "value": 70,
         "within_minutes": 30,
@@ -59,6 +63,7 @@
       "name": "rule-5",
       "condition_type": "predicted",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "value": 70,
         "within_minutes": 30,
@@ -74,6 +79,7 @@
       "name": "rule-6",
       "condition_type": "predicted",
       "condition_params": {
+        "schema_version": 2,
         "operator": ">",
         "value": 150,
         "within_minutes": 30,
@@ -89,6 +95,7 @@
       "name": "rule-7",
       "condition_type": "predicted",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "value": 70,
         "within_minutes": 30,

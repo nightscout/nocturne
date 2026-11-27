@@ -8,11 +8,12 @@
       "name": "rule-1",
       "condition_type": "not",
       "condition_params": {
+        "schema_version": 2,
         "child": {
           "type": "threshold",
           "threshold": {
-            "direction": "below",
-            "value": 70
+            "value": 70,
+            "operator": "<"
           }
         }
       },
@@ -22,7 +23,9 @@
       "id": "00000000-0000-0000-0000-000000000002",
       "name": "rule-2",
       "condition_type": "not",
-      "condition_params": {},
+      "condition_params": {
+        "schema_version": 2
+      },
       "auto_resolve_enabled": false
     }
   ],

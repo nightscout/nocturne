@@ -8,9 +8,10 @@
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
+        "schema_version": 2,
         "value": 70,
-        "clear_margin": 0
+        "clear_margin": 0,
+        "operator": "<"
       }
     },
     {
@@ -18,8 +19,9 @@
       "name": "rule-2",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       }
     }
   ],

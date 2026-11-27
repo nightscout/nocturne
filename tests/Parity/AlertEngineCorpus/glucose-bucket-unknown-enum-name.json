@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "glucose_bucket",
       "condition_params": {
+        "schema_version": 2,
         "buckets": [
           "in_range"
         ]
@@ -19,6 +20,7 @@
       "name": "rule-2",
       "condition_type": "not",
       "condition_params": {
+        "schema_version": 2,
         "child": {
           "type": "glucose_bucket",
           "glucose_bucket": {

@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "predicted",
       "condition_params": {
+        "schema_version": 2,
         "operator": "<",
         "within_minutes": 30,
         "value_from": {
@@ -22,11 +23,12 @@
       "name": "rule-2",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
+        "schema_version": 2,
         "value_from": {
           "fact": "target_low",
           "offset": -10
-        }
+        },
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     },
@@ -35,11 +37,12 @@
       "name": "rule-3",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "above",
+        "schema_version": 2,
         "value_from": {
           "fact": "target_high",
           "offset": 20
-        }
+        },
+        "operator": ">"
       },
       "auto_resolve_enabled": false
     },
@@ -48,11 +51,12 @@
       "name": "rule-4",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
+        "schema_version": 2,
         "value_from": {
           "fact": "target_low",
           "offset": 0.5
-        }
+        },
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     }

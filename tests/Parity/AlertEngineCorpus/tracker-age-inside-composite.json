@@ -8,13 +8,14 @@
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": [
           {
             "type": "tracker_age",
             "tracker_age": {
               "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
-              "operator": "\u003E=",
+              "operator": ">=",
               "minutes": 2880
             }
           },

@@ -8,8 +8,9 @@
       "name": "rule-1",
       "condition_type": "staleness",
       "condition_params": {
+        "schema_version": 2,
         "operator": "!=",
-        "value": 15
+        "minutes": 15
       },
       "auto_resolve_enabled": false
     }

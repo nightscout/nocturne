@@ -18,8 +18,8 @@ use uuid::Uuid;
 
 use crate::enums::{
     AlertStateKind, CmpOp, CompositeOp, DayOfWeek, ForecastCurve, GlucoseBucket, LimitFact,
-    PumpMode, RateDirection, SensorState, StateSpanCategory, TempBasalMetric, ThresholdDirection,
-    TransmitterBatteryMetric, TrendBucket, WindowExtreme, WireEnum,
+    PumpMode, SensorState, StateSpanCategory, TempBasalMetric, TransmitterBatteryMetric,
+    TrendBucket, WindowExtreme, WireEnum,
 };
 use crate::paths::{child_path, node_child_path};
 
@@ -93,6 +93,8 @@ pub enum Reason {
     /// A `window_minutes` outside [`MIN_WINDOW_MINUTES`] to
     /// [`MAX_WINDOW_MINUTES`].
     WindowOutOfRange,
+    /// A tree whose root does not carry [`SCHEMA_VERSION`] `2`.
+    UnsupportedSchema,
 }
 
 impl Reason {
@@ -124,6 +126,7 @@ impl Reason {
             Reason::OffsetOutOfRange => "offset_out_of_range",
             Reason::SelfReference => "self_reference",
             Reason::WindowOutOfRange => "window_out_of_range",
+            Reason::UnsupportedSchema => "unsupported_schema",
         }
     }
 
@@ -148,6 +151,7 @@ impl Reason {
             Reason::LimitConflict | Reason::SelfReference => Some(VALUE_FROM),
             Reason::OffsetOutOfRange => Some(OFFSET),
             Reason::WindowOutOfRange => Some(WINDOW_MINUTES),
+            Reason::UnsupportedSchema => Some(SCHEMA_VERSION),
             Reason::NotAnObject
             | Reason::TooDeep
             | Reason::ConditionMissing
@@ -268,8 +272,8 @@ condition_kinds! {
     Iob = "iob" => ComparePayload,
     Cob = "cob" => ComparePayload,
     Reservoir = "reservoir" => ComparePayload,
-    SiteAge = "site_age" => AgeComparePayload,
-    SensorAge = "sensor_age" => AgeComparePayload,
+    SiteAge = "site_age" => MinutesComparePayload,
+    SensorAge = "sensor_age" => MinutesComparePayload,
     AlertState = "alert_state" => AlertStatePayload,
     LoopStale = "loop_stale" => MinutesComparePayload,
     LoopEnactionStale = "loop_enaction_stale" => MinutesComparePayload,
@@ -504,6 +508,9 @@ struct Reader<'a> {
     level: usize,
     path: &'a str,
     issues: &'a Issues,
+    /// Whether `obj` is a document's root, which also carries
+    /// [`SCHEMA_VERSION`].
+    root: bool,
 }
 
 impl Reader<'_> {
@@ -523,6 +530,7 @@ impl Reader<'_> {
     /// One [`Reason::UnknownField`] when any property that is not `null` is
     /// not `known`.
     fn report_unknown(&self, known: impl Fn(&str) -> bool) {
+        let known = |k: &str| known(k) || (self.root && k == SCHEMA_VERSION);
         if self.obj.iter().any(|(k, v)| !v.is_null() && !known(k)) {
             self.report(Reason::UnknownField);
         }
@@ -698,6 +706,18 @@ impl Operand for NonNegativeMinutes {
             _ => Err(Reason::MinutesNegative(name)),
         }
     }
+}
+
+/// The root property that names a tree's schema.
+pub const SCHEMA_VERSION: &str = "schema_version";
+
+/// The schema this engine reads (engine-semantics.md §1.2). A tree whose
+/// root names another, or none, is [`Reason::UnsupportedSchema`].
+pub const CURRENT_SCHEMA: u64 = 2;
+
+/// Whether `root` names [`CURRENT_SCHEMA`]: exactly the JSON integer.
+fn names_current_schema(root: &Map<String, Value>) -> bool {
+    root.get(SCHEMA_VERSION).and_then(Value::as_u64) == Some(CURRENT_SCHEMA)
 }
 
 /// The payload property a window's length is read from.
@@ -947,6 +967,7 @@ impl Field for Option<LimitRef> {
             level: r.level.saturating_add(1),
             path: r.path,
             issues: r.issues,
+            root: false,
         };
         inner.report_unknown(|k| k == "fact" || k == OFFSET);
         let fact = inner.required("fact", word::<LimitFact>);
@@ -992,8 +1013,6 @@ macro_rules! enum_operands {
 }
 
 enum_operands!(
-    ThresholdDirection,
-    RateDirection,
     CompositeOp,
     AlertStateKind,
     CmpOp,
@@ -1018,8 +1037,6 @@ operand_fields!(
     NonNegativeMinutes,
     WindowMinutes,
     ClearMargin,
-    ThresholdDirection,
-    RateDirection,
     CompositeOp,
     AlertStateKind,
     CmpOp,
@@ -1062,7 +1079,7 @@ impl Field for Box<Node> {
             return None;
         };
         let path = child_path(r.path, 0, peek_type(v));
-        read_node(v, r.level, &path, r.issues).map(Box::new)
+        read_node(v, r.level, &path, r.issues, false).map(Box::new)
     }
 }
 
@@ -1080,7 +1097,7 @@ impl Field for Vec<Node> {
                     r.issues.report(&path, Reason::ConditionMissing);
                     None
                 } else {
-                    read_node(v, level, &path, r.issues)
+                    read_node(v, level, &path, r.issues, false)
                 }
             })
             .collect();
@@ -1223,28 +1240,25 @@ payload!(
     /// A `value_from` naming `latest_glucose` compares the reading with
     /// itself, so it is refused rather than evaluated.
     glucose ThresholdPayload {
-        direction: ThresholdDirection,
+        operator: CmpOp,
         @limit
     }
-    operator |p| match p.direction {
-        ThresholdDirection::Below => CmpOp::Lt,
-        ThresholdDirection::Above => CmpOp::Gt,
-    },
+    operator |p| p.operator,
     check |p, r| !matches!(p.value, Limit::Fact(LimitRef { fact: LimitFact::LatestGlucose, .. }))
         || r.report(Reason::SelfReference)
 );
 
 payload!(
+    /// `{operator, value, clear_margin?}`: the trend rate in mg/dL per
+    /// minute, signed, so a fall is negative. A margin is at most the size of
+    /// `value`, as on [`GlucoseChangePayload`].
     margined RateOfChangePayload {
-        direction: RateDirection,
+        operator: CmpOp,
         #[serde(serialize_with = "exact_decimal")]
-        rate: Decimal,
+        value: Decimal,
     }
-    comparison |p| match p.direction {
-        RateDirection::Falling => (CmpOp::Le, -p.rate),
-        RateDirection::Rising => (CmpOp::Ge, p.rate),
-    },
-    largest_margin |p| Some(p.rate)
+    comparison |p| (p.operator, p.value),
+    largest_margin |p| Some(p.value.abs())
 );
 
 payload!(SignalLossPayload {
@@ -1297,7 +1311,7 @@ fn report_margins_under(node: &Node, path: &str, issues: &Issues) -> bool {
 
 payload!(StalenessPayload {
     operator: CmpOp,
-    value: NonNegativeMinutes,
+    minutes: NonNegativeMinutes,
 });
 
 payload!(
@@ -1483,6 +1497,7 @@ fn comparison(
         level: r.level.saturating_add(1),
         path: r.path,
         issues: r.issues,
+        root: false,
     };
     inner.report_unknown(|k| k == "operator" || k == "value");
     // A problem inside is reported on `name`, so it says which comparison it is in.
@@ -1558,16 +1573,6 @@ payload!(
     }
 );
 
-payload!(
-    /// `{operator, value}`: site_age, sensor_age. An age only grows, so it
-    /// takes no margin.
-    AgeComparePayload {
-        operator: CmpOp,
-        #[serde(serialize_with = "exact_decimal")]
-        value: Decimal,
-    }
-);
-
 payload!(AlertStatePayload {
     alert_id: Uuid,
     state: AlertStateKind,
@@ -1575,7 +1580,8 @@ payload!(AlertStatePayload {
 });
 
 payload!(
-    /// `{operator, minutes}`: loop_stale, loop_enaction_stale.
+    /// `{operator, minutes}`: site_age, sensor_age, loop_stale,
+    /// loop_enaction_stale. An age only grows, so it takes no margin.
     MinutesComparePayload {
         operator: CmpOp,
         minutes: NonNegativeMinutes,
@@ -1731,19 +1737,21 @@ pub fn parse_payload(kind: ConditionKind, v: &Value) -> ParseResult<Payload> {
             issues.report(root, Reason::PayloadMissing);
             None
         } else {
-            read_payload(kind, v, 1, root, issues)
+            read_payload(kind, v, 1, root, issues, true)
         }
     })
 }
 
 /// `level` is the payload object's 1-based typed nesting level; `path` is the
-/// owning node's condition path.
+/// owning node's condition path; `root` whether the payload is the
+/// document's root, a rule body, which names its schema.
 fn read_payload(
     kind: ConditionKind,
     v: &Value,
     level: usize,
     path: &str,
     issues: &Issues,
+    root: bool,
 ) -> Option<Payload> {
     if !within_depth(level) {
         issues.report(path, Reason::TooDeep);
@@ -1753,11 +1761,16 @@ fn read_payload(
         issues.report(path, Reason::NotAnObject);
         return None;
     };
+    if root && !names_current_schema(obj) {
+        issues.report(path, Reason::UnsupportedSchema);
+        return None;
+    }
     let reader = Reader {
         obj,
         level: level.saturating_add(1),
         path,
         issues,
+        root,
     };
     Payload::read(kind, &reader)
 }
@@ -1771,8 +1784,9 @@ fn peek_type(v: &Value) -> Option<&str> {
 }
 
 /// `level` is the node object's 1-based typed nesting level; `path` its
-/// condition path.
-fn read_node(v: &Value, level: usize, path: &str, issues: &Issues) -> Option<Node> {
+/// condition path; `root` whether it is the document's root, which names its
+/// schema.
+fn read_node(v: &Value, level: usize, path: &str, issues: &Issues, root: bool) -> Option<Node> {
     if !within_depth(level) {
         issues.report(path, Reason::TooDeep);
         return None;
@@ -1781,6 +1795,10 @@ fn read_node(v: &Value, level: usize, path: &str, issues: &Issues) -> Option<Nod
         issues.report(path, Reason::NotAnObject);
         return None;
     };
+    if root && !names_current_schema(obj) {
+        issues.report(path, Reason::UnsupportedSchema);
+        return None;
+    }
     let kind = match obj.get("type") {
         None | Some(Value::Null) => {
             issues.report(path, Reason::TypeMissing);
@@ -1796,10 +1814,12 @@ fn read_node(v: &Value, level: usize, path: &str, issues: &Issues) -> Option<Nod
         issues.report(path, Reason::UnknownKind);
         return None;
     };
-    if obj
-        .iter()
-        .any(|(k, v)| !v.is_null() && !matches!(k.as_str(), "type" | "_uid") && k != kind.name())
-    {
+    if obj.iter().any(|(k, v)| {
+        !v.is_null()
+            && !matches!(k.as_str(), "type" | "_uid")
+            && k != kind.name()
+            && !(root && k == SCHEMA_VERSION)
+    }) {
         issues.report(path, Reason::UnknownField);
     }
     match obj.get(kind.name()) {
@@ -1807,7 +1827,9 @@ fn read_node(v: &Value, level: usize, path: &str, issues: &Issues) -> Option<Nod
             issues.report(path, Reason::PayloadMissing);
             None
         }
-        Some(payload) => read_payload(kind, payload, level.saturating_add(1), path, issues),
+        Some(payload) => {
+            read_payload(kind, payload, level.saturating_add(1), path, issues, false)
+        }
     }
     .map(Node)
 }
@@ -1858,7 +1880,7 @@ impl Node {
     /// # Errors
     /// Every problem that keeps the node from being evaluated (§1.4).
     pub fn parse_rooted(v: &Value, root: &str) -> ParseResult<Node> {
-        read_document(v, root, |issues| read_node(v, 1, root, issues))
+        read_document(v, root, |issues| read_node(v, 1, root, issues, true))
     }
 
     #[must_use]

@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
   "name": "sensitivity-ratio-op-gte",
-  "description": "sensitivity_ratio with operator \u0027\u003E=\u0027 at value below/at/above the 1.2 threshold, then with the fact absent",
+  "description": "sensitivity_ratio with operator '>=' at value below/at/above the 1.2 threshold, then with the fact absent",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "sensitivity_ratio",
       "condition_params": {
-        "operator": "\u003E=",
+        "schema_version": 2,
+        "operator": ">=",
         "value": 1.2
       },
       "auto_resolve_enabled": false

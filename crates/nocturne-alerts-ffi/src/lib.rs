@@ -17,6 +17,7 @@ compile_error!("the FFI boundary catches panics, which needs panic = \"unwind\""
 
 mod c_abi;
 mod envelope;
+mod migrate_envelope;
 mod replay_envelope;
 mod tracker_envelope;
 mod validate_envelope;
@@ -41,6 +42,9 @@ mod tracker_tests;
 
 #[cfg(test)]
 mod validate_tests;
+
+#[cfg(test)]
+mod migrate_tests;
 
 use std::any::Any;
 use std::panic::{AssertUnwindSafe, catch_unwind};

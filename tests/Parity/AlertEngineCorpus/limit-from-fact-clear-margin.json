@@ -8,11 +8,12 @@
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
+        "schema_version": 2,
         "value_from": {
           "fact": "target_low"
         },
-        "clear_margin": 5
+        "clear_margin": 5,
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     },
@@ -21,12 +22,13 @@
       "name": "rule-2",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
+        "schema_version": 2,
         "value_from": {
           "fact": "target_low",
           "offset": -10
         },
-        "clear_margin": 5
+        "clear_margin": 5,
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     },
@@ -35,14 +37,15 @@
       "name": "rule-3",
       "condition_type": "not",
       "condition_params": {
+        "schema_version": 2,
         "child": {
           "type": "threshold",
           "threshold": {
-            "direction": "below",
             "value_from": {
               "fact": "target_low"
             },
-            "clear_margin": 5
+            "clear_margin": 5,
+            "operator": "<"
           }
         }
       },

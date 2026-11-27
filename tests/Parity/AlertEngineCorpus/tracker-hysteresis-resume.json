@@ -1,15 +1,16 @@
 {
   "schema_version": 1,
   "name": "tracker-hysteresis-resume",
-  "description": "active -\u003E false enters hysteresis; true while in hysteresis resumes active without a new excursion",
+  "description": "active -> false enters hysteresis; true while in hysteresis resumes active without a new excursion",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
-        "direction": "below",
-        "value": 70
+        "schema_version": 2,
+        "value": 70,
+        "operator": "<"
       },
       "auto_resolve_enabled": false
     }

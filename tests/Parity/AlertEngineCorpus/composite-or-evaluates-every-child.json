@@ -1,20 +1,21 @@
 {
   "schema_version": 1,
   "name": "composite-or-evaluates-every-child",
-  "description": "an OR evaluates every child after one is true, so a sustained sibling\u0027s timer starts on that tick and both row orders agree",
+  "description": "an OR evaluates every child after one is true, so a sustained sibling's timer starts on that tick and both row orders agree",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "or",
         "conditions": [
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           },
           {
@@ -38,6 +39,7 @@
       "name": "rule-2",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "or",
         "conditions": [
           {
@@ -55,8 +57,8 @@
           {
             "type": "threshold",
             "threshold": {
-              "direction": "below",
-              "value": 70
+              "value": 70,
+              "operator": "<"
             }
           }
         ]

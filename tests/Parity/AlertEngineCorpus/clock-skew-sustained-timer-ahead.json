@@ -8,12 +8,13 @@
       "name": "rule-1",
       "condition_type": "sustained",
       "condition_params": {
+        "schema_version": 2,
         "minutes": 10,
         "child": {
           "type": "threshold",
           "threshold": {
-            "direction": "above",
-            "value": 180
+            "value": 180,
+            "operator": ">"
           }
         }
       },

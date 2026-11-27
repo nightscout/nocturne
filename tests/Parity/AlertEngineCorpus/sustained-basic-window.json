@@ -1,19 +1,20 @@
 {
   "schema_version": 1,
   "name": "sustained-basic-window",
-  "description": "child true sets the timer and returns false; the window fires inclusively at (now - first) \u003E= minutes; child false clears the timer and restarts",
+  "description": "child true sets the timer and returns false; the window fires inclusively at (now - first) >= minutes; child false clears the timer and restarts",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "sustained",
       "condition_params": {
+        "schema_version": 2,
         "minutes": 10,
         "child": {
           "type": "threshold",
           "threshold": {
-            "direction": "below",
-            "value": 70
+            "value": 70,
+            "operator": "<"
           }
         }
       },

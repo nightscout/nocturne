@@ -8,6 +8,7 @@
       "name": "rule-1",
       "condition_type": "threshold",
       "condition_params": {
+        "schema_version": 2,
         "value": 70
       },
       "auto_resolve_enabled": false
@@ -17,12 +18,13 @@
       "name": "rule-2",
       "condition_type": "composite",
       "condition_params": {
+        "schema_version": 2,
         "operator": "and",
         "conditions": [
           {
             "type": "rate_of_change",
             "rate_of_change": {
-              "rate": 2
+              "value": 2
             }
           }
         ]
@@ -34,6 +36,7 @@
       "name": "rule-3",
       "condition_type": "not",
       "condition_params": {
+        "schema_version": 2,
         "child": {
           "type": "threshold"
         }
