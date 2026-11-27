@@ -94,6 +94,7 @@ public class AlertReplayServicePagingTests
             new Mock<Nocturne.Core.Contracts.Repositories.ITrackerRepository>().Object,
             _reservoirEstimation.Object,
             Mock.Of<Nocturne.Core.Contracts.V4.Repositories.ISensorStateReportRepository>(),
+            Mock.Of<Nocturne.Core.Contracts.Glucose.ICanonicalGlucoseService>(),
             Options.Create(new AlertEvaluationOptions()));
         var enricher = new SensorContextEnricher(
             enricherDeps,

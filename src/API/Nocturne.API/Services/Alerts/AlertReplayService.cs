@@ -81,6 +81,7 @@ internal sealed class AlertReplayService(
         IReadOnlyList<AlertRuleSnapshot> rules = RuleDataNeeds.Walk([candidate]).NeedsActiveAlerts
             ? Layer(await alertRepository.GetEnabledRulesAsync(ct), candidate)
             : [candidate];
+        var readsSeries = RuleDataNeeds.Walk(rules).NeedsGlucoseSeries;
 
         var started = timeProvider.GetTimestamp();
         var firings = new List<AlertFiring>();
@@ -88,14 +89,14 @@ internal sealed class AlertReplayService(
         var searchedFrom = searchedTo;
 
         var days = lastDayOnly ? 1 : Math.Max(1, options.FiringSearchDays);
-        var arrivals = await ArrivalsAsync(searchedTo.AddDays(-days) - FiringSearchLeadIn, searchedTo, ct);
+        var arrivals = await ArrivalsAsync(searchedTo.AddDays(-days) - FiringSearchLeadIn, searchedTo, readsSeries, ct);
         for (var day = 0; day < days; day++)
         {
             var dayEnd = searchedTo.AddDays(-day);
             var dayStart = dayEnd.AddDays(-1);
 
             var series = await BuildTicksAsync(
-                rules, dayStart - FiringSearchLeadIn, dayEnd, arrivals, captureFacts: false, ct);
+                rules, dayStart - FiringSearchLeadIn, dayEnd, arrivals, readsSeries, captureFacts: false, ct);
             var run = await replayEngine.ReplayAsync(
                 new AlertReplayInput(rules, series.Ticks, Until: dayEnd), ct);
 
@@ -156,8 +157,10 @@ internal sealed class AlertReplayService(
             return new AlertReplayResult(windowStart, windowEnd, []);
         }
 
+        var readsSeries = RuleDataNeeds.Walk(rules).NeedsGlucoseSeries;
         var series = await BuildTicksAsync(
-            rules, windowStart, windowEnd, await ArrivalsAsync(windowStart, windowEnd, ct), captureFacts: true, ct);
+            rules, windowStart, windowEnd, await ArrivalsAsync(windowStart, windowEnd, readsSeries, ct), readsSeries,
+            captureFacts: true, ct);
 
         var run = await replayEngine.ReplayAsync(
             new AlertReplayInput(rules, series.Ticks, Until: windowEnd), ct);
@@ -195,11 +198,21 @@ internal sealed class AlertReplayService(
         bool HasReadings);
 
     /// <summary>
+    /// How far before a window replay reads readings: the earlier reading of a derived
+    /// <see cref="ReadingTrend"/>, or, when a rule reads the recent readings
+    /// (<paramref name="readsSeries"/>), the series of the window's first reading
+    /// (<see cref="RecentReadings.Span"/>).
+    /// </summary>
+    private static TimeSpan LookBack(bool readsSeries) =>
+        readsSeries ? RecentReadings.Span : ReadingTrend.MaxGap;
+
+    /// <summary>
     /// How replay tells the window's live arrivals from imported history: once per replay request,
     /// not per tick.
     /// </summary>
-    private async Task<Arrivals> ArrivalsAsync(DateTime windowStart, DateTime windowEnd, CancellationToken ct) =>
-        new(await importedHistory.InAsync(windowStart - ReadingTrend.MaxGap, windowEnd, ct));
+    private async Task<Arrivals> ArrivalsAsync(
+        DateTime windowStart, DateTime windowEnd, bool readsSeries, CancellationToken ct) =>
+        new(await importedHistory.InAsync(windowStart - LookBack(readsSeries), windowEnd, ct));
 
     /// <summary>
     /// Where live evaluated each reading (docs/alerts/engine-semantics.md §8). A reading dated
@@ -218,11 +231,13 @@ internal sealed class AlertReplayService(
             Live(reading) && reading.CreatedAt > reading.Timestamp ? reading.CreatedAt : reading.Timestamp;
     }
 
+    /// <param name="readsSeries">Whether a rule reads the recent readings, which each tick then carries.</param>
     private async Task<TickSeries> BuildTicksAsync(
         IReadOnlyList<AlertRuleSnapshot> rules,
         DateTime windowStart,
         DateTime windowEnd,
         Arrivals arrivals,
+        bool readsSeries,
         bool captureFacts,
         CancellationToken ct)
     {
@@ -230,9 +245,16 @@ internal sealed class AlertReplayService(
         // window is keyset-paged and consumed by the tick loop as a left-to-right fold, so the
         // readings are never all resident; the per-tick contexts built from them are.
         await using var readings = await ReadingCursor.CreateAsync(
-            StreamCanonicalReadingsAsync(windowStart - ReadingTrend.MaxGap, windowEnd, ct),
+            StreamCanonicalReadingsAsync(windowStart - LookBack(readsSeries), windowEnd, ct),
             StreamHiddenReadingsAsync(windowStart - ReadingTrend.MaxGap, windowEnd, ct),
             windowStart, ct);
+
+        // The canonical readings walked so far, each with the instant live evaluated it. A tick's
+        // recent readings are those that had arrived by the tick, as live read only the readings
+        // stored by then. Null when no rule reads them.
+        var recent = readsSeries
+            ? readings.Preceding.Select(r => (Reading: r, EvaluatedAt: arrivals.EvaluatedAt(r))).ToList()
+            : null;
 
         // Scoped DND (ADR 0004 D5): the tenant's windows received by the replay's end, resolved
         // per tick with WasActiveAt (receipt-gated) so replay reproduces what the live engine
@@ -271,7 +293,7 @@ internal sealed class AlertReplayService(
             // tick. A reading is evaluated no earlier than its timestamp, so every reading
             // evaluated by `tick` has been walked past once the cursor reaches `tick`.
             await readings.AdvanceToAsync(tick);
-            Enqueue(readings, arrivals, arriving);
+            Enqueue(readings, arrivals, arriving, recent);
             while (arriving.TryPeek(out var reading, out var evaluatedAt) && evaluatedAt <= tick)
             {
                 arriving.Dequeue();
@@ -290,6 +312,9 @@ internal sealed class AlertReplayService(
             var trend = known?.Trend ?? default;
             hasReadings |= current is not null;
             var valueless = current is not null && !AlertReadings.HasValue(current);
+            var glucoseSeries = recent is not null && current is not null
+                ? RecentSeries(recent, current, tick)
+                : [];
 
             var baseContext = new SensorContext
             {
@@ -303,7 +328,8 @@ internal sealed class AlertReplayService(
                 // last reading with one (CanonicalAlertEvaluator.ContextForValueless).
                 LastReadingAt = valueless ? usable?.Timestamp ?? valuelessSince : current?.Timestamp ?? tick,
                 SensorState = valueless ? new SensorStateSnapshot(SensorState.NoValue, valuelessSince) : null,
-                LatestSource = current is null ? null : new ReadingSource(current.DataSource, current.Device),
+                LatestSource = current is null ? null : ReadingSource.Of(current),
+                GlucoseSeries = glucoseSeries,
                 ActiveAlerts = new Dictionary<Guid, ActiveAlertSnapshot>(),
             };
 
@@ -334,7 +360,7 @@ internal sealed class AlertReplayService(
             ticks.Add(new AlertReplayTick(tickUtc, enrichedBase, suppressed, isReading));
 
             var sample = tick + SampleInterval;
-            var next = await NextEvaluationAsync(readings, arrivals, arriving);
+            var next = await NextEvaluationAsync(readings, arrivals, arriving, recent);
             isReading = next <= sample;
             tick = isReading ? next!.Value : sample;
         }
@@ -344,10 +370,29 @@ internal sealed class AlertReplayService(
 
     private static void Enqueue(
         ReadingCursor readings, Arrivals arrivals,
-        PriorityQueue<(SensorGlucose Reading, ReadingTrend Trend), DateTime> arriving)
+        PriorityQueue<(SensorGlucose Reading, ReadingTrend Trend), DateTime> arriving,
+        List<(SensorGlucose Reading, DateTime EvaluatedAt)>? recent)
     {
         foreach (var advanced in readings.TakeAdvanced())
-            arriving.Enqueue(advanced, arrivals.EvaluatedAt(advanced.Reading));
+        {
+            var evaluatedAt = arrivals.EvaluatedAt(advanced.Reading);
+            arriving.Enqueue(advanced, evaluatedAt);
+            recent?.Add((advanced.Reading, evaluatedAt));
+        }
+    }
+
+    /// <summary>
+    /// The recent readings of <paramref name="newest"/> at <paramref name="tick"/>, among those of
+    /// <paramref name="recent"/> live had evaluated by then. Drops the readings older than any later
+    /// series reaches, since the newest reading only moves forward.
+    /// </summary>
+    private static IReadOnlyList<GlucoseSeriesPoint> RecentSeries(
+        List<(SensorGlucose Reading, DateTime EvaluatedAt)> recent, SensorGlucose newest, DateTime tick)
+    {
+        recent.RemoveAll(r => r.Reading.Timestamp < newest.Timestamp - RecentReadings.Span);
+        return RecentReadings.Of(
+            ReadingSource.Of(newest), newest.Timestamp,
+            recent.Where(r => r.EvaluatedAt <= tick).Select(r => r.Reading));
     }
 
     /// <summary>
@@ -357,7 +402,8 @@ internal sealed class AlertReplayService(
     /// </summary>
     private static async Task<DateTime?> NextEvaluationAsync(
         ReadingCursor readings, Arrivals arrivals,
-        PriorityQueue<(SensorGlucose Reading, ReadingTrend Trend), DateTime> arriving)
+        PriorityQueue<(SensorGlucose Reading, ReadingTrend Trend), DateTime> arriving,
+        List<(SensorGlucose Reading, DateTime EvaluatedAt)>? recent)
     {
         while (true)
         {
@@ -365,7 +411,7 @@ internal sealed class AlertReplayService(
             if (readings.Upcoming is not { } upcoming || (due is { } d && d <= upcoming))
                 return due;
             await readings.AdvanceToAsync(upcoming);
-            Enqueue(readings, arrivals, arriving);
+            Enqueue(readings, arrivals, arriving, recent);
         }
     }
 
@@ -479,6 +525,9 @@ internal sealed class AlertReplayService(
 
         private SensorGlucose? Current { get; set; }
 
+        /// <summary>The canonical readings read before the window start, oldest first.</summary>
+        public IReadOnlyList<SensorGlucose> Preceding { get; private set; } = [];
+
         /// <summary>The timestamp of the first reading the cursor has not advanced to.</summary>
         public DateTime? Upcoming => _next?.Timestamp;
 
@@ -503,11 +552,14 @@ internal sealed class AlertReplayService(
             try
             {
                 var first = await cursor.PullAsync();
+                var preceding = new List<SensorGlucose>();
                 while (first is not null && first.Timestamp < windowStart)
                 {
                     cursor._earlier.Add((first, null));
+                    preceding.Add(first);
                     first = await cursor.PullAsync();
                 }
+                cursor.Preceding = preceding;
                 cursor._nextHidden = await cursor.PullHiddenAsync();
                 await cursor.MoveToAsync(first);
                 cursor._next = await cursor.PullAsync();

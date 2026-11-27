@@ -38,6 +38,7 @@ public sealed record DataNeedsSet(
     bool NeedsSensorState,
     bool NeedsApsDetermination,
     bool NeedsTargetRange,
+    bool NeedsGlucoseSeries,
     IReadOnlySet<(StateSpanCategory Category, string? State)> ReferencedStateSpans,
     IReadOnlySet<Guid> ReferencedTrackerDefinitions)
 // Note: there is intentionally no `NeedsDoNotDisturb` here. DND state must be available for
@@ -50,7 +51,7 @@ public sealed record DataNeedsSet(
     public static DataNeedsSet None { get; } =
         new(false, false, false, false, false, false, false,
             false, false, false, false, false, false, false, false,
-            false, false, false, false, false, false, false, false,
+            false, false, false, false, false, false, false, false, false,
             new HashSet<(StateSpanCategory, string?)>(),
             new HashSet<Guid>());
 }
@@ -173,6 +174,11 @@ public static class RuleDataNeeds
             case AlertConditionType.CarbsRequired:
                 b.ApsDetermination = true;
                 break;
+            case AlertConditionType.GlucoseChange:
+            case AlertConditionType.GlucoseCount:
+            case AlertConditionType.GlucoseExtreme:
+                b.GlucoseSeries = true;
+                break;
             // DoNotDisturb deliberately not handled here — see DataNeedsSet docs above.
             // SignalLoss, Staleness, Composite, Not, Sustained require no extra context: the base
             // SensorContext carries what they read.
@@ -185,6 +191,9 @@ public static class RuleDataNeeds
             case AlertConditionType.RateOfChange:
             case AlertConditionType.Trend:
             case AlertConditionType.GlucoseBucket:
+            case AlertConditionType.GlucoseChange:
+            case AlertConditionType.GlucoseCount:
+            case AlertConditionType.GlucoseExtreme:
                 b.SensorState = true;
                 break;
         }
@@ -219,6 +228,7 @@ public static class RuleDataNeeds
         public bool SensorState;
         public bool ApsDetermination;
         public bool TargetRange;
+        public bool GlucoseSeries;
         public readonly HashSet<(StateSpanCategory Category, string? State)> StateSpans = new();
         public readonly HashSet<Guid> TrackerDefinitionIds = new();
 
@@ -227,7 +237,7 @@ public static class RuleDataNeeds
                 LastApsCycle, LastApsEnacted, PumpStatus, TempBasal, UploaderStatus, TransmitterStatus, Override,
                 SensitivityRatio,
                 GlucoseBucket, Treatments, TenantTimeZone, SleepSession, PumpModes, SensorState, ApsDetermination,
-                TargetRange,
+                TargetRange, GlucoseSeries,
                 StateSpans,
                 TrackerDefinitionIds);
     }

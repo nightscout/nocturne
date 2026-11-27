@@ -49,6 +49,7 @@ internal static class EnumManifest
             ["SensorState"] = WireNames<SensorState>(),
             ["ForecastCurve"] = WireNames<ForecastCurve>(),
             ["AlertLimitFact"] = WireNames<AlertLimitFact>(),
+            ["AlertWindowExtreme"] = WireNames<AlertWindowExtreme>(),
             ["PayloadFields"] = PayloadFields(),
         };
         var json = root.ToJsonString(new JsonSerializerOptions

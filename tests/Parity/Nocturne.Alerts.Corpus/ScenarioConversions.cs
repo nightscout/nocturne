@@ -76,6 +76,8 @@ public static class ScenarioConversions
                 ? new ApsDetermination(
                     Utc(determination.At)!.Value, determination.EventualMgdl, determination.CarbsRequiredGrams)
                 : null,
+            GlucoseSeries = ctx.GlucoseSeries?.Select(p => new GlucoseSeriesPoint(Utc(p.At)!.Value, p.Mgdl)).ToList()
+                ?? (IReadOnlyList<GlucoseSeriesPoint>)[],
             ActiveAlerts = ctx.ActiveAlerts?.ToDictionary(
                     a => a.AlertId,
                     a => new ActiveAlertSnapshot(a.State, Utc(a.TriggeredAt)!.Value, Utc(a.AcknowledgedAt)))

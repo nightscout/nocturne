@@ -89,6 +89,26 @@ public class RuleDataNeedsTests
             .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsApsDetermination = true });
     }
 
+    /// <summary>
+    /// The recent readings are fetched for the three windowed leaves, which also judge the newest
+    /// reading through the sensor's state, and only them.
+    /// </summary>
+    [NativeTheory]
+    [InlineData(AlertConditionType.GlucoseChange, """{"operator":"<=","value":-30,"window_minutes":15}""")]
+    [InlineData(AlertConditionType.GlucoseExtreme, """{"of":"max","operator":">","value":250,"window_minutes":60}""")]
+    [InlineData(AlertConditionType.GlucoseCount,
+        """{"reading":{"operator":"<","value":70},"window_minutes":60,"count":{"operator":">=","value":3}}""")]
+    public void A_windowed_leaf_needs_the_series_and_the_sensor_state(AlertConditionType type, string json)
+    {
+        RuleDataNeeds.Walk([MakeRule(type, json)])
+            .Should().BeEquivalentTo(DataNeedsSet.None with { NeedsGlucoseSeries = true, NeedsSensorState = true });
+    }
+
+    [NativeFact]
+    public void A_rule_with_no_windowed_leaf_needs_no_series() =>
+        RuleDataNeeds.Walk([MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""")])
+            .NeedsGlucoseSeries.Should().BeFalse();
+
     [NativeFact]
     public void Iob_leaf_inside_composite_sets_iob_need()
     {

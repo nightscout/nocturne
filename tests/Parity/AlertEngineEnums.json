@@ -167,6 +167,25 @@
     "glucose_bucket": [
       "buckets"
     ],
+    "glucose_change": [
+      "clear_margin",
+      "operator",
+      "value",
+      "window_minutes"
+    ],
+    "glucose_count": [
+      "count",
+      "percent",
+      "reading",
+      "window_minutes"
+    ],
+    "glucose_extreme": [
+      "clear_margin",
+      "of",
+      "operator",
+      "value",
+      "window_minutes"
+    ],
     "iob": [
       "clear_margin",
       "operator",
@@ -301,25 +320,6 @@
       "clear_margin",
       "operator",
       "value"
-    ],
-    "glucose_change": [
-      "clear_margin",
-      "operator",
-      "value",
-      "window_minutes"
-    ],
-    "glucose_count": [
-      "count",
-      "percent",
-      "reading",
-      "window_minutes"
-    ],
-    "glucose_extreme": [
-      "clear_margin",
-      "of",
-      "operator",
-      "value",
-      "window_minutes"
     ]
   }
 }

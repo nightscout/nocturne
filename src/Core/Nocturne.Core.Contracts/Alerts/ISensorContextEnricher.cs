@@ -55,10 +55,12 @@ public interface ISensorContextEnricher
     /// <item>The active-alerts snapshot is taken from <see cref="SensorContext.ActiveAlerts"/>
     /// on <paramref name="baseContext"/>; the enricher does not call the alert repository.
     /// The replay walker computes its own running set across the replay window.</item>
+    /// <item>The recent readings are taken from <see cref="SensorContext.GlucoseSeries"/> on
+    /// <paramref name="baseContext"/>: the replay walker selects them from the readings it walks.</item>
     /// </list>
     /// </remarks>
-    /// <param name="baseContext">Per-tick base context. <see cref="SensorContext.ActiveAlerts"/>,
-    /// when set, is preserved through to the returned context.</param>
+    /// <param name="baseContext">Per-tick base context. <see cref="SensorContext.ActiveAlerts"/> and
+    /// <see cref="SensorContext.GlucoseSeries"/> are preserved through to the returned context.</param>
     /// <param name="rules">Rules being evaluated this tick.</param>
     /// <param name="asOf">Replay timestamp; every fact in the returned context reflects state
     /// at this instant. UTC.</param>

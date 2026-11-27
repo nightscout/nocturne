@@ -36,7 +36,9 @@ namespace Nocturne.API.Services.Alerts;
 /// passes "now" as the as-of timestamp, and <c>EnrichAsOfAsync</c> passes the replay tick.
 /// Replay skips the prediction service (intrinsically forward-looking) and the active-alerts
 /// repo fetch (the replay walker maintains its own running set across the window and threads
-/// it in via <see cref="SensorContext.ActiveAlerts"/>).
+/// it in via <see cref="SensorContext.ActiveAlerts"/>), and reads no recent readings: the walker
+/// selects <see cref="SensorContext.GlucoseSeries"/> from the readings it walks, by
+/// <see cref="RecentReadings"/> as this does.
 ///
 /// Data-source dependencies are bundled into <see cref="SensorContextEnricherDependencies"/>
 /// so this constructor stays focused on orchestration concerns (service provider for the
@@ -128,6 +130,14 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 : (DateTimeOffset?)null;
             var (predictions, curves) = await FetchPredictionsAsync(asOf, ct);
             enriched = enriched with { Predictions = predictions, PredictionCurves = curves };
+        }
+
+        // Replay fills the series per tick from the readings it walks (AlertReplayService).
+        if (needs.NeedsGlucoseSeries && !isReplay
+            && baseContext is { LatestSource: { } source, LatestTimestamp: { } newestAt })
+        {
+            var window = await _deps.CanonicalGlucose.GetWindowAsync(newestAt - RecentReadings.Span, newestAt, ct);
+            enriched = enriched with { GlucoseSeries = RecentReadings.Of(source, newestAt, window) };
         }
 
         if (needs.NeedsReservoir)
