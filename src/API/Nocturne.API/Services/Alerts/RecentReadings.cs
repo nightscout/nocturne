@@ -46,8 +46,7 @@ internal static class RecentReadings
     public static async Task<IReadOnlyList<GlucoseSeriesPoint>> ReadAsync(
         SensorGlucose newest, ICanonicalGlucoseService canonical, CancellationToken ct)
     {
-        var readings = await canonical.GetStreamSeriesAsync(newest, newest.Timestamp - Span, ct);
-        return Of(newest, readings.Select(r => (r, (Guid?)null)));
+        return Of(newest, await canonical.GetStreamSeriesAsync(newest, newest.Timestamp - Span, ct));
     }
 
     /// <summary>
@@ -55,6 +54,12 @@ internal static class RecentReadings
     /// stream in any order, each with the primary of its duplicate group when it is a non-primary copy;
     /// oldest first.
     /// </summary>
+    /// <remarks>
+    /// A duplicate group is one reading, so it gives one point however many of its copies the stream
+    /// holds, or <c>glucose_count</c> would count an uploader that sent a reading twice twice. The
+    /// point is the newest reading when it is in the group, else the group's primary, else its
+    /// earliest copy (the lowest id breaking a tie).
+    /// </remarks>
     public static IReadOnlyList<GlucoseSeriesPoint> Of(
         SensorGlucose newest, IEnumerable<(SensorGlucose Reading, Guid? DuplicateOf)> candidates)
     {
@@ -63,13 +68,20 @@ internal static class RecentReadings
         var from = newest.Timestamp - Span;
         return candidates
             .Where(c => c.Reading.Id == newest.Id || c.DuplicateOf != newest.Id)
-            .Select(c => c.Reading)
-            .Where(r => AlertReadings.HasValue(r)
+            .Where(c => c.Reading is var r
+                        && AlertReadings.HasValue(r)
                         && r.Timestamp >= from
                         && r.Timestamp <= newest.Timestamp
                         && (r.DataSource ?? "") == source
                         && CanonicalGlucoseStream.StreamKey(r) == stream)
-            .DistinctBy(r => r.Id)
+            .DistinctBy(c => c.Reading.Id)
+            .GroupBy(c => c.DuplicateOf ?? c.Reading.Id)
+            .Select(group => group
+                .Select(c => c.Reading)
+                .OrderBy(r => r.Id == newest.Id ? 0 : r.Id == group.Key ? 1 : 2)
+                .ThenBy(r => r.Timestamp)
+                .ThenBy(r => r.Id)
+                .First())
             .OrderBy(r => r.Timestamp)
             .Select(r => new GlucoseSeriesPoint(r.Timestamp, r.Mgdl.ToDecimal()))
             .ToList();

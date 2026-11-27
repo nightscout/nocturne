@@ -74,7 +74,7 @@ internal sealed class CanonicalGlucoseService : ICanonicalGlucoseService
         => _sensorGlucoseRepository.GetStreamPredecessorAsync(reading, since, ct);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<SensorGlucose>> GetStreamSeriesAsync(
+    public Task<IReadOnlyList<(SensorGlucose Reading, Guid? DuplicateOf)>> GetStreamSeriesAsync(
         SensorGlucose newest, DateTime since, CancellationToken ct = default)
         => _sensorGlucoseRepository.GetStreamSeriesAsync(newest, since, ct);
 

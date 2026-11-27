@@ -239,9 +239,10 @@ public interface ISensorGlucoseRepository
     /// timestamped in [<paramref name="since"/>, the newest reading's timestamp], oldest first, chosen
     /// as <see cref="GetStreamPredecessorAsync"/> chooses: non-primary duplicate copies and readings of
     /// a stream that lost its bucket are in it, a copy in the newest reading's own duplicate group is
-    /// not, and the newest reading itself is.
+    /// not, and the newest reading itself is. Each comes with the primary of its duplicate group when
+    /// it is a non-primary copy, so copies of one reading can be told apart from readings.
     /// </summary>
-    Task<IReadOnlyList<SensorGlucose>> GetStreamSeriesAsync(
+    Task<IReadOnlyList<(SensorGlucose Reading, Guid? DuplicateOf)>> GetStreamSeriesAsync(
         SensorGlucose newest, DateTime since, CancellationToken ct = default);
 
     /// <summary>

@@ -273,7 +273,8 @@ public class AlertReplayServiceTests
     /// so it alternates between them. An uploader's recent readings hold its own copies the canonical
     /// read hides, a 65 behind the other app's 66 among them, and a reading of a bucket its stream
     /// lost to another stream, but not a copy in its newest reading's own duplicate group, nor a
-    /// hidden copy before it arrived (docs/alerts/engine-semantics.md §4, recent readings).
+    /// hidden copy before it arrived. A reading it sent twice is one point, its group's primary
+    /// (docs/alerts/engine-semantics.md §4, recent readings).
     /// </summary>
     [NativeFact]
     public async Task A_ticks_recent_readings_hold_the_uploaders_own_hidden_copies()
@@ -301,6 +302,7 @@ public class AlertReplayServiceTests
                 (From(Xdrip, Reading(windowStart.AddMinutes(-30), 120)), null),
                 (From(Xdrip, Reading(windowStart, 65)), d0.Id),
                 (From(Dexcom, Reading(windowStart.AddMinutes(5), 90)), x5.Id),
+                (From(Xdrip, Reading(windowStart.AddMinutes(5).AddSeconds(5), 91)), x5.Id),
                 (From(Xdrip, Reading(windowStart.AddMinutes(10), 95)), d10.Id),
                 (From(Xdrip, Arriving(windowStart.AddMinutes(12), 97, TimeSpan.FromMinutes(18))), null),
                 (From(Xdrip, Reading(windowStart.AddMinutes(15), 101)), x15.Id),

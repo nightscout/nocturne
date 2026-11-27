@@ -2296,7 +2296,7 @@ public class SensorContextEnricherTests
     private void StreamSeriesHolds(params SensorGlucose[] readings) =>
         _canonicalGlucose
             .Setup(c => c.GetStreamSeriesAsync(It.IsAny<SensorGlucose>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(readings.OrderBy(r => r.Timestamp).ToList());
+            .ReturnsAsync(readings.OrderBy(r => r.Timestamp).Select(r => (r, (Guid?)null)).ToList());
 
     private Task<SensorContext> EnrichSeries(ReadingSource source) =>
         BuildEnricher().EnrichAsync(ReadingOf(source with { ReadingId = NewestId }), [FallRule], CancellationToken.None);

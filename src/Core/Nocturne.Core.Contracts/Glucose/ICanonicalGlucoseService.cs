@@ -53,6 +53,6 @@ public interface ICanonicalGlucoseService
     /// the newest reading's timestamp], hidden copies included
     /// (<see cref="V4.Repositories.ISensorGlucoseRepository.GetStreamSeriesAsync"/>).
     /// </summary>
-    Task<IReadOnlyList<SensorGlucose>> GetStreamSeriesAsync(
+    Task<IReadOnlyList<(SensorGlucose Reading, Guid? DuplicateOf)>> GetStreamSeriesAsync(
         SensorGlucose newest, DateTime since, CancellationToken ct = default);
 }

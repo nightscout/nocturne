@@ -82,6 +82,7 @@ public class AlertSweepJobSnoozeTests
             .ReturnsAsync((SensorGlucose newest, DateTime since, CancellationToken _) => _readings
                 .Where(r => r.Timestamp <= newest.Timestamp && r.Timestamp >= since)
                 .OrderBy(r => r.Timestamp)
+                .Select(r => (r, (Guid?)null))
                 .ToList());
     }
 

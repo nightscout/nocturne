@@ -251,7 +251,7 @@ public class SensorGlucoseStreamPredecessorTests : IDisposable
         await _context.SensorGlucose.AsNoTracking().Where(e => e.Id == reading.Id).Select(e => e.IsSecondaryStream).SingleAsync();
 
     private async Task<IEnumerable<Guid>> SeriesOfAsync(SensorGlucose newest, DateTime since) =>
-        (await _glucose.GetStreamSeriesAsync(newest, since)).Select(r => r.Id);
+        (await _glucose.GetStreamSeriesAsync(newest, since)).Select(r => r.Reading.Id);
 
     /// <summary>
     /// With the primary alternating between two uploaders, a stream's recent readings are every one
@@ -268,6 +268,26 @@ public class SensorGlucoseStreamPredecessorTests : IDisposable
             .Should().Equal(dexcom[0].Id, dexcom[1].Id, dexcom[2].Id);
         (await SeriesOfAsync(xdrip[1], Start.AddMinutes(-180)))
             .Should().Equal(xdrip[0].Id, xdrip[1].Id);
+        (await _glucose.GetStreamSeriesAsync(dexcom[2], Start.AddMinutes(-180)))
+            .Select(r => r.DuplicateOf).Should().Equal(null, xdrip[1].Id, null);
+    }
+
+    /// <summary>
+    /// An uploader that sends one reading twice, five seconds apart, writes one duplicate group. The
+    /// series read returns both copies, the later one with the earlier as its group's primary, so the
+    /// reading counts once (<c>RecentReadings.Of</c>).
+    /// </summary>
+    [Fact]
+    public async Task The_series_names_the_primary_of_a_reading_its_uploader_sent_twice()
+    {
+        var first = await WriteAsync(Dexcom, Start.AddMinutes(-5), 110);
+        var again = await WriteAsync(Dexcom, Start.AddMinutes(-5).AddSeconds(5), 110);
+        var newest = await WriteAsync(Dexcom, Start, 100);
+        (await IsDuplicateAsync(again)).Should().BeTrue();
+
+        (await _glucose.GetStreamSeriesAsync(newest, Start.AddMinutes(-180)))
+            .Select(r => (r.Reading.Id, r.DuplicateOf))
+            .Should().Equal((first.Id, null), (again.Id, first.Id), (newest.Id, null));
     }
 
     /// <summary>

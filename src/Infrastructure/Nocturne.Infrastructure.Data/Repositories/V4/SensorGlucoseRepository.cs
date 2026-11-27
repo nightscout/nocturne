@@ -488,16 +488,33 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
-    /// <remarks>Read as <see cref="StreamReadingsOf"/> selects.</remarks>
-    public async Task<IReadOnlyList<SensorGlucose>> GetStreamSeriesAsync(
+    /// <remarks>
+    /// Read as <see cref="StreamReadingsOf"/> selects, each non-primary copy with its group's primary
+    /// as <see cref="GetHiddenAsync"/> finds it.
+    /// </remarks>
+    public async Task<IReadOnlyList<(SensorGlucose Reading, Guid? DuplicateOf)>> GetStreamSeriesAsync(
         SensorGlucose newest, DateTime since, CancellationToken ct = default)
     {
+        var key = RecordTypeKeys.Key(RecordType.SensorGlucose);
+
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await StreamReadingsOf(ctx, newest, since, includeReading: true)
+        var rows = await StreamReadingsOf(ctx, newest, since, includeReading: true)
             .OrderBy(e => e.Timestamp)
             .ThenBy(e => e.Id)
+            .Select(e => new
+            {
+                Entity = e,
+                DuplicateOf = e.IsDuplicate
+                    ? ctx.LinkedRecords
+                        .Where(p => p.RecordType == key && p.IsPrimary
+                            && ctx.LinkedRecords.Any(l =>
+                                l.RecordType == key && l.RecordId == e.Id && l.CanonicalId == p.CanonicalId))
+                        .Select(p => (Guid?)p.RecordId)
+                        .FirstOrDefault()
+                    : null,
+            })
             .ToListAsync(ct);
-        return entities.Select(SensorGlucoseMapper.ToDomainModel).ToList();
+        return rows.Select(r => (SensorGlucoseMapper.ToDomainModel(r.Entity), r.DuplicateOf)).ToList();
     }
 
     /// <summary>
