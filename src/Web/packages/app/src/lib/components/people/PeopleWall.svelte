@@ -11,7 +11,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Now } from "#lib/hooks/now.svelte.js";
   import { plural } from "#lib/utils/plural.js";
-  import { time } from "#lib/utils/formatting.js";
+  import { formatList, time } from "#lib/utils/formatting.js";
   import { createOverlayReveal } from "#lib/utils/overlay-reveal.svelte.js";
   import { Key } from "@nocturne/ui/keys";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
@@ -48,11 +48,11 @@
   let fellBack = $state<FallbackReason | null>(null);
   const group = $derived(groupOf(tab));
   const groupsQuery = getGroups();
-  // The wall is seen by everyone in the room, so it never shows one viewer's own rules.
+  // The wall is seen by everyone in the room, so it shows the rules its teams share and never one viewer's own.
   const overview = followPeople(
     () => group,
     () => void groupsQuery.refresh().catch(() => {}),
-    OverviewRuleSet.Fixed
+    OverviewRuleSet.Team
   );
   const query = $derived(overview.query);
   const groupNotFound = $derived(isHttpError(query.error) && query.error.status === 404);
@@ -94,6 +94,7 @@
 
   const people = $derived(kept?.response.tenants ?? []);
   const hiddenCount = $derived(kept?.response.hiddenCount ?? 0);
+  const ruleTeams = $derived(kept?.response.ruleTeams ?? []);
   const pending = $derived(!kept && !loadError);
 
   let rootHeight = $state<number>();
@@ -267,7 +268,15 @@
           </span>
         {/if}
         <span class="text-muted-foreground" data-testid="wall-rules">
-          Flagged by Nocturne's fixed rules.
+          {#if ruleTeams.length === 0}
+            Flagged by Nocturne's fixed rules.
+          {:else if ruleTeams.length === 1}
+            Flagged by Nocturne's fixed rules and {ruleTeams[0].name}'s rules.
+          {:else}
+            Flagged by Nocturne's fixed rules and the rules of {ruleTeams.length} teams: {formatList(
+              ruleTeams.map((team) => team.name ?? "")
+            )}.
+          {/if}
         </span>
         <div class="flex flex-wrap items-center gap-3" data-testid="wall-connection">
           {#if loadError && kept}

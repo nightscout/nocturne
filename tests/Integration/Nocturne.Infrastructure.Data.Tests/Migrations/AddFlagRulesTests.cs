@@ -82,15 +82,12 @@ public class AddFlagRulesTests(AddFlagRulesFixture fixture) : IClassFixture<AddF
     private static string Literal(Guid? id) => id is { } value ? $"'{value}'" : "NULL";
 
     [Fact]
-    public async Task The_table_is_under_a_forced_subject_pin_alone()
+    public async Task The_table_is_under_a_forced_subject_pin()
     {
         (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, """
             SELECT count(*) FROM pg_class c
              WHERE c.relname = 'flag_rules' AND c.relrowsecurity AND c.relforcerowsecurity
                AND EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'subject_pin' AND p.polpermissive)
-            """)).Should().Be(1);
-        (await NpgsqlTestCommands.ScalarAsync<long>(fixture.Migrator, """
-            SELECT count(*) FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid WHERE c.relname = 'flag_rules'
             """)).Should().Be(1);
     }
 

@@ -19,6 +19,9 @@ export const RULE_LEVELS = [
 
 export const DEFAULT_RULE_LEVEL = NotificationUrgency.Warn;
 
+/** Whose rules the editor shows: the viewer's own, or a team's. */
+export type FlagRuleOwner = { kind: "personal" } | { kind: "team"; teamId: string };
+
 /** A rule as the editor holds it: its value in the unit the viewer reads the fact in. */
 export interface RuleDraft {
   dataset: string;

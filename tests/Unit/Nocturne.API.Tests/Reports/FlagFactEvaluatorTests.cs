@@ -425,7 +425,9 @@ public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
                     ? await scope.ServiceProvider.GetRequiredService<ICanonicalGlucoseService>().GetLatestAsync(cancellationToken)
                     : null;
                 var pump = devices ? await NewestPumpAsync(person, scope.ServiceProvider, cancellationToken) : null;
-                judged.Add(await judging.JudgeAsync(person, scope.ServiceProvider, new FlagLiveReads(latest, [], pump), cancellationToken));
+                judged.Add(await judging.JudgeAsync(
+                    person, scope.ServiceProvider, new FlagLiveReads(latest, [], pump), [.. conditions.Select((_, i) => i)],
+                    cancellationToken));
             }
             judging.Finish();
             return (judged, judging.Pending);

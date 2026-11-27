@@ -346,6 +346,15 @@ public static class AuthAuditEventType
     /// </summary>
     public const string TeamStaffReachChanged = "team_staff_reach_changed";
 
+    /// <summary>Event type when a manager adds a flag rule to a team. The details hold the rule.</summary>
+    public const string TeamFlagRuleCreated = "team_flag_rule_created";
+
+    /// <summary>Event type when a manager changes a team's flag rule. The details hold the rule before and after.</summary>
+    public const string TeamFlagRuleChanged = "team_flag_rule_changed";
+
+    /// <summary>Event type when a manager deletes a team's flag rule. The details hold the rule.</summary>
+    public const string TeamFlagRuleDeleted = "team_flag_rule_deleted";
+
     /// <summary>
     /// The event types the member history reads. The two partial indexes that serve it are filtered on this
     /// list, so the read must send it as constants for the planner to use them. Adding a type changes both

@@ -117,38 +117,48 @@ internal static class TenantOverviewTestKit
         public NocturneDbContext CreateDbContext() => new(options);
     }
 
-    /// <summary>A reason a rule of the caller's gives, at <paramref name="level"/>.</summary>
-    public static TenantOverviewAttention RuleReason(NotificationUrgency level) =>
+    /// <summary>A reason a rule of the caller's, or of <paramref name="team"/>, gives, at <paramref name="level"/>.</summary>
+    public static TenantOverviewAttention RuleReason(NotificationUrgency level, TenantOverviewRuleTeam? team) =>
         new(TenantOverviewAttentionKind.FlagRule, level)
         {
             Rule = new TenantOverviewRuleReason(
-                Guid.NewGuid(), FlagRuleSource.Yours, "glucose_statistics", "timeBelow", "Time below range", "%", "consensus",
+                Guid.NewGuid(), team is null ? FlagRuleSource.Yours : FlagRuleSource.Team, team, "glucose_statistics",
+                "timeBelow", "Time below range", "%", "consensus",
                 6.5, FlagRuleComparison.Above, 4, 14, DateTime.UtcNow.AddDays(-14), DateTime.UtcNow, null, null),
         };
 
     /// <summary>A run that gives each person the reasons scripted for them, and records what the overview passed it.</summary>
-    public sealed class ScriptedRules : IPersonalFlagRules
+    public sealed class ScriptedRules : IViewerFlagRules
     {
         public Dictionary<Guid, IReadOnlyList<TenantOverviewAttention>> Reasons { get; } = [];
         public int Pending { get; init; }
         public bool None { get; init; }
+        public IReadOnlyList<TenantOverviewRuleTeam> Teams { get; init; } = [];
         public int Begun { get; private set; }
         public List<Guid> Subjects { get; } = [];
+        public List<OverviewRuleSet> RuleSets { get; } = [];
+        public List<IReadOnlyList<Guid>> PeopleBegunFor { get; } = [];
         public List<bool> CredentialLimits { get; } = [];
         public List<(GlucoseReadTenant Person, SensorGlucose? Latest, IReadOnlyList<TrackerInstance>? Trackers, PumpSnapshot? Pump)> Judged { get; } = [];
         public int? FinishedAfter { get; private set; }
 
-        public Task<IPersonalFlagRuleRun?> BeginAsync(Guid subjectId, bool credentialLimitTo24Hours, CancellationToken ct)
+        public Task<IViewerFlagRuleRun?> BeginAsync(
+            Guid subjectId, OverviewRuleSet rules, IReadOnlyList<GlucoseReadTenant> people, bool credentialLimitTo24Hours,
+            CancellationToken ct)
         {
             Begun++;
             Subjects.Add(subjectId);
+            RuleSets.Add(rules);
+            PeopleBegunFor.Add([.. people.Select(p => p.Tenant.Id)]);
             CredentialLimits.Add(credentialLimitTo24Hours);
-            return Task.FromResult<IPersonalFlagRuleRun?>(None ? null : new Run(this));
+            return Task.FromResult<IViewerFlagRuleRun?>(None ? null : new Run(this));
         }
 
-        private sealed class Run(ScriptedRules owner) : IPersonalFlagRuleRun
+        private sealed class Run(ScriptedRules owner) : IViewerFlagRuleRun
         {
             public int PeopleWithRulesPending => owner.Pending;
+
+            public IReadOnlyList<TenantOverviewRuleTeam> Teams => owner.Teams;
 
             public Task<IReadOnlyList<TenantOverviewAttention>> ReasonsAsync(
                 GlucoseReadTenant person, IServiceProvider personScope, SensorGlucose? latest,

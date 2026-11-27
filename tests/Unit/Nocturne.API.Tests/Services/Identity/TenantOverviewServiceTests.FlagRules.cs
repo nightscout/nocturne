@@ -25,10 +25,10 @@ public partial class TenantOverviewServiceTests
         var calm = SeedMembership(options, subjectId, "calm", [Scope.GlucoseRead]);
         var ruled = SeedMembership(options, subjectId, "ruled", [Scope.GlucoseRead]);
         var fakes = QuietFakes(calm, ruled);
-        var rules = new ScriptedRules { Reasons = { [ruled] = [RuleReason(NotificationUrgency.Warn)] } };
+        var rules = new ScriptedRules { Reasons = { [ruled] = [RuleReason(NotificationUrgency.Warn, null)] } };
 
         var response = await NewService(options, fakes: fakes, flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         response.Tenants.Select(t => t.Slug).Should().Equal("ruled", "calm");
         var reason = response.Tenants[0].Attention.Should().ContainSingle().Subject;
@@ -48,11 +48,11 @@ public partial class TenantOverviewServiceTests
         fakes.Data[low] = new TenantData { Latest = new SensorGlucose { Mgdl = 60, Timestamp = DateTime.UtcNow.AddMinutes(-1) } };
         var rules = new ScriptedRules
         {
-            Reasons = { [low] = [RuleReason(NotificationUrgency.Info), RuleReason(NotificationUrgency.Hazard)] },
+            Reasons = { [low] = [RuleReason(NotificationUrgency.Info, null), RuleReason(NotificationUrgency.Hazard, null)] },
         };
 
         var response = await NewService(options, fakes: fakes, flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         var attention = response.Tenants.Single().Attention;
         attention.Should().HaveCount(3);
@@ -62,19 +62,50 @@ public partial class TenantOverviewServiceTests
     }
 
     [Fact]
-    public async Task The_wall_read_leaves_personal_rules_out_and_never_loads_them()
+    public async Task A_read_of_the_fixed_set_never_loads_rules_and_names_no_team()
     {
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
         var ruled = SeedMembership(options, subjectId, "ruled", [Scope.GlucoseRead]);
-        var rules = new ScriptedRules { Pending = 3, Reasons = { [ruled] = [RuleReason(NotificationUrgency.Hazard)] } };
+        var rules = new ScriptedRules
+        {
+            Pending = 3,
+            Reasons = { [ruled] = [RuleReason(NotificationUrgency.Hazard, null)] },
+            Teams = [new TenantOverviewRuleTeam(Guid.NewGuid(), "Ward 4")],
+        };
 
         var response = await NewService(options, fakes: QuietFakes(ruled), flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.LeaveOut);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.Fixed);
 
         rules.Begun.Should().Be(0);
         response.Tenants.Single().Attention.Should().BeEmpty();
         response.PeopleWithRulesPending.Should().Be(0);
+        response.RuleTeams.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(OverviewRuleSet.Team)]
+    [InlineData(OverviewRuleSet.All)]
+    public async Task A_read_of_team_or_all_rules_passes_its_set_and_people_on_and_names_the_teams_whose_rules_applied(OverviewRuleSet set)
+    {
+        var subjectId = Guid.NewGuid();
+        var options = NewOptions();
+        var first = SeedMembership(options, subjectId, "first", [Scope.GlucoseRead]);
+        var second = SeedMembership(options, subjectId, "second", [Scope.GlucoseRead]);
+        var ward = new TenantOverviewRuleTeam(Guid.NewGuid(), "Ward 4");
+        var rules = new ScriptedRules
+        {
+            Reasons = { [first] = [RuleReason(NotificationUrgency.Warn, ward)] },
+            Teams = [ward],
+        };
+
+        var response = await NewService(options, fakes: QuietFakes(first, second), flagRules: rules)
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, set);
+
+        rules.RuleSets.Should().Equal(set);
+        rules.PeopleBegunFor.Single().Should().BeEquivalentTo([first, second]);
+        response.RuleTeams.Should().Equal(ward);
+        response.Tenants.Single(t => t.TenantId == first).Attention.Single().Rule!.Team.Should().Be(ward);
     }
 
     [Fact]
@@ -87,7 +118,7 @@ public partial class TenantOverviewServiceTests
         var rules = new ScriptedRules { Pending = 2 };
 
         var response = await NewService(options, fakes: QuietFakes(first, second), flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         response.PeopleWithRulesPending.Should().Be(2);
         rules.Judged.Should().HaveCount(2);
@@ -106,7 +137,7 @@ public partial class TenantOverviewServiceTests
         var rules = new ScriptedRules();
 
         await NewService(options, fakes: QuietFakes(person), flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, limited);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, limited);
 
         rules.CredentialLimits.Should().Equal(limited);
         rules.Subjects.Should().Equal(subjectId);
@@ -130,7 +161,7 @@ public partial class TenantOverviewServiceTests
         var rules = new ScriptedRules();
 
         await NewService(options, fakes: fakes, flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         var judged = rules.Judged.Should().ContainSingle().Subject;
         judged.Person.Tenant.Id.Should().Be(person);
@@ -151,7 +182,7 @@ public partial class TenantOverviewServiceTests
         var rules = new ScriptedRules { None = true };
 
         var response = await NewService(options, flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         rules.Begun.Should().Be(1);
         response.PeopleWithRulesPending.Should().Be(0);
@@ -163,7 +194,7 @@ public partial class TenantOverviewServiceTests
         var rules = new ScriptedRules();
 
         var response = await NewService(NewOptions(), flagRules: rules)
-            .GetOverviewAsync(Guid.NewGuid(), FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+            .GetOverviewAsync(Guid.NewGuid(), FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
 
         response.Tenants.Should().BeEmpty();
         rules.Begun.Should().Be(0);

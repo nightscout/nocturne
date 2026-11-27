@@ -58,7 +58,7 @@ public class MyTenantsControllerTests
         _overviewService.Verify(
             s => s.GetOverviewAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(),
-                It.IsAny<OverviewFlagRules>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<OverviewRuleSet>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -123,10 +123,10 @@ public class MyTenantsControllerTests
     public async Task A_group_asked_for_is_read_as_that_group_and_everyone_is_not_read()
     {
         var group = Guid.CreateVersion7();
-        var overview = new TenantOverviewResponse([], 2, 0);
+        var overview = new TenantOverviewResponse([], 2, 0, []);
         _overviewService
             .Setup(s => s.GetGroupOverviewAsync(
-                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, OverviewFlagRules.Judge, false,
+                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, OverviewRuleSet.All, false,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(overview);
 
@@ -136,27 +136,29 @@ public class MyTenantsControllerTests
         _overviewService.Verify(
             s => s.GetOverviewAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(),
-                It.IsAny<OverviewFlagRules>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<OverviewRuleSet>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
-    public static TheoryData<bool, OverviewRuleSet?, OverviewFlagRules> RuleSets => new()
+    public static TheoryData<bool, OverviewRuleSet?, OverviewRuleSet> RuleSets => new()
     {
-        { false, null, OverviewFlagRules.LeaveOut },
-        { false, OverviewRuleSet.Fixed, OverviewFlagRules.LeaveOut },
-        { false, OverviewRuleSet.All, OverviewFlagRules.Judge },
-        { true, null, OverviewFlagRules.LeaveOut },
-        { true, OverviewRuleSet.Fixed, OverviewFlagRules.LeaveOut },
-        { true, OverviewRuleSet.All, OverviewFlagRules.Judge },
+        { false, null, OverviewRuleSet.Fixed },
+        { false, OverviewRuleSet.Fixed, OverviewRuleSet.Fixed },
+        { false, OverviewRuleSet.Team, OverviewRuleSet.Team },
+        { false, OverviewRuleSet.All, OverviewRuleSet.All },
+        { true, null, OverviewRuleSet.Fixed },
+        { true, OverviewRuleSet.Fixed, OverviewRuleSet.Fixed },
+        { true, OverviewRuleSet.Team, OverviewRuleSet.Team },
+        { true, OverviewRuleSet.All, OverviewRuleSet.All },
     };
 
     [Theory]
     [MemberData(nameof(RuleSets))]
-    public async Task An_overview_of_everyone_or_a_group_judges_the_callers_own_rules_only_when_asked_for_them(
-        bool ofAGroup, OverviewRuleSet? rules, OverviewFlagRules expected)
+    public async Task An_overview_of_everyone_or_a_group_judges_the_rules_it_names_and_the_fixed_set_when_it_names_none(
+        bool ofAGroup, OverviewRuleSet? rules, OverviewRuleSet expected)
     {
         var group = Guid.CreateVersion7();
-        var overview = new TenantOverviewResponse([], ofAGroup ? 0 : null, 4);
+        var overview = new TenantOverviewResponse([], ofAGroup ? 0 : null, 4, []);
         _overviewService
             .Setup(s => s.GetOverviewAsync(
                 _subjectId, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, expected, false,
@@ -240,7 +242,7 @@ public class MyTenantsControllerTests
         _overviewService
             .Setup(s => s.GetPersonAsync(
                 _subjectId, tenantId, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie,
-                OverviewFlagRules.LeaveOut, false, It.IsAny<CancellationToken>()))
+                OverviewRuleSet.Fixed, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(detail);
 
         var result = await CreateController(Member()).GetPerson(tenantId, null, CancellationToken.None);
@@ -249,11 +251,12 @@ public class MyTenantsControllerTests
     }
 
     [Theory]
-    [InlineData(null, OverviewFlagRules.LeaveOut)]
-    [InlineData(OverviewRuleSet.Fixed, OverviewFlagRules.LeaveOut)]
-    [InlineData(OverviewRuleSet.All, OverviewFlagRules.Judge)]
-    public async Task A_person_read_judges_the_callers_own_rules_only_when_asked_for_them(
-        OverviewRuleSet? rules, OverviewFlagRules expected)
+    [InlineData(null, OverviewRuleSet.Fixed)]
+    [InlineData(OverviewRuleSet.Fixed, OverviewRuleSet.Fixed)]
+    [InlineData(OverviewRuleSet.Team, OverviewRuleSet.Team)]
+    [InlineData(OverviewRuleSet.All, OverviewRuleSet.All)]
+    public async Task A_person_read_judges_the_rules_it_names_and_the_fixed_set_when_it_names_none(
+        OverviewRuleSet? rules, OverviewRuleSet expected)
     {
         var tenantId = Guid.NewGuid();
         var detail = new TenantPersonDetail(
@@ -315,7 +318,7 @@ public class MyTenantsControllerTests
         _overviewService.Verify(
             s => s.GetPersonAsync(
                 null, tenantId, It.IsAny<IReadOnlySet<string>>(), authType,
-                It.IsAny<OverviewFlagRules>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<OverviewRuleSet>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -323,7 +326,7 @@ public class MyTenantsControllerTests
         _overviewService.Verify(
             s => s.GetPersonAsync(
                 It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(),
-                It.IsAny<OverviewFlagRules>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<OverviewRuleSet>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
     [Theory]

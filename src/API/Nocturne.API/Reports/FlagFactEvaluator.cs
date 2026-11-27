@@ -93,7 +93,10 @@ internal enum FlagPersonState
     Failed,
 }
 
-/// <summary>A person's judging: every condition, in the order the conditions were given, when <see cref="State"/> is judged.</summary>
+/// <summary>
+/// A person's judging: every condition that applies to them, in the order <see cref="FlagFactEvaluator.FlagJudging.JudgeAsync"/>
+/// was given them, when <see cref="State"/> is judged.
+/// </summary>
 internal sealed record FlagPersonJudging(FlagPersonState State, IReadOnlyList<FlagJudgement> Judgements)
 {
     public static readonly FlagPersonJudging Pending = new(FlagPersonState.Pending, []);
@@ -239,7 +242,10 @@ internal sealed class FlagFactEvaluator(
         return new FlagJudging(this, conditions, credentialLimitTo24Hours, viewer, http);
     }
 
-    /// <summary>One overview read's judging. Its people are judged one at a time, on the request's own flow.</summary>
+    /// <summary>
+    /// One overview read's judging. Its people are judged one at a time, on the request's own flow, each by the
+    /// conditions that apply to them, so conditions that apply to different people still share reads and keeps.
+    /// </summary>
     internal sealed class FlagJudging
     {
         private readonly FlagFactEvaluator _evaluator;
@@ -267,17 +273,22 @@ internal sealed class FlagFactEvaluator(
         public int Pending { get; private set; }
 
         /// <summary>
-        /// Every condition for <paramref name="person"/>, read in <paramref name="personScope"/> (the overview's scope for
-        /// the person) and on <paramref name="live"/>. Pending while a period read is not kept. The person's read-audit
-        /// row is enqueued before it returns judged.
+        /// The conditions <paramref name="applicable"/> indexes for <paramref name="person"/>, read in
+        /// <paramref name="personScope"/> (the overview's scope for the person) and on <paramref name="live"/>. A condition
+        /// not in <paramref name="applicable"/> is neither judged nor read for the person. Pending while a read is not
+        /// kept. The person's read-audit row is enqueued before it returns judged.
         /// </summary>
         public async Task<FlagPersonJudging> JudgeAsync(
-            GlucoseReadTenant person, IServiceProvider personScope, FlagLiveReads live, CancellationToken cancellationToken)
+            GlucoseReadTenant person,
+            IServiceProvider personScope,
+            FlagLiveReads live,
+            IReadOnlyList<int> applicable,
+            CancellationToken cancellationToken)
         {
             var now = _evaluator.Time.GetUtcNow();
-            var judgements = new FlagJudgement?[_conditions.Count];
+            var judgements = new Dictionary<int, FlagJudgement>();
             var open = new List<int>();
-            for (var i = 0; i < _conditions.Count; i++)
+            foreach (var i in applicable.Distinct())
             {
                 if (Uncheckable(person, _conditions[i], _credentialLimitTo24Hours) is { } uncheckable)
                     judgements[i] = uncheckable;
@@ -285,7 +296,7 @@ internal sealed class FlagFactEvaluator(
                     open.Add(i);
             }
             if (open.Count == 0)
-                return new FlagPersonJudging(FlagPersonState.Judged, judgements!);
+                return new FlagPersonJudging(FlagPersonState.Judged, [.. applicable.Select(i => judgements[i])]);
 
             var cache = personScope.GetRequiredService<ITenantCache>();
             var served = new List<ServedRead>();
@@ -325,7 +336,7 @@ internal sealed class FlagFactEvaluator(
 
             if (served.Count > 0)
                 await _evaluator.AuditAsync(person.Tenant, served, cache, _http, cancellationToken);
-            return new FlagPersonJudging(FlagPersonState.Judged, judgements!);
+            return new FlagPersonJudging(FlagPersonState.Judged, [.. applicable.Select(i => judgements[i])]);
         }
 
         /// <summary>Starts the background reads this judging found missing or ageing. It does not wait for them.</summary>

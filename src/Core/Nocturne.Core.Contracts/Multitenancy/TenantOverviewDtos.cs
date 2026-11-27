@@ -14,10 +14,18 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 /// everyone the caller follows.
 /// </param>
 /// <param name="PeopleWithRulesPending">
-/// How many people the caller's own flag rules are still being checked for. Those people carry only the fixed reasons
-/// until a later read; a page re-reads sooner while this is above zero. Zero when the read leaves the rules out.
+/// How many people the flag rules the read judges are still being checked for. Those people carry only the fixed
+/// reasons until a later read; a page re-reads sooner while this is above zero. Zero when the read judges no rules.
 /// </param>
-public record TenantOverviewResponse(List<TenantOverviewItem> Tenants, int? HiddenCount, int PeopleWithRulesPending);
+/// <param name="RuleTeams">
+/// The teams whose flag rules the read judged for at least one of its people, by name: each holds a rule and follows
+/// one of them. Empty for a read of the fixed reasons only.
+/// </param>
+public record TenantOverviewResponse(
+    List<TenantOverviewItem> Tenants, int? HiddenCount, int PeopleWithRulesPending, List<TenantOverviewRuleTeam> RuleTeams);
+
+/// <summary>A team whose flag rules a read judged, as a reason it gives names it.</summary>
+public record TenantOverviewRuleTeam(Guid Id, string Name);
 
 /// <summary>
 /// The flag rules a read of people judges beside the fixed reasons every view of them has. A read that names none
@@ -26,10 +34,16 @@ public record TenantOverviewResponse(List<TenantOverviewItem> Tenants, int? Hidd
 [JsonConverter(typeof(JsonStringEnumConverter<OverviewRuleSet>))]
 public enum OverviewRuleSet
 {
-    /// <summary>The fixed reasons only, for a view that is not the caller's alone, such as the wall.</summary>
+    /// <summary>The fixed reasons only.</summary>
     Fixed,
 
-    /// <summary>The fixed reasons and the caller's own flag rules, for a view only the caller sees.</summary>
+    /// <summary>
+    /// The fixed reasons and the rules of the teams the caller is staff of, for a view that is not the caller's alone,
+    /// such as the wall: each person is judged by the rules of the teams that follow them.
+    /// </summary>
+    Team,
+
+    /// <summary>The fixed reasons, the teams' rules and the caller's own flag rules, for a view only the caller sees.</summary>
     All,
 }
 
@@ -94,7 +108,7 @@ public enum TenantOverviewAttentionKind
     /// <summary>A tracker is at warn urgency or above.</summary>
     TrackerDue,
 
-    /// <summary>A figure met one of the caller's own flag rules (<see cref="TenantOverviewAttention.Rule"/>).</summary>
+    /// <summary>A figure met a flag rule of the caller's or of a team of theirs (<see cref="TenantOverviewAttention.Rule"/>).</summary>
     FlagRule,
 }
 
@@ -118,8 +132,10 @@ public record TenantOverviewAttention(
 }
 
 /// <summary>
-/// A figure of a person that met one of the caller's own flag rules. A fact, stated as it is: never advice.
+/// A figure of a person that met a flag rule of the caller's or of a team of theirs. A fact, stated as it is: never
+/// advice.
 /// </summary>
+/// <param name="Team">For a <see cref="FlagRuleSource.Team"/> rule, the team that holds it.</param>
 /// <param name="Label">The fact's label, as the flag facts list gives it.</param>
 /// <param name="Unit">The unit of <paramref name="Value"/> and <paramref name="RuleValue"/>: mg/dL for glucose.</param>
 /// <param name="Range">For a glucose time figure, the target range it is measured against: consensus or own.</param>
@@ -134,6 +150,7 @@ public record TenantOverviewAttention(
 public record TenantOverviewRuleReason(
     Guid RuleId,
     FlagRuleSource Source,
+    TenantOverviewRuleTeam? Team,
     string Dataset,
     string Field,
     string Label,

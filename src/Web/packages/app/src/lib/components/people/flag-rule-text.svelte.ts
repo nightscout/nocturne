@@ -1,5 +1,6 @@
 import {
   FlagRuleComparison,
+  FlagRuleSource,
   type FlagRule,
   type TenantOverviewRuleReason,
 } from "@nocturne/api-client";
@@ -21,18 +22,27 @@ function periodText(days: number): string {
   return plural(days, ["# day", "# days"]);
 }
 
-/** What a person's figure is, and the rule it met. A fact, never advice. */
+/** What a person's figure is, and the rule it met, the viewer's own or a team's. A fact, never advice. */
 export function ruleReasonPhrase(rule: TenantOverviewRuleReason): string {
   const label = rule.label ?? "";
   const value = factValue(rule.value ?? 0, rule.unit);
   const threshold = factValue(rule.ruleValue ?? 0, rule.unit);
   const below = rule.comparison === FlagRuleComparison.Below;
+  const team = rule.source === FlagRuleSource.Team;
   if (rule.days == null) {
+    if (team)
+      return below
+        ? `${label}: ${value} (team rule: below ${threshold})`
+        : `${label}: ${value} (team rule: above ${threshold})`;
     return below
       ? `${label}: ${value} (your rule: below ${threshold})`
       : `${label}: ${value} (your rule: above ${threshold})`;
   }
   const period = periodText(rule.days);
+  if (team)
+    return below
+      ? `${label}: ${value} in the last ${period} (team rule: below ${threshold})`
+      : `${label}: ${value} in the last ${period} (team rule: above ${threshold})`;
   return below
     ? `${label}: ${value} in the last ${period} (your rule: below ${threshold})`
     : `${label}: ${value} in the last ${period} (your rule: above ${threshold})`;

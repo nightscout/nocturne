@@ -47,6 +47,19 @@ public interface ITeamRepository
     /// </summary>
     Task<IReadOnlyDictionary<Guid, Guid>> GetFirstGroupOfPeopleAsync(Guid subjectId, DateTime now, CancellationToken ct);
 
+    /// <summary>
+    /// The teams <paramref name="subjectId"/> is a member of whose end has not passed at <paramref name="now"/>, by
+    /// name, ignoring case, then id, each with the people the team follows: the sites whose access it has that has
+    /// not ended. Reads on a context pinned to the subject.
+    /// </summary>
+    /// <remarks>
+    /// These are the team's people, not the people the subject follows through the team: a site's block or decline
+    /// of the subject and the groups that narrow the subject are not applied. A team's flag rules apply to the team's
+    /// people for every staff member of the team; whether a staff member sees a person is decided by their own
+    /// access.
+    /// </remarks>
+    Task<IReadOnlyList<TeamAndItsPeople>> GetTeamsAndTheirPeopleAsync(Guid subjectId, DateTime now, CancellationToken ct);
+
     /// <summary>Renames the team and returns the name it had; null when the caller is not a manager of it.</summary>
     Task<string?> RenameAsync(Guid teamId, Guid callerSubjectId, string name, CancellationToken ct);
 

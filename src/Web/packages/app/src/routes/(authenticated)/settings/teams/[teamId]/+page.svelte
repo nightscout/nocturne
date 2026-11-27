@@ -42,6 +42,7 @@
   import TeamSitesSection from "#lib/components/teams/TeamSitesSection.svelte";
   import TeamStaffSection from "#lib/components/teams/TeamStaffSection.svelte";
   import TeamGroupsSection from "#lib/components/teams/TeamGroupsSection.svelte";
+  import TeamFlagRulesSection from "#lib/components/teams/TeamFlagRulesSection.svelte";
   import { REACH_EVERY_PERSON, REACH_THEIR_GROUPS } from "#lib/teams/staff-reach.svelte.js";
   import StaffInvitesSection from "#lib/components/teams/StaffInvitesSection.svelte";
   import StaffNarrowing from "#lib/components/teams/StaffNarrowing.svelte";
@@ -443,6 +444,10 @@
           </ConfirmDialog>
         </Card.Content>
       </Card.Root>
+    {/if}
+
+    {#if isManager || (isStaff && !ownEnd)}
+      <TeamFlagRulesSection {teamId} {isManager} />
     {/if}
 
     {#if isManager}

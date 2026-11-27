@@ -98,7 +98,7 @@
     {@const shown = detail.person}
     <section class="space-y-2 p-4" aria-label="Now">
       <PersonReading person={shown} />
-      <AttentionReasons person={shown} />
+      <AttentionReasons person={shown} linkTeams />
     </section>
     <section class="space-y-2 p-4">
       <div class="flex items-baseline justify-between gap-2">

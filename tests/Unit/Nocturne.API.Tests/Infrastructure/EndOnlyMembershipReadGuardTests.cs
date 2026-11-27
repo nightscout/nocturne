@@ -70,6 +70,8 @@ public class EndOnlyMembershipReadGuardTests
             "a team's access to a site, which the group list shows as ended, not a membership",
         [$"{Repositories}/TeamRepository.Groups.cs: TeamRepository.AccessesOutsideGroupsAsync"] =
             "a team's access to a site, which the switch's count leaves out once ended, not a membership",
+        [$"{Repositories}/TeamRepository.cs: TeamRepository.GetTeamsAndTheirPeopleAsync"] =
+            "a team's access to a site and a member's place in the team, which decide whose rules a staff member's overview judges and for whom, not a membership",
         [$"{Repositories}/TeamRepository.cs: TeamRepository.PeopleOfStaffPlaces"] =
             "a team's access to a site, which a person of a group needs to be counted on a staff member's tab or under a wall's heading, not a membership",
         [$"{Repositories}/TeamReasonChanges.cs: TeamReasonChanges.SyncAsync"] =

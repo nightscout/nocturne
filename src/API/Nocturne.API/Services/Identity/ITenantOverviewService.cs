@@ -21,12 +21,12 @@ public interface ITenantOverviewService
     /// effective permissions, <paramref name="authType"/> and <paramref name="tokenScopes"/> — the
     /// same resolution <c>MemberScopeMiddleware</c> applies per request. A tenant whose
     /// membership, or <paramref name="credentialLimitTo24Hours"/>, limits the caller to the last
-    /// 24 hours is read under that clamp. Unless <paramref name="flagRules"/> leaves them out, the subject's own flag
-    /// rules are judged for each person (<see cref="IPersonalFlagRules"/>), and their reasons merged into the person's.
+    /// 24 hours is read under that clamp. The flag rules <paramref name="rules"/> names are judged for each person
+    /// (<see cref="IViewerFlagRules"/>), and their reasons merged into the person's.
     /// </summary>
     Task<TenantOverviewResponse> GetOverviewAsync(
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
-        OverviewFlagRules flagRules,
+        OverviewRuleSet rules,
         bool credentialLimitTo24Hours = false,
         CancellationToken ct = default);
 
@@ -44,7 +44,7 @@ public interface ITenantOverviewService
     /// </summary>
     Task<TenantOverviewResponse?> GetGroupOverviewAsync(
         Guid subjectId, Guid groupId, IReadOnlySet<string> tokenScopes, AuthType authType,
-        OverviewFlagRules flagRules, bool credentialLimitTo24Hours, CancellationToken ct);
+        OverviewRuleSet rules, bool credentialLimitTo24Hours, CancellationToken ct);
 
     /// <summary>
     /// <see cref="GetReviewAsync"/> for only the people <see cref="GetGroupOverviewAsync"/> lists. Null when
@@ -75,11 +75,11 @@ public interface ITenantOverviewService
     /// <see cref="GetGlucoseReadTenantsAsync"/> returns, whether it does not exist or the caller may not
     /// read it, and then nothing of the tenant is read. A caller with no subject of its own has no
     /// memberships, so it gets null. The read runs under the same history clamp as the overview's, and
-    /// judges the subject's own flag rules as the overview does unless <paramref name="flagRules"/> leaves them out.
+    /// judges the flag rules <paramref name="rules"/> names as the overview does.
     /// </summary>
     Task<TenantPersonDetail?> GetPersonAsync(
         Guid? subjectId, Guid tenantId, IReadOnlySet<string> tokenScopes, AuthType authType,
-        OverviewFlagRules flagRules,
+        OverviewRuleSet rules,
         bool credentialLimitTo24Hours = false,
         CancellationToken ct = default);
 

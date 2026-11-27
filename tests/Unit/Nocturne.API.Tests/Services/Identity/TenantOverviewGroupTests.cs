@@ -56,7 +56,7 @@ public class TenantOverviewGroupTests
         InGroup(cy, zed, bo, noGlucose, inactive, stranger);
 
         var group = await Service().GetGroupOverviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, CancellationToken.None);
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, false, CancellationToken.None);
 
         group.Should().NotBeNull();
         _errors.Errors.Should().BeEmpty();
@@ -65,7 +65,7 @@ public class TenantOverviewGroupTests
         group.Tenants.Skip(1).Should().OnlyContain(t => t.Attention.Count == 0);
         group.HiddenCount.Should().Be(3);
 
-        var everyone = await Service().GetOverviewAsync(_subject, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+        var everyone = await Service().GetOverviewAsync(_subject, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
         everyone.Tenants.Select(t => t.Slug).Should().Equal("zed", "bo", "cy", "dee");
         everyone.HiddenCount.Should().BeNull();
     }
@@ -79,7 +79,7 @@ public class TenantOverviewGroupTests
         InGroup(read, narrowed, stranger);
 
         var group = await Service().GetGroupOverviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, CancellationToken.None);
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, false, CancellationToken.None);
         var review = await Service().GetGroupReviewAsync(
             _subject, _group, FullTokenScopes, AuthType.SessionCookie, 14, false, CancellationToken.None);
 
@@ -100,7 +100,7 @@ public class TenantOverviewGroupTests
             .ReturnsAsync((IReadOnlySet<Guid>?)null);
 
         (await Service().GetGroupOverviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, CancellationToken.None)).Should().BeNull();
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, false, CancellationToken.None)).Should().BeNull();
         (await Service().GetGroupReviewAsync(
             _subject, _group, FullTokenScopes, AuthType.SessionCookie, 14, false, CancellationToken.None)).Should().BeNull();
     }
@@ -112,7 +112,7 @@ public class TenantOverviewGroupTests
         InGroup(Guid.NewGuid(), Guid.NewGuid());
 
         var group = await Service().GetGroupOverviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, CancellationToken.None);
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, false, CancellationToken.None);
 
         group!.Tenants.Should().BeEmpty();
         group.HiddenCount.Should().Be(2);
@@ -128,29 +128,31 @@ public class TenantOverviewGroupTests
             .ReturnsAsync(new Dictionary<Guid, Guid> { [amy] = birch, [Guid.NewGuid()] = Guid.NewGuid() });
         InGroup(amy, bo);
 
-        var everyone = await Service().GetOverviewAsync(_subject, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge);
+        var everyone = await Service().GetOverviewAsync(_subject, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
         everyone.Tenants.ToDictionary(t => t.Slug, t => t.FirstGroupId).Should().BeEquivalentTo(
             new Dictionary<string, Guid?> { ["amy"] = birch, ["bo"] = null });
 
         var group = await Service().GetGroupOverviewAsync(
-            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewFlagRules.Judge, false, CancellationToken.None);
+            _subject, _group, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, false, CancellationToken.None);
         group!.Tenants.Should().HaveCount(2).And.OnlyContain(t => t.FirstGroupId == null);
     }
 
     [Theory]
-    [InlineData(OverviewFlagRules.LeaveOut)]
-    [InlineData(OverviewFlagRules.Judge)]
-    public async Task A_group_read_that_leaves_the_callers_rules_out_never_loads_them(OverviewFlagRules flagRules)
+    [InlineData(OverviewRuleSet.Fixed)]
+    [InlineData(OverviewRuleSet.Team)]
+    [InlineData(OverviewRuleSet.All)]
+    public async Task A_group_read_of_the_fixed_set_never_loads_rules_and_any_other_passes_its_rules_on(OverviewRuleSet flagRules)
     {
         var ruled = Reading(SeedMembership(_options, _subject, "ruled", GlucoseReader));
         InGroup(ruled);
-        _rules.Reasons[ruled] = [RuleReason(NotificationUrgency.Hazard)];
+        _rules.Reasons[ruled] = [RuleReason(NotificationUrgency.Hazard, null)];
 
         var group = await Service().GetGroupOverviewAsync(
             _subject, _group, FullTokenScopes, AuthType.SessionCookie, flagRules, false, CancellationToken.None);
 
-        var judged = flagRules == OverviewFlagRules.Judge;
+        var judged = flagRules != OverviewRuleSet.Fixed;
         _rules.Begun.Should().Be(judged ? 1 : 0);
+        _rules.RuleSets.Should().Equal(judged ? [flagRules] : []);
         group!.Tenants.Single().Attention.Any(a => a.Kind == TenantOverviewAttentionKind.FlagRule).Should().Be(judged);
     }
 

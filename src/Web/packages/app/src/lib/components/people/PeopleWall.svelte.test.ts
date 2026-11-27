@@ -159,13 +159,45 @@ afterEach(() => {
 });
 
 describe("People wall display", () => {
-  it("reads the overview without the viewer's own flag rules, since the room sees it", async () => {
+  it("reads the overview with its teams' rules and without the viewer's own, since the room sees it", async () => {
     overview.data = { tenants: [named(1)] };
     render(PeopleWall);
     await expect.element(page.getByText("Person 001")).toBeVisible();
 
     expect(refreshes.reads.length).toBeGreaterThan(0);
-    expect(refreshes.reads).toEqual(refreshes.reads.map(() => ({ rules: OverviewRuleSet.Fixed })));
+    expect(refreshes.reads).toEqual(refreshes.reads.map(() => ({ rules: OverviewRuleSet.Team })));
+  });
+
+  it("states the fixed rules alone when no team's rules applied", async () => {
+    overview.data = { tenants: [named(1)], ruleTeams: [] };
+    render(PeopleWall);
+
+    await expect.element(page.getByTestId("wall-rules")).toHaveTextContent("Flagged by Nocturne's fixed rules.");
+  });
+
+  it("names the one team whose rules applied", async () => {
+    overview.data = { tenants: [named(1)], ruleTeams: [{ id: birch.id, name: "Ward 4" }] };
+    render(PeopleWall);
+
+    await expect
+      .element(page.getByTestId("wall-rules"))
+      .toHaveTextContent("Flagged by Nocturne's fixed rules and Ward 4's rules.");
+  });
+
+  it("counts and names every team whose rules applied, in the order the API gives", async () => {
+    overview.data = {
+      tenants: [named(1)],
+      ruleTeams: [
+        { id: birch.id, name: "Ward 4" },
+        { id: oak.id, name: "Ward 5" },
+        { id: "0193b6a0-0000-7000-8000-0000000000c3", name: "Clinic" },
+      ],
+    };
+    render(PeopleWall);
+
+    await expect
+      .element(page.getByTestId("wall-rules"))
+      .toHaveTextContent("Flagged by Nocturne's fixed rules and the rules of 3 teams: Ward 4, Ward 5, and Clinic.");
   });
 
   describe("leaving", () => {
@@ -830,10 +862,10 @@ describe("a group's wall", () => {
     render(PeopleWall);
     await expect.element(page.getByText("Person 003")).toBeVisible();
 
-    expect(refreshes.reads).toContainEqual({ group: birch.id, rules: OverviewRuleSet.Fixed });
+    expect(refreshes.reads).toContainEqual({ group: birch.id, rules: OverviewRuleSet.Team });
     expect(
       refreshes.reads.filter(
-        (read) => JSON.stringify(read) !== JSON.stringify({ group: birch.id, rules: OverviewRuleSet.Fixed })
+        (read) => JSON.stringify(read) !== JSON.stringify({ group: birch.id, rules: OverviewRuleSet.Team })
       )
     ).toEqual([]);
     expect(namesIn("wall-band")).toEqual(["Person 001"]);
@@ -847,7 +879,7 @@ describe("a group's wall", () => {
     expect(navigation.address.searchParams.get("group")).toBe(birch.id);
   });
 
-  it("reads a group without the viewer's own flag rules, as the everyone wall does", async () => {
+  it("reads a group with its teams' rules and without the viewer's own, as the everyone wall does", async () => {
     openAt(`?group=${birch.id}`);
     overview.groups = [birch];
     overview.groupReads[birch.id!] = { tenants: [named(2)], hiddenCount: 0 };
@@ -855,7 +887,7 @@ describe("a group's wall", () => {
     await expect.element(page.getByText("Person 002")).toBeVisible();
 
     expect(refreshes.reads.length).toBeGreaterThan(0);
-    expect(refreshes.reads).toEqual(refreshes.reads.map(() => ({ group: birch.id, rules: OverviewRuleSet.Fixed })));
+    expect(refreshes.reads).toEqual(refreshes.reads.map(() => ({ group: birch.id, rules: OverviewRuleSet.Team })));
   });
 
   it("lists the same people whatever else the address holds", async () => {
@@ -865,10 +897,10 @@ describe("a group's wall", () => {
     render(PeopleWall);
     await expect.element(page.getByText("Person 003")).toBeVisible();
 
-    expect(refreshes.reads).toContainEqual({ group: birch.id, rules: OverviewRuleSet.Fixed });
+    expect(refreshes.reads).toContainEqual({ group: birch.id, rules: OverviewRuleSet.Team });
     expect(
       refreshes.reads.filter(
-        (read) => JSON.stringify(read) !== JSON.stringify({ group: birch.id, rules: OverviewRuleSet.Fixed })
+        (read) => JSON.stringify(read) !== JSON.stringify({ group: birch.id, rules: OverviewRuleSet.Team })
       )
     ).toEqual([]);
     expect(columnRows().flat()).toEqual(["Person 002", "Person 003"]);
@@ -1115,6 +1147,23 @@ describe("headings on the wall of everyone", () => {
 });
 
 describe("the overview through its generated schema", () => {
+  it("reads the teams whose rules applied", async () => {
+    const response = TenantOverviewResponseSchema.parse({
+      tenants: [named(1, { tenantId: "0193b6a0-0000-7000-8000-0000000000a1" })],
+      hiddenCount: null,
+      peopleWithRulesPending: 0,
+      ruleTeams: [{ id: "0193b6a0-0000-7000-8000-0000000000b1", name: "Ward 4" }],
+    });
+    expect(response.ruleTeams).toEqual([{ id: "0193b6a0-0000-7000-8000-0000000000b1", name: "Ward 4" }]);
+
+    overview.data = response;
+    render(PeopleWall);
+
+    await expect
+      .element(page.getByTestId("wall-rules"))
+      .toHaveTextContent("Flagged by Nocturne's fixed rules and Ward 4's rules.");
+  });
+
   it("reads a person in none of the viewer's groups as under the last heading", async () => {
     const response = TenantOverviewResponseSchema.parse({
       tenants: [
