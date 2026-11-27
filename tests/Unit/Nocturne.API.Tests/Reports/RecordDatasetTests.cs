@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Reports;
@@ -21,6 +22,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Reports;
@@ -64,6 +66,9 @@ public class RecordDatasetTests
         public readonly Mock<IChartDataService> Chart = new();
         public readonly Mock<ILoopAnalysisService> Loop = new();
         public readonly Mock<IStateSpanRepository> StateSpans = new();
+        public readonly Mock<IActiveProfileResolver> Profiles = new();
+        public readonly Mock<ITargetRangeScheduleRepository> TargetRanges = new();
+        public readonly Mock<ITrackerRepository> Trackers = new();
 
         public Harness(string? zone = "UTC")
         {
@@ -105,10 +110,12 @@ public class RecordDatasetTests
                 .AddSingleton(Boluses.Object).AddSingleton(Carbs.Object).AddSingleton(Temps.Object).AddSingleton(Injections.Object)
                 .AddSingleton(Notes.Object).AddSingleton(Spans.Object).AddSingleton(Pump.Object).AddSingleton(Uploader.Object)
                 .AddSingleton(Age.Object).AddSingleton(Chart.Object).AddSingleton(Loop.Object).AddSingleton(StateSpans.Object)
+                .AddSingleton(Profiles.Object).AddSingleton(TargetRanges.Object).AddSingleton(Trackers.Object)
                 .AddSingleton(new TenantClockResolver(Therapy.Object, new CategoryReadContext(), new ShareClockDouble(Therapy.Object), NullLogger<TenantClockResolver>.Instance))
                 .AddSingleton<IStatisticsService>(new StatisticsService(new FixedTime(Now)))
                 .AddSingleton<TimeProvider>(new FixedTime(Now))
                 .AddSingleton<IHttpContextAccessor>(new HttpContextAccessor { HttpContext = new DefaultHttpContext() })
+                .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
                 .BuildServiceProvider();
             var readLog = new ReportReadLog();
             return (new ReportSpecRunner(ReportSpecValidatorTests.Registry, new FixedTime(Now)),
@@ -137,6 +144,37 @@ public class RecordDatasetTests
             Injections.Verify(i => i.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(),
                 It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
         }
+
+        /// <summary>The active profile's target range schedule: one entry per (time, low, high), in mg/dL.</summary>
+        public void WithTargetRange(params (string Time, double Low, double High)[] entries)
+        {
+            Profiles.Setup(p => p.GetProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())).ReturnsAsync("Default");
+            TargetRanges.Setup(t => t.GetActiveAtAsync("Default", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new TargetRangeSchedule
+                {
+                    ProfileName = "Default",
+                    Entries = [.. entries.Select(e => new TargetRangeEntry { Time = e.Time, Low = e.Low, High = e.High })],
+                });
+        }
+
+        /// <summary>Range analytics over the same repositories, as <c>GET /api/v4/statistics/range-analytics</c> reads them.</summary>
+        public RangeAnalyticsReader RangeAnalytics()
+        {
+            var time = new FixedTime(Now);
+            var statistics = new StatisticsService(time);
+            Glucose.Setup(g => g.CountByPatientDeviceAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
+            return new RangeAnalyticsReader(
+                Glucose.Object, Boluses.Object, Carbs.Object, Mock.Of<IPatientDeviceRepository>(), statistics,
+                new TenantClockResolver(Therapy.Object, new CategoryReadContext(), new ShareClockDouble(Therapy.Object), NullLogger<TenantClockResolver>.Instance),
+                Profiles.Object, TargetRanges.Object,
+                new InsulinDeliveryReader(Boluses.Object, Carbs.Object, Temps.Object, Injections.Object, Mock.Of<IStateSpanRepository>(),
+                    Mock.Of<IBasalSegmentService>(), Therapy.Object, statistics, time),
+                time);
+        }
+
+        /// <summary>How many times the active profile or a target range schedule was read.</summary>
+        public int ScheduleReads => Profiles.Invocations.Count + TargetRanges.Invocations.Count;
 
         /// <summary>How many times the glucose readings were read from the repository.</summary>
         public int GlucoseReads => Glucose.Invocations.Count(i => i.Method.Name == nameof(ISensorGlucoseRepository.GetForAnalyticsAsync));
@@ -775,8 +813,112 @@ public class RecordDatasetTests
 
         harness.VerifyNoInsulinRead();
         panel.Fields.Select(f => f.Name).Should().NotContain(GlucoseStatisticsDataset.InsulinFields);
-        panel.Summary.Should().EndWith("Fields omitted: tdd, basalPercent, carbsPerDay (scope not granted).");
+        panel.Summary.Should().EndWith("Fields omitted: tdd, basalPercent, carbsPerDay, "
+            + "timeInOwnRange, timeBelowOwnRange, timeAboveOwnRange, ownRangeLow, ownRangeHigh, ownRangeVaries (scope not granted).");
         readLog.Datasets.Should().Equal("glucose");
+    }
+
+    // ---- glucose_statistics own range ----
+
+    private static string OwnRangeSpec(params string[] columns)
+    {
+        var bound = JsonSerializer.Serialize(columns);
+        return $$"""
+            { "version": 1, "range": { "hours": 336 }, "panels": [ { "dataset": { "name": "glucose_statistics" }, "kind": "stat_tiles",
+              "bindings": { "columns": {{bound}} } } ] }
+            """;
+    }
+
+    [Fact]
+    public async Task Statistics_without_an_own_range_column_read_no_target_range()
+    {
+        var harness = new Harness();
+        harness.WithTargetRange(("00:00", 80, 160));
+        var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead, Scope.TherapyRead);
+
+        var panel = (await runner.RunAsync(Spec(OwnRangeSpec("timeBelow", "cv")), context, CancellationToken.None)).Panels.Single();
+
+        panel.Rows.Single()["timeBelow"].Should().NotBeNull();
+        harness.ScheduleReads.Should().Be(0);
+        panel.Summary.Should().NotContain("Own target range");
+        readLog.Datasets.Should().Equal("glucose");
+    }
+
+    [Fact]
+    public async Task Own_range_figures_equal_range_analytics_personal_range_for_a_schedule_that_varies()
+    {
+        var harness = new Harness();
+        harness.WithTargetRange(("00:00", 80, 160), ("08:00", 90, 180));
+        var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead, Scope.TherapyRead);
+
+        var row = (await runner.RunAsync(Spec(OwnRangeSpec(GlucoseStatisticsDataset.OwnRangeFields.ToArray())), context, CancellationToken.None))
+            .Panels.Single().Rows.Single();
+        var personal = (await harness.RangeAnalytics().ReadAsync(
+            Now.AddDays(-14).UtcDateTime, Now.UtcDateTime, DiabetesPopulation.Type1Adult, null, CancellationToken.None)).PersonalRange!;
+
+        personal.InRangePercent.Should().BePositive();
+        personal.BelowRangePercent.Should().BePositive();
+        row["timeInOwnRange"].Should().Be(ScaledRounding.Round(personal.InRangePercent, 1));
+        row["timeBelowOwnRange"].Should().Be(ScaledRounding.Round(personal.BelowRangePercent, 1));
+        row["timeAboveOwnRange"].Should().Be(ScaledRounding.Round(personal.AboveRangePercent, 1));
+        (row["ownRangeLow"], row["ownRangeHigh"], row["ownRangeVaries"]).Should().Be((80.0, 180.0, "yes"));
+        readLog.Datasets.Should().Equal("glucose", "profiles");
+    }
+
+    [Fact]
+    public async Task Own_range_fields_need_therapy_read_and_without_it_are_omitted_and_no_schedule_is_read()
+    {
+        var harness = new Harness();
+        harness.WithTargetRange(("00:00", 80, 160));
+        var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead);
+
+        var panel = (await runner.RunAsync(Spec(OwnRangeSpec("timeBelow", "timeBelowOwnRange", "ownRangeLow")), context, CancellationToken.None))
+            .Panels.Single();
+
+        panel.Fields.Select(f => f.Name).Should().Equal("timeBelow");
+        panel.Omitted.Should().Contain(new ReportOmittedField("timeBelowOwnRange", Scope.TherapyRead))
+            .And.Contain(new ReportOmittedField("ownRangeLow", Scope.TherapyRead));
+        harness.ScheduleReads.Should().Be(0);
+        readLog.Datasets.Should().Equal("glucose");
+    }
+
+    [Fact]
+    public async Task A_failed_target_range_read_empties_only_the_own_range_fields()
+    {
+        var harness = new Harness();
+        harness.Profiles.Setup(p => p.GetProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())).ReturnsAsync("Default");
+        harness.TargetRanges.Setup(t => t.GetActiveAtAsync("Default", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NpgsqlException("connection refused"));
+        var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead, Scope.TherapyRead);
+
+        var panel = (await runner.RunAsync(Spec(OwnRangeSpec("timeBelow", "cv", "timeBelowOwnRange", "ownRangeLow")), context, CancellationToken.None))
+            .Panels.Single();
+
+        panel.Status.Should().Be(ReportPanelStatus.Ok);
+        var row = panel.Rows.Single();
+        row["timeBelow"].Should().NotBeNull();
+        row["cv"].Should().NotBeNull();
+        (row["timeBelowOwnRange"], row["ownRangeLow"]).Should().Be(((object?)null, (object?)null));
+        readLog.Datasets.Should().Equal("glucose");
+    }
+
+    [Fact]
+    public async Task A_failed_glucose_read_ends_only_once_the_target_range_read_it_started_has_ended()
+    {
+        var harness = new Harness();
+        var profile = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.Profiles.Setup(p => p.GetProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())).Returns(profile.Task);
+        harness.Glucose.Setup(g => g.GetForAnalyticsAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>(), It.IsAny<GlucoseStreams>()))
+            .ThrowsAsync(new NpgsqlException("connection refused"));
+        var (runner, context, _) = harness.Arrange(Scope.GlucoseRead, Scope.TherapyRead);
+
+        var run = runner.RunAsync(Spec(OwnRangeSpec("timeBelowOwnRange")), context, CancellationToken.None);
+
+        run.IsCompleted.Should().BeFalse("the scope the target range is read in may be disposed once the run ends");
+        profile.SetResult("Default");
+        (await run).Panels.Single().Status.Should().Be(ReportPanelStatus.Failed);
+        harness.TargetRanges.Verify(t => t.GetActiveAtAsync("Default", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -795,5 +937,60 @@ public class RecordDatasetTests
         panel.Rows.Single()["carbsPerDay"].Should().Be(70.0);
         panel.Summary.Should().Contain("Insulin per day 14 U, 0% of it basal. Carbs per day 70 g.");
         readLog.Datasets.Should().Equal("glucose", "treatments");
+    }
+
+    // ---- current_status ----
+
+    private static TrackerInstance Tracker(TrackerCategory category, int lifespanHours, double ageHours) => new()
+    {
+        Id = Guid.NewGuid(),
+        Definition = TrackerDefinition.Restore(Guid.NewGuid(), category.ToString(), category,
+            lifespanHours: lifespanHours, dashboardVisibility: DashboardVisibility.Off),
+        StartedAt = Now.UtcDateTime.AddHours(-ageHours),
+    };
+
+    [Fact]
+    public async Task Current_status_reads_the_hours_since_the_latest_reading_and_the_soonest_sensor_and_site_trackers()
+    {
+        var harness = new Harness();
+        harness.Canonical.Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SensorGlucose { Timestamp = Now.UtcDateTime.AddMinutes(-95), Mgdl = 120 });
+        harness.Trackers.Setup(t => t.GetActiveInstancesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            Tracker(TrackerCategory.Sensor, 240, 200),
+            Tracker(TrackerCategory.Sensor, 240, 250),
+            Tracker(TrackerCategory.Pod, 72, 30),
+            Tracker(TrackerCategory.Reservoir, 72, 70),
+        ]);
+        var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead, Scope.AlertsRead);
+
+        var panel = (await runner.RunAsync(Spec("""
+            { "version": 1, "panels": [ { "dataset": { "name": "current_status" }, "kind": "stat_tiles" } ] }
+            """), context, CancellationToken.None)).Panels.Single();
+
+        var row = panel.Rows.Single();
+        row["hoursSinceReading"].Should().Be(1.6);
+        row["sensorHoursLeft"].Should().Be(-10.0, "the soonest sensor, past due, though the dashboard hides it");
+        row["siteHoursLeft"].Should().Be(42.0);
+        panel.Summary.Should().Contain("Sensor hours left: -10.").And.Contain("Site hours left: 42.");
+        readLog.Datasets.Should().Equal("glucose", "trackers");
+    }
+
+    [Fact]
+    public async Task Current_status_leaves_the_trackers_out_without_alerts_read_and_has_no_value_without_a_reading()
+    {
+        var harness = new Harness();
+        var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead);
+
+        var panel = (await runner.RunAsync(Spec("""
+            { "version": 1, "panels": [ { "dataset": { "name": "current_status" }, "kind": "stat_tiles" } ] }
+            """), context, CancellationToken.None)).Panels.Single();
+
+        var row = panel.Rows.Single();
+        row["hoursSinceReading"].Should().BeNull();
+        row.Should().NotContainKey("sensorHoursLeft").And.NotContainKey("siteHoursLeft");
+        panel.Omitted.Select(o => o.Field).Should().Equal("sensorHoursLeft", "siteHoursLeft");
+        harness.Trackers.Verify(t => t.GetActiveInstancesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        readLog.Datasets.Should().BeEmpty();
     }
 }

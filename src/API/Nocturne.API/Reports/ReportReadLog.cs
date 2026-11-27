@@ -18,4 +18,17 @@ internal sealed class ReportReadLog
             _datasets.Add(dataset);
         RecordCount += records;
     }
+
+    /// <summary>The reads of <paramref name="logs"/> as one log, its categories in the order they were first read.</summary>
+    public static ReportReadLog Of(IEnumerable<ReportReadLog> logs)
+    {
+        var all = new ReportReadLog();
+        foreach (var log in logs)
+        {
+            foreach (var dataset in log.Datasets)
+                all.Record(dataset, 0);
+            all.RecordCount += log.RecordCount;
+        }
+        return all;
+    }
 }

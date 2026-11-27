@@ -1451,8 +1451,11 @@ public class DataSufficiencyAssessment
     /// <summary>Data completeness percentage</summary>
     public double CompletenessPercentage { get; set; }
 
+    /// <summary>The completeness, as a percent, below which a period holds too little data for a valid report.</summary>
+    public const double MinimumCompleteness = 70;
+
     /// <summary>Minimum required completeness for valid report (typically 70%)</summary>
-    public double MinimumRequiredCompleteness { get; set; } = 70;
+    public double MinimumRequiredCompleteness { get; set; } = MinimumCompleteness;
 
     /// <summary>Average readings per day, over the days of <see cref="DaysWithData"/></summary>
     public double AverageReadingsPerDay { get; set; }

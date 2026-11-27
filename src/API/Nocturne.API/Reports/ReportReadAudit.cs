@@ -24,31 +24,43 @@ internal static class ReportReadAudit
     internal const string Filtered = "[filtered]";
 
     /// <summary>Enqueues the row <paramref name="build"/> makes when the request's tenant audits reads.</summary>
-    internal static async Task WriteAsync(
+    internal static Task WriteAsync(
         IServiceProvider services,
         HttpContext httpContext,
         string what,
         Func<Guid, ReadAccessLogEntity> build,
+        CancellationToken cancellationToken) =>
+        httpContext.GetTenantContext() is { } tenant
+            ? WriteAsync(services, tenant.TenantId, what, build, cancellationToken)
+            : Task.CompletedTask;
+
+    /// <summary>
+    /// Enqueues the row <paramref name="build"/> makes when <paramref name="tenantId"/> audits reads, and says whether it
+    /// did: not when the tenant does not audit reads or its setting could not be read.
+    /// </summary>
+    internal static async Task<bool> WriteAsync(
+        IServiceProvider services,
+        Guid tenantId,
+        string what,
+        Func<Guid, ReadAccessLogEntity> build,
         CancellationToken cancellationToken)
     {
-        if (httpContext.GetTenantContext() is not { } tenant)
-            return;
-
         try
         {
             var config = await services.GetRequiredService<ITenantAuditConfigCache>()
-                .GetConfigAsync(tenant.TenantId, cancellationToken);
+                .GetConfigAsync(tenantId, cancellationToken);
             if (!config.ReadAuditEnabled)
-                return;
+                return false;
         }
         catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException or TimeoutException)
         {
             services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(ReportReadAudit))
                 .LogWarning(ex, "Could not read the read-audit setting; the report read {What} is not audited", what);
-            return;
+            return false;
         }
 
-        services.GetRequiredService<ReadAccessLogWriter>().Enqueue(build(tenant.TenantId));
+        services.GetRequiredService<ReadAccessLogWriter>().Enqueue(build(tenantId));
+        return true;
     }
 
     /// <summary>A read-audit row for a report read: the categories and count <paramref name="readLog"/> holds.</summary>
@@ -59,10 +71,10 @@ internal static class ReportReadAudit
         int statusCode,
         ReportReadLog readLog,
         IAuditContext audit,
-        HttpContext httpContext,
+        HttpContext? httpContext,
         DateTime now)
     {
-        var userAgent = httpContext.Request.Headers.UserAgent.ToString();
+        var userAgent = httpContext?.Request.Headers.UserAgent.ToString();
 
         return new ReadAccessLogEntity
         {
@@ -72,7 +84,7 @@ internal static class ReportReadAudit
             ActorName = audit.SubjectName,
             AuthType = audit.AuthType,
             TokenId = audit.TokenId,
-            CredentialFingerprint = httpContext.GetAuthContext()?.CredentialFingerprint,
+            CredentialFingerprint = httpContext?.GetAuthContext()?.CredentialFingerprint,
             IpAddress = audit.IpAddress,
             UserAgent = string.IsNullOrEmpty(userAgent) ? null : userAgent,
             Endpoint = endpoint,

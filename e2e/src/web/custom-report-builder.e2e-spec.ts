@@ -68,7 +68,7 @@ test.describe("custom report builder", () => {
     await expect(page.getByTestId("spec-errors")).toHaveCount(0);
 
     const figures = blocksOf(page).first().getByRole("region", { name: "Key figures" });
-    await expect(figures.getByText("Time in range", { exact: true }).locator("..")).toContainText("100");
+    await expect(figures.getByText("Time in consensus range", { exact: true }).locator("..")).toContainText("100");
     await page.getByLabel("Report title").fill("Two weeks of glucose");
     await page.getByTestId("save-trigger").click();
     await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Builder e2e");

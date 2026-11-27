@@ -19,7 +19,7 @@ public class ReportSpecValidatorTests
         new DeviceEventsDataset(), new SystemEventsDataset(), new TrackersDataset(), new SleepStagesDataset(), new SleepNightsDataset(),
         new SleepBiometricsDataset(), new LabHbA1cDataset(), new BodyWeightDataset(), new AlertExcursionsDataset(),
         new AlertInstancesDataset(), new DndWindowsDataset(), new SensorDetailDataset(), new MeterGlucoseDataset(),
-        new CompressionLowsDataset(), new GlucoseEpisodesDataset(),
+        new CompressionLowsDataset(), new GlucoseEpisodesDataset(), new CurrentStatusDataset(),
     ]);
 
     private static readonly ReportSpecValidator Validator = new(Registry, TimeProvider.System);

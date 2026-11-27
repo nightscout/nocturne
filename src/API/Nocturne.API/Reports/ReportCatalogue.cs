@@ -21,6 +21,7 @@ namespace Nocturne.API.Reports;
 /// <param name="MaxRangeHours">The longest range any dataset covers, in hours.</param>
 /// <param name="MaxNameLength">The longest name a saved report may have.</param>
 /// <param name="MaxGridMinutes">The coarsest grid a chart may give, in minutes.</param>
+/// <param name="FlagFacts">The dataset fields a flag rule may judge, in dataset order.</param>
 public sealed record CustomReportCatalogue(
     [property: Required] int MaxPanels,
     [property: Required] int MaxTracks,
@@ -35,7 +36,23 @@ public sealed record CustomReportCatalogue(
     [property: Required] IReadOnlyList<CustomReportMark> Marks,
     [property: Required] IReadOnlyList<CustomReportOp> Ops,
     [property: Required] IReadOnlyList<CustomReportDataset> Datasets,
-    [property: Required] CustomReportWorkspace Workspace);
+    [property: Required] CustomReportWorkspace Workspace,
+    [property: Required] IReadOnlyList<CustomReportFlagFact> FlagFacts);
+
+/// <summary>A dataset field a flag rule may judge: one number per person, over a range or as it is now.</summary>
+/// <param name="Dataset">The name a condition gives the dataset.</param>
+/// <param name="Field">The field. A glucose field is in mg/dL, the unit a rule's value is always in.</param>
+/// <param name="Kind">period: over the last N days, kept for up to 15 minutes; live: as it is now, read every time, with no range.</param>
+/// <param name="OwnRange">Measured against each person's own target range, whose bound the judgement states.</param>
+/// <param name="Scopes">Every scope a caller needs to judge it for a person: the dataset's, the field's own, and reports.read for a period fact.</param>
+/// <param name="MaxDays">The longest range a condition on it takes, in days; null for a live fact.</param>
+public sealed record CustomReportFlagFact(
+    [property: Required] string Dataset,
+    [property: Required] CustomReportField Field,
+    [property: Required] string Kind,
+    [property: Required] bool OwnRange,
+    [property: Required] IReadOnlyList<string> Scopes,
+    int? MaxDays);
 
 /// <summary>A kind of panel, with its words.</summary>
 public sealed record CustomReportPanelKind([property: Required] string Name, [property: Required] string Label);
@@ -249,7 +266,14 @@ internal sealed class ReportCatalogue(
             [.. ReportMarks.Slots(m).Select(s => new CustomReportMarkSlot(s.Key, s.Label, s.Input, s.Accepts, s.Counts, s.Required))]))],
         [.. ReportDerivedOps.All.Select(Op)],
         [.. registry.All.Select(dataset => Describe(dataset, grantedScopes, useMmol))],
-        ReportWorkspace.Build(registry, grantedScopes));
+        ReportWorkspace.Build(registry, grantedScopes),
+        [.. registry.All.SelectMany(dataset => FlagFacts.Of(dataset).Select(field => new CustomReportFlagFact(
+            dataset.Name,
+            Field(field.ResolveUnit(useMmol: false), dataset, grantedScopes),
+            ReportWire.Name(field.FlagFact!.Kind),
+            field.FlagFact.OwnRange,
+            FlagFacts.Scopes(dataset, field),
+            field.FlagFact.Kind == ReportFlagFactKind.Period ? FlagFacts.MaxDays : null)))]);
 
     internal static string PanelKindLabel(ReportPanelKind kind) => kind switch
     {
@@ -292,12 +316,7 @@ internal sealed class ReportCatalogue(
             dataset.RequiredScope,
             permitted,
             ReportParametersSchema.For(dataset.ParametersType),
-            [.. dataset.Fields.Select(f => f.ResolveUnit(useMmol)).Select(f => new CustomReportField(
-                f.Name, f.Label, ReportWire.Name(f.Kind), f.Unit, f.Description, f.Scope,
-                permitted && (f.Scope is null || Scope.Satisfies(granted, f.Scope)),
-                f.Aggregate is { } aggregate ? ReportWire.Name(aggregate) : null,
-                f.Marker is { } marker ? ReportWire.Name(marker) : null,
-                f.Setting != ReportSetting.None))],
+            [.. dataset.Fields.Select(f => Field(f.ResolveUnit(useMmol), dataset, granted))],
             [.. dataset.Marks.SelectMany(ReportMarks.XKinds).Distinct()
                 .Where(k => chartFields.Any(f => f.AxisKind == k)).Select(ReportWire.Name)],
             [.. dataset.PanelKinds.Select(k => new CustomReportDatasetPanelKind(
@@ -311,6 +330,13 @@ internal sealed class ReportCatalogue(
             dataset.SeriesParameter,
             dataset.SeriesField is null ? null : dataset.SeriesCount((ReportDatasetParameters)Activator.CreateInstance(dataset.ParametersType)!));
     }
+
+    private static CustomReportField Field(ReportField f, IReportDataset dataset, IReadOnlySet<string> granted) => new(
+        f.Name, f.Label, ReportWire.Name(f.Kind), f.Unit, f.Description, f.Scope,
+        Scope.Satisfies(granted, dataset.RequiredScope) && (f.Scope is null || Scope.Satisfies(granted, f.Scope)),
+        f.Aggregate is { } aggregate ? ReportWire.Name(aggregate) : null,
+        f.Marker is { } marker ? ReportWire.Name(marker) : null,
+        f.Setting != ReportSetting.None);
 
     /// <summary>The bindings a new layer of <paramref name="dataset"/> drawn as <paramref name="mark"/> starts with, normalised by the validator.</summary>
     internal CustomReportLayerBindings DefaultBindings(IReportDataset dataset, ReportMark mark, bool useMmol)

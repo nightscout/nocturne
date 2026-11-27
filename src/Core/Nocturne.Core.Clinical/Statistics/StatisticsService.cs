@@ -557,7 +557,7 @@ public partial class StatisticsService(TimeProvider timeProvider) : IStatisticsS
             }
         }
 
-        var isSufficient = completeness >= 70;
+        var isSufficient = completeness >= DataSufficiencyAssessment.MinimumCompleteness;
 
         string warningMessage = "";
         string recommendation = "";

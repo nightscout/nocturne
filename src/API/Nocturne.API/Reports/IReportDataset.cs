@@ -126,6 +126,13 @@ internal sealed record ReportField(
     /// </summary>
     public string? Texture { get; init; }
 
+    /// <summary>
+    /// Whether a flag rule may judge the field, and how; null for a field that is not one number per person in the
+    /// dataset's stat tiles row. Set on the field in <see cref="IReportDataset.FieldsFor"/> of
+    /// <see cref="ReportPanelKind.StatTiles"/>, which is where the catalogue and the evaluator look for it.
+    /// </summary>
+    public ReportFlagFact? FlagFact { get; init; }
+
     public bool IsNumber => Kind is ReportFieldKind.Number or ReportFieldKind.Percent;
 
     /// <summary>The horizontal axis a field of this kind lays a chart along, or null for a value field.</summary>
@@ -146,6 +153,43 @@ internal sealed record ReportField(
 
     public ReportField ResolveUnit(bool useMmol) =>
         InGlucoseUnit ? this with { Unit = (useMmol ? "mmol/L" : "mg/dL") + Unit![GlucoseUnit.Length..] } : this;
+}
+
+/// <summary>How fresh a flag fact is read: over a range and kept for a while, or as it is now on every read.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReportFlagFactKind>))]
+internal enum ReportFlagFactKind
+{
+    /// <summary>A figure over the last N days, kept per person, fact and range for up to fifteen minutes.</summary>
+    [JsonStringEnumMemberName("period")]
+    Period,
+
+    /// <summary>A value as it is now, read on every judgement; it takes no range.</summary>
+    [JsonStringEnumMemberName("live")]
+    Live,
+}
+
+/// <summary>What makes a field a flag fact.</summary>
+/// <param name="Kind">Whether it is judged over a range of days (period) or as it is now (live).</param>
+/// <param name="OwnRange">The figure is measured against the person's own target range, whose bound the judgement states.</param>
+/// <param name="CoverageField">
+/// The field of the same row that says how much of the range the data covers, as a percent; a judgement below
+/// <see cref="Core.Models.DataSufficiencyAssessment.MinimumCompleteness"/> of it says there was too little data.
+/// Null for a fact with no coverage.
+/// </param>
+internal sealed record ReportFlagFact(ReportFlagFactKind Kind, bool OwnRange, string? CoverageField)
+{
+    /// <summary>The row field an own-range fact's dataset writes the range's low edge to, in the display unit.</summary>
+    public const string OwnRangeLowField = "ownRangeLow";
+
+    /// <summary>The row field an own-range fact's dataset writes the range's high edge to, in the display unit.</summary>
+    public const string OwnRangeHighField = "ownRangeHigh";
+
+    /// <summary>The row field that is <c>yes</c> when the own range changes over the day.</summary>
+    public const string OwnRangeVariesField = "ownRangeVaries";
+
+    public static readonly ReportFlagFact Live = new(ReportFlagFactKind.Live, false, null);
+
+    public static readonly ReportFlagFact Period = new(ReportFlagFactKind.Period, false, null);
 }
 
 /// <summary>
@@ -203,6 +247,12 @@ internal interface IReportDataset
     /// Null for a dataset that reads the same rows for every shape, so its layers and sources share one read.
     /// </summary>
     string? ReadVariant(ReportReadShape shape) => null;
+
+    /// <summary>
+    /// How a figures or table panel showing <paramref name="columns"/> reads it: <see cref="ReportReadShape.Panel"/>, or
+    /// for a dataset that reads some fields only when they are shown, those fields (<see cref="ReportDatasetRequest.Fields"/>).
+    /// </summary>
+    ReportReadShape PanelShape(IReadOnlyList<string> columns) => ReportReadShape.Panel;
 
     /// <summary>
     /// A chart layer of it that a grid folds reads every row (<see cref="ReportDatasetRequest.Whole"/>): its point
