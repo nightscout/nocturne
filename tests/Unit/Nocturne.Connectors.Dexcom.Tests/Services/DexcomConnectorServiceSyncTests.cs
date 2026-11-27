@@ -117,6 +117,24 @@ public class DexcomConnectorServiceSyncTests
         query.Should().Contain("minutes=35").And.Contain("maxCount=7");
     }
 
+    /// <summary>Share serves the last day of readings, so a first scheduled sync never asks for more.</summary>
+    [Fact]
+    public async Task SyncDataAsync_AnOpenRequestWithNothingStored_AsksShareForNoMoreThanOneDay()
+    {
+        var glucose = new Mock<IGlucosePublisher>();
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.Setup(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose).Returns(glucose.Object);
+        glucose.Setup(g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+
+        var query = HttpUtility.ParseQueryString(
+            await QueryAsync(new SyncRequest { DataTypes = [SyncDataType.Glucose] }, publisher.Object));
+
+        int.Parse(query["minutes"]!).Should().Be(24 * 60);
+        int.Parse(query["maxCount"]!).Should().Be(24 * 60 / 5);
+    }
+
     private static async Task<string> QueryAsync(SyncRequest syncRequest, IConnectorPublisher? publisher = null)
     {
         string? query = null;

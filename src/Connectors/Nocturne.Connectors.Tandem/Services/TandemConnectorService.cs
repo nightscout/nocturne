@@ -418,7 +418,7 @@ public class TandemConnectorService
         {
             var candidates = new[] { request.Resume.Point(ResumeFamily.Glucose), request.Resume.Point(ResumeFamily.Treatments) }
                 .Where(d => d.HasValue).Select(d => d!.Value).ToList();
-            return candidates.Count > 0 ? candidates.Min() : DefaultInitialSyncFloor();
+            return candidates.Count > 0 ? candidates.Min() : ConcreteFirstSyncStart;
         }
 
         // The pump's own range is how far back this source goes, so an open start begins at its

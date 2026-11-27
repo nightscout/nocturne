@@ -252,7 +252,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
     /// <summary>
     ///     The glucose family's resume point: the most recent stored entry (minus the catch-up
-    ///     overlap), or <see cref="InitialSyncFloor"/> when none is stored. Combine it with a
+    ///     overlap), or <see cref="FirstSyncStart"/> when none is stored. Combine it with a
     ///     caller's bound through <see cref="ResumeFrom(DateTime?, DateTime?)"/> rather than
     ///     choosing between the two.
     /// </summary>
@@ -266,7 +266,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
     /// <summary>
     ///     The treatment family's resume point: the most recent stored treatment (minus the
-    ///     catch-up overlap), or <see cref="InitialSyncFloor"/> when none is stored.
+    ///     catch-up overlap), or <see cref="FirstSyncStart"/> when none is stored.
     /// </summary>
     private async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(TConfig config)
     {
@@ -278,14 +278,14 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
     /// <summary>
     ///     The device-status family's resume point: the most recent stored device status (minus the
-    ///     catch-up overlap), or <c>null</c> — the whole history, whatever
-    ///     <see cref="InitialSyncFloor"/> says — when none is stored.
+    ///     catch-up overlap), or, when none is stored, <see cref="HistoryStart"/>: the whole history of a
+    ///     source that serves it, whatever <see cref="InitialSyncFloor"/> says.
     /// </summary>
     private async Task<DateTime?> CalculateDeviceStatusCatchUpSinceAsync(TConfig config)
     {
         var latest = await FetchLatestWatermarkAsync(
             "device status", () => _publisher!.Device.GetLatestDeviceStatusTimestampAsync(ConnectorSource));
-        return TryCalculateCatchUpSince(latest, "device status");
+        return TryCalculateCatchUpSince(latest, "device status") ?? HistoryStart;
     }
 
     /// <summary>
@@ -296,7 +296,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     {
         var latest = await FetchLatestWatermarkAsync(
             "activity", () => _publisher!.Metadata.GetLatestActivityTimestampAsync(ConnectorSource));
-        return TryCalculateCatchUpSince(latest, "activity");
+        return TryCalculateCatchUpSince(latest, "activity") ?? HistoryStart;
     }
 
     /// <summary>
@@ -314,7 +314,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
     /// <summary>
     ///     The state-span family's resume point: the most recent stored state span outside the
-    ///     activity categories (minus the catch-up overlap), or <see cref="InitialSyncFloor"/> when
+    ///     activity categories (minus the catch-up overlap), or <see cref="FirstSyncStart"/> when
     ///     none is stored.
     /// </summary>
     private async Task<DateTime?> CalculateStateSpanSinceTimestampAsync(TConfig config)
@@ -328,8 +328,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// <summary>
     ///     Reads one resume watermark of <paramref name="family"/>. A failed read propagates rather than
     ///     reading as null: a null watermark means "no prior data", which triggers an initial backfill,
-    ///     unbounded for a connector with a null <see cref="InitialSyncFloor"/>, and for device status and
-    ///     activity the whole history. A transient read failure must fail this cycle (retried next
+    ///     unbounded for a connector whose <see cref="FirstSyncStart"/> is open, and for device status and
+    ///     activity one whose <see cref="HistoryStart"/> is. A transient read failure must fail this cycle (retried next
     ///     interval), not be amplified into a full-history recrawl and republish.
     /// </summary>
     private async Task<DateTime?> FetchLatestWatermarkAsync(string family, Func<Task<DateTime?>> read)
@@ -404,10 +404,10 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// <summary>
     ///     <see cref="WindowStart"/> for a source that cannot read from an open start. Every run of such
     ///     a connector has one: a range names it or resolves to <see cref="HistoryStart"/>, and a
-    ///     scheduled run's point falls back to <see cref="InitialSyncFloor"/>.
+    ///     scheduled run's point falls back to <see cref="FirstSyncStart"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">
-    ///     The connector's <see cref="HistoryStart"/> or <see cref="InitialSyncFloor"/> is open, so the
+    ///     The connector's <see cref="HistoryStart"/> or <see cref="FirstSyncStart"/> is open, so the
     ///     run has no start.
     /// </exception>
     protected static DateTime ConcreteWindowStart(SyncRequest request, ResumeFamily family) =>
@@ -457,7 +457,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     }
 
     /// <summary>
-    ///     When no prior data exists, falls back to <see cref="InitialSyncFloor"/>, which may be
+    ///     When no prior data exists, falls back to <see cref="FirstSyncStart"/>, which may be
     ///     <c>null</c> (no lower bound) for connectors that import the source's full history.
     /// </summary>
     private DateTime? CalculateSinceFromTimestamp(DateTime? latestTimestamp, string dataType)
@@ -466,9 +466,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         if (catchUpSince.HasValue)
             return catchUpSince.Value;
 
-        // No prior data: this is the initial sync. Most connectors bound the first backfill to
-        // InitialSyncFloor; a null floor means "no lower bound" — import the source's full history.
-        var fallbackSince = InitialSyncFloor;
+        var fallbackSince = FirstSyncStart;
         if (fallbackSince.HasValue)
             _logger?.LogInformation(
                 "No existing {DataType} found for {ConnectorSource}, performing initial sync from {Since:yyyy-MM-dd HH:mm:ss} UTC",
@@ -486,7 +484,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     }
 
     /// <summary>
-    ///     Lower bound applied to an initial sync when no prior data exists for a data type.
+    ///     Lower bound applied to an initial sync when no prior data exists for a data type, read
+    ///     through <see cref="FirstSyncStart"/>.
     ///     Connectors whose source is a full data export (e.g. Nightscout) override this to return
     ///     <c>null</c> so the first backfill imports the entire history; the default bounds the
     ///     initial window to <see cref="DefaultInitialSyncFloor"/> so a first sync against a
@@ -499,12 +498,25 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         Clock.GetUtcNow().UtcDateTime.AddMonths(-ConnectorRunLimits.DefaultInitialSyncMonths);
 
     /// <summary>
+    ///     Where a scheduled sync of a family with nothing stored starts: the later of
+    ///     <see cref="InitialSyncFloor"/> and <see cref="HistoryStart"/>, where <c>null</c> is
+    ///     unbounded, so one bound alone stands and two leave the start open.
+    /// </summary>
+    protected DateTime? FirstSyncStart => Later(InitialSyncFloor, HistoryStart);
+
+    /// <summary>
+    ///     <see cref="FirstSyncStart"/> for a source that cannot read from an open start, which
+    ///     begins at <see cref="DefaultInitialSyncFloor"/> when both bounds are open.
+    /// </summary>
+    protected DateTime ConcreteFirstSyncStart => FirstSyncStart ?? DefaultInitialSyncFloor();
+
+    /// <summary>
     ///     Where a range naming no lower bound starts: the
     ///     <see cref="ConnectorRegistrationAttribute.HistoryReach"/> the connector declares. <c>null</c> for a source that serves its whole
     ///     history and reads from an open start; a connector whose whole history needs a concrete
     ///     start overrides it.
     /// </summary>
-    /// <remarks>Not <see cref="InitialSyncFloor"/>, which is a policy for the scheduled first sync.</remarks>
+    /// <remarks><see cref="FirstSyncStart"/> also bounds a scheduled first sync by it.</remarks>
     protected virtual DateTime? HistoryStart =>
         Registration?.HistoryReach.StartFrom(Clock.GetUtcNow().UtcDateTime);
 

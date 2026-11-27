@@ -441,7 +441,7 @@ public class GlookoConnectorService
     /// <remarks>
     ///     The base resumes each family from its own newest stored record. Most Glooko accounts
     ///     never store one (CGM backfill is off by default), so that resolves to the six-month
-    ///     <see cref="BaseConnectorService{TConfig}.InitialSyncFloor"/> on every run; and where one
+    ///     <see cref="BaseConnectorService{TConfig}.FirstSyncStart"/> on every run; and where one
     ///     exists it says nothing about what is still to come, because Glooko posts pump data in
     ///     batches days after the fact. The connector therefore reads <see cref="GlookoConstants.ShortWindow"/>
     ///     on most runs, the fixed <see cref="GlookoConnectorConfiguration.LookbackDays"/> once per
