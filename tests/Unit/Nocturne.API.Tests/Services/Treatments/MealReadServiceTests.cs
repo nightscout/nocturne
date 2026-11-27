@@ -230,7 +230,7 @@ public class MealReadServiceTests : IDisposable
         var body = await GetMeals(now.AddHours(-1), now.AddHours(1));
 
         body.Should().HaveCount(1);
-        body[0].Timestamp.Should().Be(earliestBolusTs);
+        body[0].Timestamp.Should().Be(RecordTime.AtMillisecond(earliestBolusTs));
     }
 
     [Fact]
@@ -406,8 +406,8 @@ public class MealReadServiceTests : IDisposable
         var to = from.AddHours(4);
         var atFrom = SeedCarbIntake(from, 10.0);
         var atTo = SeedCarbIntake(to, 20.0);
-        SeedCarbIntake(from.AddTicks(-1), 30.0);
-        SeedCarbIntake(to.AddTicks(1), 40.0);
+        SeedCarbIntake(from.AddMilliseconds(-1), 30.0);
+        SeedCarbIntake(to.AddMilliseconds(1), 40.0);
 
         var body = await GetMeals(from, to);
 

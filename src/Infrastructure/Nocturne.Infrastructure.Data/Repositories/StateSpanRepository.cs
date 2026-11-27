@@ -275,6 +275,7 @@ public class StateSpanRepository : IStateSpanRepository
         IReadOnlyList<StateSpan> stateSpans,
         CancellationToken cancellationToken = default)
     {
+        AtRecordTime(stateSpans);
         var ids = stateSpans.Select(s => s.Id).OfType<string>().Distinct().ToList();
         if (ids.Count == 0)
             return [.. stateSpans.Select(_ => (StateSpan?)null)];
@@ -337,6 +338,7 @@ public class StateSpanRepository : IStateSpanRepository
         IReadOnlyList<StateSpan> stateSpans,
         CancellationToken cancellationToken = default)
     {
+        AtRecordTime(stateSpans);
         var sent = stateSpans
             .Where(s => !string.IsNullOrEmpty(s.OriginalId))
             .GroupBy(s => s.OriginalId!, StringComparer.Ordinal)
@@ -429,6 +431,7 @@ public class StateSpanRepository : IStateSpanRepository
         if (stateSpans.Count == 0)
             return [];
 
+        AtRecordTime(stateSpans);
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var originalIds = stateSpans
             .Select(s => s.OriginalId)
@@ -637,6 +640,7 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
+        AtRecordTime([stateSpan]);
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entity = await db.StateSpans.FirstOrDefaultAsync(
             s => s.LegacyId == id,
@@ -659,6 +663,20 @@ public class StateSpanRepository : IStateSpanRepository
         await db.SaveChangesAsync(cancellationToken);
         await ReportWrittenAsync();
         return StateSpanMapper.ToDomainModel(entity);
+    }
+
+    /// <summary>
+    /// Cuts the times of spans about to be compared with stored rows as the store keeps a record time
+    /// (<see cref="RecordTime.AtMillisecond"/>), so a span sent again reads as unmoved and an end sent again
+    /// as the one stored.
+    /// </summary>
+    private static void AtRecordTime(IEnumerable<StateSpan> spans)
+    {
+        foreach (var span in spans)
+        {
+            span.StartTimestamp = RecordTime.AtMillisecond(span.StartTimestamp);
+            span.EndTimestamp = span.EndTimestamp is { } end ? RecordTime.AtMillisecond(end) : null;
+        }
     }
 
     /// <summary>
@@ -1103,6 +1121,7 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
+        AtRecordTime([stateSpan]);
         await using var db = await _contexts.CreateAsync(cancellationToken);
         var entity = await db.StateSpans.FirstOrDefaultAsync(
             s => s.LegacyId == id && ActivityCategories.Contains(s.Category),

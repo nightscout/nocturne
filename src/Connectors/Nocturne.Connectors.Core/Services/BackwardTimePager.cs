@@ -188,11 +188,9 @@ public static class BackwardTimePager
     public static DateTime CreatedAtAdmittedThrough(DateTime bound) =>
         IsWholeSecond(bound)
             ? SecondOf(bound).AddSeconds(1).AddTicks(-1)
-            : MillisecondOf(bound).AddMilliseconds(1).AddTicks(-1);
+            : RecordTime.AtMillisecond(bound).AddMilliseconds(1).AddTicks(-1);
 
     private static bool IsWholeSecond(DateTime at) => at.Millisecond == 0;
 
     private static DateTime SecondOf(DateTime at) => at.AddTicks(-(at.Ticks % TimeSpan.TicksPerSecond));
-
-    private static DateTime MillisecondOf(DateTime at) => at.AddTicks(-(at.Ticks % TimeSpan.TicksPerMillisecond));
 }

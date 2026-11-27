@@ -1027,6 +1027,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
             EnforceTenantOwnership(entry, isAdded);
             StripNulCharacters(entry, isAdded, isRelational, ReportTruncation);
+            TruncateRecordTimes(entry);
             ApplyUpstreamFingerprint(entry);
             ApplyWrittenLive(entry);
             if (isAdded && entry.Entity is IWriterStamped { WriterGrantId: null } written)
@@ -1082,6 +1083,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             return;
 
         entry.Property(nameof(IUpstreamFingerprinted.UpstreamFingerprint)).CurrentValue = fingerprint;
+    }
+
+    /// <summary>Cuts the record times of a row a save inserts or modifies (<see cref="V4RecordTables.CutRecordTimes"/>).</summary>
+    private static void TruncateRecordTimes(EntityEntry entry)
+    {
+        if (entry.State is EntityState.Added or EntityState.Modified)
+            V4RecordTables.CutRecordTimes(entry);
     }
 
     /// <summary>Marks a row a live write inserts or modifies, per <see cref="LiveWriteScope"/>.</summary>

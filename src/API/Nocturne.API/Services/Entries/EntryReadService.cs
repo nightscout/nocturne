@@ -779,8 +779,8 @@ internal class EntryReadService : IEntryStore
     }
 
     /// <summary>
-    /// The half-open range <c>[mills, mills + 1 ms)</c>. A stored timestamp can carry sub-millisecond
-    /// precision that its <c>Mills</c> truncates away, so equality on the instant would miss it.
+    /// The half-open range <c>[mills, mills + 1 ms)</c>, whose ends a chunk of probes takes from its first
+    /// and last probe.
     /// </summary>
     private static (DateTime From, DateTime To) MillisecondOf(long mills) =>
         (mills.ToUtcDateTime(), (mills + 1).ToUtcDateTime());

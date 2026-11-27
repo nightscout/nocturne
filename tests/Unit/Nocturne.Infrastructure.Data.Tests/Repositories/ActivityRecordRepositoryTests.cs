@@ -99,6 +99,26 @@ public class ActivityRecordRepositoryTests : IDisposable
         written.HeartRateWrites.Updated.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// A reading sent again at a time below the millisecond holds what its row stored, which the save cut to
+    /// the millisecond, so it is unchanged.
+    /// </summary>
+    [Fact]
+    public async Task AReadingSentAgainBelowTheMillisecondIsUnchanged()
+    {
+        var at = Stamp.AddTicks(1_234_560);
+        var heart = Heart(Id);
+        heart.Timestamp = at;
+        await StoreAsync(_tenant, heart);
+        var reading = Reading(Id, 72);
+        reading.Timestamp = at;
+
+        var written = await Repository(_tenant).WriteHealthSeriesAsync([(0, reading)], []);
+
+        written.HeartRateWrites.Unchanged.Select(u => u.Index).Should().Equal(0);
+        written.HeartRateWrites.Updated.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task AnIdIsDeletedByUserOnlyInItsOwnTenantAndNotWhenSwept()
     {

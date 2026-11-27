@@ -744,6 +744,26 @@ public class TreatmentsIntegrationTests : ApiIntegrationTestBase
     }
 
 
+    [Fact]
+    public async Task V4BolusAtATimeBelowTheMillisecond_ResolvesOnV3ById()
+    {
+        var client = CreateAuthenticatedClient();
+        var createdAt = DistinctTime();
+        var post = await client.PostAsJsonAsync("/api/v4/insulin/boluses", new
+        {
+            timestamp = createdAt.Replace("Z", "4567Z"),
+            insulin = 1.37,
+        });
+        post.IsSuccessStatusCode.Should().BeTrue(await post.Content.ReadAsStringAsync());
+        var bolus = await post.Content.ReadFromJsonAsync<JsonElement>();
+        bolus.GetProperty("timestamp").GetDateTimeOffset().Should().Be(DateTimeOffset.Parse(createdAt));
+
+        var read = await client.GetAsync($"/api/v3/treatments/{bolus.GetProperty("id").GetString()}");
+        read.StatusCode.Should().Be(HttpStatusCode.OK, await read.Content.ReadAsStringAsync());
+        V3Result(await read.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("date").GetInt64()
+            .Should().Be(DateTimeOffset.Parse(createdAt).ToUnixTimeMilliseconds());
+    }
+
     /// <summary>
     /// AAPS's temp basal lifecycle: POST at start, then PATCH twice by the identifier the create
     /// returned when the pump cuts it short. The record keeps that identifier through both edits.

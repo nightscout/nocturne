@@ -230,7 +230,9 @@ public sealed class ActivityRecordRepository(INocturneDbContextFactory contexts,
 
             applyUpdate(stored, model);
             stored.DeletedAt = null;
-            (db.Entry(stored).State == EntityState.Unchanged && !resolved.Hidden.Contains(stored) ? plan.Unchanged : plan.Updated)
+            var entry = db.Entry(stored);
+            V4RecordTables.CutRecordTimes(entry);
+            (entry.State == EntityState.Unchanged && !resolved.Hidden.Contains(stored) ? plan.Unchanged : plan.Updated)
                 .Add((index, stored));
         }
 

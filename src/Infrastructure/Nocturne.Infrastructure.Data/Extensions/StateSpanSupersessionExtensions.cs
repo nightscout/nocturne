@@ -355,7 +355,7 @@ internal static class StateSpanSupersessionExtensions
         var successors = await SuccessorsAsync(ctx, spans, eligible, ct);
         var moves = spans
             .Select(s => (s.Id, Was: (s.EndTimestamp, s.SupersededById),
-                Target: StateSpanSuccession.EndAt(successors.GetValueOrDefault(s.Id))))
+                Target: EndAtMillisecond(StateSpanSuccession.EndAt(successors.GetValueOrDefault(s.Id)))))
             .Where(s => writeUnchanged || s.Target != s.Was)
             .ToList();
         if (moves.Count == 0)
@@ -373,6 +373,13 @@ internal static class StateSpanSupersessionExtensions
             ct);
         return moves.ToDictionary(m => m.Id, m => new WrittenEnd(m.Target.Item1, m.Target.Item2, touchedAt));
     }
+
+    /// <summary>
+    /// <paramref name="target"/> with its end as a save stores it, for <see cref="EndAtSuccessorsAsync"/>,
+    /// whose update skips the save.
+    /// </summary>
+    private static (DateTime? End, Guid? SupersededById) EndAtMillisecond((DateTime? End, Guid? SupersededById) target) =>
+        (target.End is { } end ? RecordTime.AtMillisecond(end) : null, target.SupersededById);
 
     /// <summary>
     /// The first live <paramref name="eligible"/> successor of each of <paramref name="spans"/> that has

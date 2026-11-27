@@ -982,6 +982,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
         var before = ToDomain(entity);
         ApplyUpdate(entity, model);
+        V4RecordTables.CutRecordTimes(ctx.Entry(entity));
         var materiallyChanged = HasMaterialChange(ctx, entity);
         await SaveWriteAsync(ctx, entity, before.Timestamp, ct);
         var updated = ToDomain(entity);
@@ -1333,6 +1334,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 SentForHidden[entity] = sentForHidden;
 
             var entry = ctx.Entry(entity);
+            V4RecordTables.CutRecordTimes(entry);
             if (NocturneDbContext.WritesNothing(entry))
             {
                 Unchanged.Add(entity);

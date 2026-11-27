@@ -106,6 +106,29 @@ public class DeviceStatusDecomposerPumpModeClockTests : IDisposable
         (await SpansAsync(PumpModeState.Suspended)).Should().Equal([(T.AddHours(-1), (DateTime?)T)]);
     }
 
+    /// <summary>
+    /// A suspension seen by two snapshots, then a resume whose pump clock is a day ahead, arriving below the
+    /// millisecond.
+    /// The resume ends the suspension at its arrival as the store keeps it, and decomposed again it finds that
+    /// end, so it backfills no suspension from the second snapshot.
+    /// </summary>
+    [Fact]
+    public async Task AResumeDatedADayAheadArrivingBelowTheMillisecond_DecomposedAgain_BackfillsNoSuspension()
+    {
+        var arrived = T.AddTicks(1_234_567);
+        await FoldAsync(T.AddHours(-2), Suspension("before", T.AddHours(-2), suspended: false));
+        await FoldAsync(T.AddHours(-1), Suspension("suspend", T.AddHours(-1), suspended: true));
+        await FoldAsync(T.AddMinutes(-30), Suspension("still", T.AddMinutes(-30), suspended: true));
+        await FoldAsync(arrived, Suspension("resume-ahead", T, suspended: false, clock: DayAhead));
+        var ended = (T.AddHours(-1), (DateTime?)RecordTime.AtMillisecond(arrived));
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal([ended]);
+
+        await FoldAsync(T.AddHours(2), Suspension("resume-ahead", T, suspended: false, clock: DayAhead));
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal([ended]);
+    }
+
     /// <summary>A resume dated a day ahead backfills a suspension that ends when it arrived, not at a future time.</summary>
     [Fact]
     public async Task AResumeDatedADayAhead_BackfillsASuspensionEndingWhenItArrived()
