@@ -95,7 +95,7 @@ this tick):
 | `condition_missing` | a `null` slot in a composite's `conditions` |
 | `unknown_field` | a node property other than `type`, `_uid` and its own kind's payload, or a payload property its kind does not read (names match exactly, §1.1), so a misspelt operand such as `timeoutMinutes` or `Value` is not silently dropped. No field is named: the property is the author's text |
 | `field_missing` | a required operand is absent or `null`: every operand except `for_minutes`, `timezone` and `state_span_active` `state`, and the `child` of a `not` or `sustained`. On `threshold`, `predicted` and `eventual_glucose` it is on `value` when neither `value` nor `value_from` is present, and on `fact` when a `value_from` has none (§3, a limit from a fact). On `glucose_count` it is on `count` when neither `count` nor `percent` is present |
-| `invalid_field` | a value of the wrong JSON kind, a number out of range, an enum operand that is not a string, or a `timezone` that is not exactly an IANA zone id (§4), a `glucose_count` `count` value that is negative or not whole, or a `percent` value outside 0 to 100 (the field is `count` or `percent`) |
+| `invalid_field` | a value of the wrong JSON kind, a number out of range, an enum operand that is not a string, or a `timezone` that is not exactly an IANA zone id (§4), a `glucose_count` `count` value that is negative or not whole, or a `percent` value outside 0 to 100 (the field is `count` or `percent`). A problem inside a `glucose_count` `reading`, `count` or `percent` object (an absent, invalid or unknown `operator` or `value`) is reported on that object's name |
 | `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `direction`, `alert_state` `state`, `trend` `bucket`, `temp_basal` or `transmitter_battery` `metric`, `pump_state` `mode`, `state_span_active` `category`, a `predicted` `curve`, a `value_from` `fact`, a `glucose_extreme` `of`, or a `glucose_bucket`, `day_of_week`, `sensor_state`, `min_of` or `max_of` list member |
 | `list_empty` | a composite's `conditions`, a `glucose_bucket` `buckets`, a `day_of_week` `days` or a `sensor_state` `states` that is absent, `null` or empty, or a `predicted` `min_of` or `max_of` that is present and empty |
 | `minutes_not_positive` | a duration `<= 0` that leaves its node never true: `sustained` `minutes`, `signal_loss` `timeout_minutes`, `predicted` `within_minutes` (no prediction is at or before now) |
@@ -105,7 +105,7 @@ this tick):
 | `pump_mode_category` | a `state_span_active` on the `PumpMode` category; pump modes are `pump_state`'s |
 | `margin_negative` | a `clear_margin` below `0` (§3, clear margin) |
 | `margin_on_equality` | a `clear_margin` above `0` on an `==` comparison, which has no side to widen (§3, clear margin) |
-| `margin_past_zero` | a `rate_of_change` `clear_margin` above its `rate`, or a `glucose_change` one above the size of its `value` where the margin moves the limit toward zero, which would carry the limit past zero (§3, clear margin) |
+| `margin_past_zero` | a `rate_of_change` `clear_margin` above its `rate`, or a `glucose_change` one above the size of its `value`, which would carry the limit past zero (§3, clear margin) |
 | `margin_under_sustained` | a `clear_margin` above `0` on a leaf anywhere under a `sustained` (§3, clear margin) |
 | `selector_conflict` | a `predicted` with more than one of `curve`, `min_of` and `max_of` (§3, forecast curves), or a `glucose_count` with both `count` and `percent` (§3, windows); the field is the second present, in that order |
 | `limit_conflict` | a `threshold`, `predicted` or `eventual_glucose` with both `value` and `value_from` (§3, a limit from a fact); the field is `value_from` |
@@ -620,9 +620,8 @@ the property is an unknown field on them (§1.4). Absent or `0` is no margin, an
 evaluates exactly as without the member. A margin is read as `value` is: a JSON number in the
 decimal range (else `invalid_field`), never negative (`margin_negative`), never above `0` on an
 `==` comparison, which has no side to widen (`margin_on_equality`), never above a `rate_of_change`
-leaf's `rate`, nor above the size of a `glucose_change` leaf's `value` where the margin moves the
-limit toward zero (`<` or `<=` with a value at or below `0`, `>` or `>=` with one at or above it)
-(`margin_past_zero`), and never above `0` on a leaf anywhere under a `sustained`
+leaf's `rate`, nor above the size of a `glucose_change` leaf's `value`, whichever way the operator points, since
+under a `not` the margin moves the limit the other way (`margin_past_zero`), and never above `0` on a leaf anywhere under a `sustained`
 (`margin_under_sustained`, below). `glucose_count` takes none: its tally is a count, not a value
 in the unit of a reading.
 

@@ -737,15 +737,35 @@ fn a_change_margin_cannot_pass_zero() {
         "margin_past_zero",
         Some("clear_margin"),
     )];
-    for (operator, value) in [("<=", -30), ("<", -30), (">=", 30), (">", 30)] {
+    // Whichever way the margin moves the limit: under a `not` it moves the
+    // other way, so a margin that moves it away from zero here moves it
+    // toward zero there.
+    for (operator, value) in [
+        ("<=", -30),
+        ("<", -30),
+        (">=", 30),
+        (">", 30),
+        ("<=", 30),
+        (">=", -30),
+    ] {
         assert_eq!(change(operator, value, "30"), vec![], "{operator} {value}");
         assert_eq!(change(operator, value, "30.5"), past, "{operator} {value}");
     }
-    for (operator, value) in [("<=", 30), (">=", -30)] {
-        assert_eq!(change(operator, value, "100"), vec![], "{operator} {value}");
-    }
     assert_eq!(change("<=", 0, "1"), past);
     assert_eq!(change("<=", 0, "0"), vec![]);
+
+    // "Fell at least 10 in 15 minutes", written as a `not`: a margin of 20
+    // would hold it open on a rise of up to 10.
+    let fell = json!({ "child": node("glucose_change",
+        json!({ "operator": ">", "value": -10, "window_minutes": 15, "clear_margin": 20 })) });
+    assert_eq!(
+        issues(ConditionKind::Not, &fell),
+        vec![(
+            "not[0].glucose_change".to_owned(),
+            "margin_past_zero",
+            Some("clear_margin")
+        )]
+    );
 }
 
 #[test]

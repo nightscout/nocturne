@@ -1122,7 +1122,7 @@ fn a_count_is_a_whole_number_and_a_percent_is_zero_to_a_hundred() {
 fn a_count_reads_its_comparisons_as_written() {
     assert_eq!(
         count(json!({ "count": { "operator": "at_least", "value": 3 } })),
-        at_leaf("glucose_count", &[Reason::UnknownValue("operator")])
+        at_leaf("glucose_count", &[Reason::UnknownValue("count")])
     );
     assert_eq!(
         count(json!({ "count": { "operator": ">=", "value": 3, "Value": 4 } })),
@@ -1130,7 +1130,7 @@ fn a_count_reads_its_comparisons_as_written() {
     );
     assert_eq!(
         count(json!({ "count": { "operator": ">=" } })),
-        at_leaf("glucose_count", &[Reason::FieldMissing("value")])
+        at_leaf("glucose_count", &[Reason::FieldMissing("count")])
     );
     assert_eq!(
         count(json!({ "count": 3 })),
@@ -1140,6 +1140,14 @@ fn a_count_reads_its_comparisons_as_written() {
         issues_of(
             "glucose_count",
             json!({ "window_minutes": 20, "count": { "operator": ">=", "value": 3 } })
+        ),
+        at_leaf("glucose_count", &[Reason::FieldMissing("reading")])
+    );
+    assert_eq!(
+        issues_of(
+            "glucose_count",
+            json!({ "reading": { "value": 70 }, "window_minutes": 20,
+                "count": { "operator": ">=", "value": 3 } })
         ),
         at_leaf("glucose_count", &[Reason::FieldMissing("reading")])
     );

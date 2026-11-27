@@ -1394,23 +1394,13 @@ payload!(
     operator |p| p.operator
 );
 
-/// The largest margin a comparison of a signed change takes when the margin
-/// moves its limit toward zero: one larger carries the limit past zero, so a
-/// rule about a fall would stay open on a rise. `None` when the margin moves
-/// the limit away from zero.
-fn margin_toward_zero(operator: CmpOp, value: Decimal) -> Option<Decimal> {
-    let toward = match operator {
-        CmpOp::Lt | CmpOp::Le => value <= Decimal::ZERO,
-        CmpOp::Gt | CmpOp::Ge => value >= Decimal::ZERO,
-        CmpOp::Eq => false,
-    };
-    toward.then(|| value.abs())
-}
-
 payload!(
     /// `{operator, value, window_minutes, clear_margin?}`: the newest reading
     /// less the oldest one in the window, in mg/dL (engine-semantics.md §3,
     /// windows).
+    /// A margin is at most the size of `value`: under a `not` it moves the
+    /// limit the other way, so a larger one could carry it past zero on
+    /// either side, and a rule about a fall would stay open on a rise.
     margined GlucoseChangePayload {
         operator: CmpOp,
         #[serde(serialize_with = "exact_decimal")]
@@ -1418,7 +1408,7 @@ payload!(
         window_minutes: WindowMinutes,
     }
     comparison |p| (p.operator, p.value),
-    largest_margin |p| margin_toward_zero(p.operator, p.value)
+    largest_margin |p| Some(p.value.abs())
 );
 
 payload!(
@@ -1495,9 +1485,11 @@ fn comparison(
         issues: r.issues,
     };
     inner.report_unknown(|k| k == "operator" || k == "value");
-    let operator = inner.required("operator", <CmpOp as Operand>::parse);
-    let value = inner
-        .required("value", <Decimal as Operand>::parse)
+    // A problem inside is reported on `name`, so it says which comparison it is in.
+    let operand = |key: &str| inner.get(key).ok_or(Reason::FieldMissing(name));
+    let operator = r.ok(operand("operator").and_then(|v| <CmpOp as Operand>::parse(v, name)));
+    let value = r
+        .ok(operand("value").and_then(|v| <Decimal as Operand>::parse(v, name)))
         .filter(|&value| accepts(value) || r.report(Reason::InvalidField(name)));
     Some(Some(Comparison {
         operator: operator?,
