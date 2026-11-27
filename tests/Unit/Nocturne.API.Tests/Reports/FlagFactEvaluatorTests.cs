@@ -745,14 +745,18 @@ public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
     [InlineData(typeof(InvalidOperationException))]
     [InlineData(typeof(NullReferenceException))]
     [InlineData(typeof(TimeoutException))]
-    public async Task A_defect_reading_the_schedule_reaches_the_caller_rather_than_emptying_the_own_range_fact(Type defect)
+    public async Task A_defect_reading_the_schedule_fails_the_persons_read_rather_than_emptying_the_own_range_fact(Type defect)
     {
         var harness = new Harness { ScheduleDefect = (Exception)Activator.CreateInstance(defect)! };
         var person = harness.Follow(new Person(Pattern, TimeSpan.FromDays(15), AllDay(80, 160)), Therapy);
+        IReadOnlyList<FlagFactCondition> conditions = [TimeBelowOwnRange(harness)];
 
-        var judge = () => harness.JudgeAsync(person, TimeBelowOwnRange(harness));
+        await Harness.JudgeOnceAsync(harness.Evaluator, [person], conditions, false, CancellationToken.None);
+        await harness.Reads.WhenIdleAsync();
+        var (judged, _) = await Harness.JudgeOnceAsync(harness.Evaluator, [person], conditions, false, CancellationToken.None);
 
-        await judge.Should().ThrowAsync<Exception>().Where(e => e.GetType() == defect);
+        judged.Single().State.Should().Be(FlagPersonState.Failed);
+        harness.Errors.Should().ContainSingle();
     }
 
     [Fact]
