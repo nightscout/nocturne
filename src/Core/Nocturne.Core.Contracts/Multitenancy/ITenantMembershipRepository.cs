@@ -203,6 +203,15 @@ public interface ITenantMembershipRepository
     Task<IReadOnlyList<SubjectMembership>> ListMembershipsOfSubjectAsync(Guid subjectId, DateTime now, CancellationToken ct);
 
     /// <summary>
+    /// Where each membership <paramref name="subjectId"/> holds that has not ended at <paramref name="now"/> comes from,
+    /// keyed by tenant: from the reasons in force then, so a site's block or decline of the subject and the groups that
+    /// narrow them, which the reasons are kept in line with, apply. A membership whose row holds no reason stands on a
+    /// direct one, as <c>MembershipReasons</c> adopts it.
+    /// </summary>
+    /// <remarks>Pinned to the subject, as <see cref="ListMembershipsOfSubjectAsync"/> is.</remarks>
+    Task<IReadOnlyDictionary<Guid, MembershipSources>> ListSourcesOfSubjectAsync(Guid subjectId, DateTime now, CancellationToken ct);
+
+    /// <summary>
     /// Whether any member of <paramref name="tenantId"/> holds a passkey or a working OIDC identity,
     /// and whether the site is in recovery mode (<see cref="SetupGate"/>); null when the tenant has
     /// no member, so no member can hold a credential.

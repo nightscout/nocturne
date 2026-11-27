@@ -28,7 +28,7 @@ public partial class TenantOverviewServiceTests
         var rules = new ScriptedRules { Reasons = { [ruled] = [RuleReason(NotificationUrgency.Warn, null)] } };
 
         var response = await NewService(options, fakes: fakes, flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
 
         response.Tenants.Select(t => t.Slug).Should().Equal("ruled", "calm");
         var reason = response.Tenants[0].Attention.Should().ContainSingle().Subject;
@@ -52,7 +52,7 @@ public partial class TenantOverviewServiceTests
         };
 
         var response = await NewService(options, fakes: fakes, flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
 
         var attention = response.Tenants.Single().Attention;
         attention.Should().HaveCount(3);
@@ -75,7 +75,7 @@ public partial class TenantOverviewServiceTests
         };
 
         var response = await NewService(options, fakes: QuietFakes(ruled), flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.Fixed);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.Fixed, PeopleQuery.Empty);
 
         rules.Begun.Should().Be(0);
         response.Tenants.Single().Attention.Should().BeEmpty();
@@ -100,7 +100,7 @@ public partial class TenantOverviewServiceTests
         };
 
         var response = await NewService(options, fakes: QuietFakes(first, second), flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, set);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, set, PeopleQuery.Empty);
 
         rules.RuleSets.Should().Equal(set);
         rules.PeopleBegunFor.Single().Should().BeEquivalentTo([first, second]);
@@ -118,7 +118,7 @@ public partial class TenantOverviewServiceTests
         var rules = new ScriptedRules { Pending = 2 };
 
         var response = await NewService(options, fakes: QuietFakes(first, second), flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
 
         response.PeopleWithRulesPending.Should().Be(2);
         rules.Judged.Should().HaveCount(2);
@@ -137,7 +137,7 @@ public partial class TenantOverviewServiceTests
         var rules = new ScriptedRules();
 
         await NewService(options, fakes: QuietFakes(person), flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, limited);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty, limited);
 
         rules.CredentialLimits.Should().Equal(limited);
         rules.Subjects.Should().Equal(subjectId);
@@ -161,7 +161,7 @@ public partial class TenantOverviewServiceTests
         var rules = new ScriptedRules();
 
         await NewService(options, fakes: fakes, flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
 
         var judged = rules.Judged.Should().ContainSingle().Subject;
         judged.Person.Tenant.Id.Should().Be(person);
@@ -182,7 +182,7 @@ public partial class TenantOverviewServiceTests
         var rules = new ScriptedRules { None = true };
 
         var response = await NewService(options, flagRules: rules)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
 
         rules.Begun.Should().Be(1);
         response.PeopleWithRulesPending.Should().Be(0);
@@ -194,7 +194,7 @@ public partial class TenantOverviewServiceTests
         var rules = new ScriptedRules();
 
         var response = await NewService(NewOptions(), flagRules: rules)
-            .GetOverviewAsync(Guid.NewGuid(), FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+            .GetOverviewAsync(Guid.NewGuid(), FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
 
         response.Tenants.Should().BeEmpty();
         rules.Begun.Should().Be(0);

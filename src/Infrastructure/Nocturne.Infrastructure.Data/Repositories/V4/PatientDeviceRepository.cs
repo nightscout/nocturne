@@ -62,6 +62,14 @@ public class PatientDeviceRepository : IPatientDeviceRepository
         return entities.Select(PatientDeviceMapper.ToDomainModel);
     }
 
+    /// <summary>The current devices of <paramref name="devices"/>, ranked first by rank, then the newest started.</summary>
+    internal static IQueryable<PatientDeviceEntity> InCurrentOrder(IQueryable<PatientDeviceEntity> devices) =>
+        devices
+            .Where(e => e.IsCurrent)
+            .OrderBy(e => e.Rank == null)
+            .ThenBy(e => e.Rank)
+            .ThenByDescending(e => e.StartDate);
+
     /// <summary>
     /// Gets all currently used patient devices.
     /// </summary>
@@ -70,13 +78,7 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     public async Task<IEnumerable<PatientDevice>> GetCurrentAsync(CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entities = await ctx.PatientDevices
-            .AsNoTracking()
-            .Where(e => e.IsCurrent)
-            .OrderBy(e => e.Rank == null)
-            .ThenBy(e => e.Rank)
-            .ThenByDescending(e => e.StartDate)
-            .ToListAsync(ct);
+        var entities = await InCurrentOrder(ctx.PatientDevices.AsNoTracking()).ToListAsync(ct);
 
         return entities.Select(PatientDeviceMapper.ToDomainModel);
     }

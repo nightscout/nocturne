@@ -31,7 +31,7 @@ namespace Nocturne.API.Services.Identity;
 /// request's tenant, so the endpoint works from the apex (tenantless) in multi-tenant deployments.
 /// </summary>
 /// <seealso cref="ITenantOverviewService"/>
-public class TenantOverviewService : ITenantOverviewService
+public partial class TenantOverviewService : ITenantOverviewService
 {
     private const string AuditEndpoint = "service:tenant-overview";
 
@@ -69,11 +69,12 @@ public class TenantOverviewService : ITenantOverviewService
     public async Task<TenantOverviewResponse> GetOverviewAsync(
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
         OverviewRuleSet rules,
+        PeopleQuery query,
         bool credentialLimitTo24Hours = false,
         CancellationToken ct = default)
     {
         var (items, hiddenCount, rulesPending, ruleTeams) = await BuildOverviewAsync(
-            subjectId, await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct), null, rules,
+            subjectId, await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct), null, rules, query,
             credentialLimitTo24Hours, ct);
         var firstGroups = await _teams.GetFirstGroupOfPeopleAsync(subjectId, _time.GetUtcNow().UtcDateTime, ct);
         var headed = items
@@ -87,20 +88,20 @@ public class TenantOverviewService : ITenantOverviewService
 
     public async Task<TenantOverviewResponse?> GetGroupOverviewAsync(
         Guid subjectId, Guid groupId, IReadOnlySet<string> tokenScopes, AuthType authType,
-        OverviewRuleSet rules, bool credentialLimitTo24Hours, CancellationToken ct)
+        OverviewRuleSet rules, PeopleQuery query, bool credentialLimitTo24Hours, CancellationToken ct)
     {
         if (await ReadableInGroupAsync(subjectId, groupId, tokenScopes, authType, ct) is not { } group)
             return null;
 
         return await BuildOverviewAsync(
-            subjectId, group.Readable, group.HiddenCount, rules, credentialLimitTo24Hours, ct);
+            subjectId, group.Readable, group.HiddenCount, rules, query, credentialLimitTo24Hours, ct);
     }
 
     public async Task<TenantReviewResponse?> GetGroupReviewAsync(
         Guid subjectId, Guid groupId, IReadOnlySet<string> tokenScopes, AuthType authType, int days,
-        bool credentialLimitTo24Hours, CancellationToken ct) =>
+        OverviewRuleSet rules, PeopleQuery query, bool credentialLimitTo24Hours, CancellationToken ct) =>
         await ReadableInGroupAsync(subjectId, groupId, tokenScopes, authType, ct) is { } group
-            ? await BuildReviewAsync(group.Readable, days, credentialLimitTo24Hours, ct)
+            ? await BuildReviewAsync(subjectId, group.Readable, days, rules, query, credentialLimitTo24Hours, ct)
             : null;
 
     /// <summary>
@@ -120,39 +121,50 @@ public class TenantOverviewService : ITenantOverviewService
         return (readable, people.Count - readable.Count);
     }
 
-    /// <summary>The items of <paramref name="glucoseReadTenants"/>, with the flag rules <paramref name="rules"/> names judged for each.</summary>
+    /// <summary>
+    /// The items of <paramref name="glucoseReadTenants"/> <paramref name="query"/> keeps, in its order, with the flag rules
+    /// <paramref name="rules"/> names and its fact filters judged for each (<see cref="KeptItemsAsync"/>).
+    /// </summary>
     private async Task<TenantOverviewResponse> BuildOverviewAsync(
         Guid subjectId,
         IReadOnlyList<GlucoseReadTenant> glucoseReadTenants,
         int? hiddenCount,
         OverviewRuleSet rules,
+        PeopleQuery query,
         bool credentialLimitTo24Hours,
         CancellationToken ct)
     {
-        var run = await BeginRulesAsync(subjectId, rules, glucoseReadTenants, credentialLimitTo24Hours, ct);
-        var items = await BuildItemsAsync(glucoseReadTenants, run, credentialLimitTo24Hours, ct);
-        run?.Finish();
-        return new(items, hiddenCount, run?.PeopleWithRulesPending ?? 0, [.. run?.Teams ?? []]);
+        var kept = await KeptItemsAsync(subjectId, glucoseReadTenants, rules, query, credentialLimitTo24Hours, ct);
+        return new(kept.Items, hiddenCount, kept.Pending, [.. kept.RuleTeams]);
     }
 
-    /// <summary>The judging of the flag rules <paramref name="rules"/> names for <paramref name="people"/>; null for the fixed reasons only.</summary>
+    /// <summary>
+    /// The judging of the flag rules <paramref name="rules"/> names and the fact filters of <paramref name="query"/> for
+    /// <paramref name="people"/>; null when there is neither.
+    /// </summary>
     private async Task<IViewerFlagRuleRun?> BeginRulesAsync(
         Guid subjectId,
         OverviewRuleSet rules,
+        PeopleQuery query,
         IReadOnlyList<GlucoseReadTenant> people,
-        bool credentialLimitTo24Hours,
-        CancellationToken ct) =>
-        rules != OverviewRuleSet.Fixed && people.Count > 0
-            ? await _flagRules.BeginAsync(subjectId, rules, people, credentialLimitTo24Hours, ct)
-            : null;
-
-    private async Task<List<TenantOverviewItem>> BuildItemsAsync(
-        IReadOnlyList<GlucoseReadTenant> glucoseReadTenants,
-        IViewerFlagRuleRun? rules,
         bool credentialLimitTo24Hours,
         CancellationToken ct)
     {
-        var items = new List<TenantOverviewItem>();
+        var facts = query.AllFilters.Where(f => f.Kind == PeopleFilterKind.Fact).ToList();
+        return (rules != OverviewRuleSet.Fixed || facts.Count > 0) && people.Count > 0
+            ? await _flagRules.BeginAsync(subjectId, rules, facts, people, credentialLimitTo24Hours, ct)
+            : null;
+    }
+
+    /// <summary>Each item, and whether every fact filter of the run matched for it.</summary>
+    private async Task<List<(TenantOverviewItem Item, bool MatchesFilters)>> BuildItemsAsync(
+        IReadOnlyList<GlucoseReadTenant> glucoseReadTenants,
+        IViewerFlagRuleRun? rules,
+        bool hasFactFilters,
+        bool credentialLimitTo24Hours,
+        CancellationToken ct)
+    {
+        var items = new List<(TenantOverviewItem, bool)>();
         foreach (var readable in glucoseReadTenants)
         {
             var tenant = readable.Tenant;
@@ -172,7 +184,7 @@ public class TenantOverviewService : ITenantOverviewService
                     var fallbackLastReadingAt = historyClamped ? null : tenant.LastReadingAt;
                     var fallbackStatus = _classifier.Classify(
                         null, null, fallbackLastReadingAt, _classifier.Defaults, nowUtc);
-                    return new TenantOverviewItem(
+                    return (new TenantOverviewItem(
                         tenant.Id, tenant.Slug, tenant.DisplayName,
                         fallbackLastReadingAt, Latest: null, fallbackStatus,
                         _classifier.Defaults, ActiveAlertCount: null, HighestActiveSeverity: null,
@@ -181,23 +193,63 @@ public class TenantOverviewService : ITenantOverviewService
                             fallbackStatus, latest: null, fallbackLastReadingAt,
                             activeAlertCount: null, highestSeverity: null, trackers: null,
                             nowUtc),
-                        FirstGroupId: null);
+                        FirstGroupId: null), !hasFactFilters);
                 }));
         }
 
-        items.Sort(CompareForDisplay);
         return items;
     }
 
     public async Task<TenantReviewResponse> GetReviewAsync(
         Guid? subjectId, IReadOnlySet<string> tokenScopes, AuthType authType, int days,
+        OverviewRuleSet rules,
+        PeopleQuery query,
         bool credentialLimitTo24Hours = false,
         CancellationToken ct = default) =>
-        await BuildReviewAsync(
-            subjectId is { } subject ? await GetGlucoseReadTenantsAsync(subject, tokenScopes, authType, ct) : [],
-            days, credentialLimitTo24Hours, ct);
+        subjectId is { } subject
+            ? await BuildReviewAsync(
+                subject, await GetGlucoseReadTenantsAsync(subject, tokenScopes, authType, ct), days, rules, query,
+                credentialLimitTo24Hours, ct)
+            : await ReadReviewAsync([], days, credentialLimitTo24Hours, ct);
 
+    /// <summary>
+    /// The review of the people of <paramref name="glucoseReadTenants"/> <paramref name="query"/> keeps. Ordered by the
+    /// query's sort when it is a review column (<see cref="PeopleOrder.CompareReview"/>); otherwise in the overview's
+    /// order when a part of the query needs the overview's items to judge (<see cref="PeopleOrder.NeedsItems"/>), and in
+    /// no meaningful order when none does.
+    /// </summary>
     private async Task<TenantReviewResponse> BuildReviewAsync(
+        Guid subjectId,
+        IReadOnlyList<GlucoseReadTenant> glucoseReadTenants,
+        int days,
+        OverviewRuleSet rules,
+        PeopleQuery query,
+        bool credentialLimitTo24Hours,
+        CancellationToken ct)
+    {
+        IReadOnlyList<GlucoseReadTenant> people;
+        IReadOnlySet<Guid> flagged = new HashSet<Guid>();
+        var pending = 0;
+        if (PeopleOrder.NeedsItems(query))
+        {
+            var kept = await KeptItemsAsync(subjectId, glucoseReadTenants, rules, query, credentialLimitTo24Hours, ct);
+            var byTenant = glucoseReadTenants.ToDictionary(t => t.Tenant.Id);
+            people = [.. kept.Items.Select(item => byTenant[item.TenantId])];
+            flagged = kept.Items.Where(PeopleOrder.IsFlagged).Select(item => item.TenantId).ToHashSet();
+            pending = kept.Pending;
+        }
+        else
+        {
+            people = await NarrowAsync(subjectId, glucoseReadTenants, query, credentialLimitTo24Hours, ct);
+        }
+
+        var review = await ReadReviewAsync(people, days, credentialLimitTo24Hours, ct);
+        if (query.Sort is { } sort && PeopleSort.ReviewColumns.Contains(sort.Column))
+            review.People.Sort((a, b) => PeopleOrder.CompareReview(a, b, sort, flagged));
+        return review with { PeopleWithRulesPending = pending };
+    }
+
+    private async Task<TenantReviewResponse> ReadReviewAsync(
         IReadOnlyList<GlucoseReadTenant> glucoseReadTenants, int days, bool credentialLimitTo24Hours, CancellationToken ct)
     {
         var to = _time.GetUtcNow().UtcDateTime;
@@ -228,7 +280,7 @@ public class TenantOverviewService : ITenantOverviewService
             }
         }
 
-        return new TenantReviewResponse(from, to, previousFrom, from, people);
+        return new TenantReviewResponse(from, to, previousFrom, from, people, 0);
     }
 
     private async Task<T> TryBuildAsync<T>(TenantRecord tenant, Func<Task<T>> build, Func<T> fallback)
@@ -361,11 +413,11 @@ public class TenantOverviewService : ITenantOverviewService
         var to = _time.GetUtcNow().UtcDateTime;
         var from = to - PersonWindow;
 
-        var run = await BeginRulesAsync(subject, rules, [readable], credentialLimitTo24Hours, ct);
+        var run = await BeginRulesAsync(subject, rules, PeopleQuery.Empty, [readable], credentialLimitTo24Hours, ct);
         await using var scope = OpenTenantScope(tenant, access.HistoryClamped);
         var services = scope.ServiceProvider;
 
-        var person = await BuildItemAsync(services, readable, access, run, ct);
+        var (person, _) = await BuildItemAsync(services, readable, access, run, ct);
         run?.Finish();
         var readings = await services.GetRequiredService<ICanonicalGlucoseService>().GetWindowAsync(from, to, ct);
         var entries = access.Therapy ? await ReadEntriesAsync(services, from, to, ct) : null;
@@ -400,7 +452,8 @@ public class TenantOverviewService : ITenantOverviewService
                 credentialLimitTo24Hours, readable.MembershipLimitTo24Hours, readable.EffectivePermissions));
     }
 
-    private async Task<TenantOverviewItem> BuildItemAsync(
+    /// <summary>The person's item, and whether every fact filter of <paramref name="rules"/> matched for them.</summary>
+    private async Task<(TenantOverviewItem Item, bool MatchesFilters)> BuildItemAsync(
         IServiceProvider services, GlucoseReadTenant readable, ItemAccess access, IViewerFlagRuleRun? rules, CancellationToken ct)
     {
         var tenant = readable.Tenant;
@@ -473,15 +526,18 @@ public class TenantOverviewService : ITenantOverviewService
             latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, nowUtc);
 
         var attention = BuildAttention(status, reading, lastReadingAt, activeAlertCount, highestSeverity, trackers, nowUtc);
+        var matchesFilters = true;
         if (rules is not null)
         {
+            var judged = await rules.JudgeAsync(readable, services, latest, activeTrackers, pump, ct);
+            matchesFilters = judged.MatchesFilters;
             attention = attention
-                .Concat(await rules.ReasonsAsync(readable, services, latest, activeTrackers, pump, ct))
+                .Concat(judged.Reasons)
                 .OrderByDescending(r => r.Level)
                 .ToList();
         }
 
-        return new TenantOverviewItem(
+        return (new TenantOverviewItem(
             tenant.Id, tenant.Slug, tenant.DisplayName,
             latest?.Timestamp ?? lastReadingAt,
             reading, status, thresholds,
@@ -489,7 +545,7 @@ public class TenantOverviewService : ITenantOverviewService
             ThinToBuckets(recent),
             therapy, devices, trackers,
             attention,
-            FirstGroupId: null);
+            FirstGroupId: null), matchesFilters);
     }
 
     /// <summary>Oldest first, the newest reading of each 5-minute bucket.</summary>

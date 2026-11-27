@@ -96,10 +96,10 @@ public class TeamFlagRulesIntegrationTests(ApiIntegrationTestFixture fixture, IT
         (await staffClient.PostAsJsonAsync("/api/v4/me/flag-rules", StaleReading(100_000))).StatusCode.Should().Be(HttpStatusCode.Created);
         (await staffClient.PostAsJsonAsync("/api/v4/me/flag-rules", StaleReading(99_999))).StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var team = await staffClient.GetFromJsonAsync<JsonElement>("/api/v4/me/tenants/overview?rules=Team");
-        var all = await staffClient.GetFromJsonAsync<JsonElement>("/api/v4/me/tenants/overview?rules=All");
-        var unnamed = await staffClient.GetFromJsonAsync<JsonElement>("/api/v4/me/tenants/overview");
-        var managed = await managerClient.GetFromJsonAsync<JsonElement>("/api/v4/me/tenants/overview?rules=Team");
+        var team = await OverviewAsync(staffClient, new { rules = "Team" });
+        var all = await OverviewAsync(staffClient, new { rules = "All" });
+        var unnamed = await OverviewAsync(staffClient, new { });
+        var managed = await OverviewAsync(managerClient, new { rules = "Team" });
 
         RuleReasons(team).Should().Equal(("Team", teamName, 100_000.0));
         RuleTeams(team).Should().Equal((teamId, teamName));
@@ -110,6 +110,13 @@ public class TeamFlagRulesIntegrationTests(ApiIntegrationTestFixture fixture, IT
         RuleReasons(managed).Should().BeEmpty("a manager follows nobody through the team");
         RuleTeams(managed).Should().BeEmpty();
         (await ownerOnSite.GetStringAsync("/api/v4/member-invites/members/history")).Should().NotContain("flag_rule").And.NotContain("FlagRule");
+    }
+
+    private static async Task<JsonElement> OverviewAsync(HttpClient client, object request)
+    {
+        var response = await client.PostAsJsonAsync("/api/v4/me/tenants/overview", request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
 
     private static IEnumerable<(string? Source, string? Team, double Value)> RuleReasons(JsonElement overview) =>

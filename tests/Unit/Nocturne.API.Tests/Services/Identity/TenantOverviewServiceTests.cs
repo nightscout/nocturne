@@ -1,3 +1,4 @@
+using Nocturne.Core.Models.Identity;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
@@ -25,6 +26,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 using static Nocturne.API.Tests.Services.Identity.TenantOverviewTestKit;
@@ -58,7 +60,7 @@ public partial class TenantOverviewServiceTests
         SeedMembership(options, Guid.NewGuid(), "other-subject", [Scope.GlucoseRead]);
 
         var service = NewService(options);
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         response.Tenants.Select(t => t.Slug).Should().BeEquivalentTo(
             ["included", "superuser", "readwrite", "direct-only"]);
@@ -84,16 +86,16 @@ public partial class TenantOverviewServiceTests
         // membership used to bypass the intersection here, so an owner's narrowly-scoped
         // third-party token still saw every tenant in the picker.
         var narrow = await service.GetOverviewAsync(
-            subjectId, new HashSet<string> { Scope.TreatmentsRead }, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+            subjectId, new HashSet<string> { Scope.TreatmentsRead }, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
         narrow.Tenants.Should().BeEmpty();
 
         // An empty scope set on a delegated credential grants nothing.
         var empty = await service.GetOverviewAsync(
-            subjectId, new HashSet<string>(), AuthType.OAuthAccessToken, OverviewRuleSet.All);
+            subjectId, new HashSet<string>(), AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
         empty.Tenants.Should().BeEmpty();
 
         // A full-access token consents to everything, so both memberships resolve in full.
-        var full = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+        var full = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
         full.Tenants.Select(t => t.Slug).Should().BeEquivalentTo(["member-tenant", "owner-tenant"]);
     }
 
@@ -117,13 +119,13 @@ public partial class TenantOverviewServiceTests
         var service = NewService(options);
 
         var session = await service.GetOverviewAsync(
-            subjectId, new HashSet<string>(), AuthType.SessionCookie, OverviewRuleSet.All);
+            subjectId, new HashSet<string>(), AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
         session.Tenants.Select(t => t.Slug).Should().BeEquivalentTo(
             ["member-tenant", "admin-tenant", "owner-tenant"]);
 
         // The same subject over a delegated credential with no scopes still sees nothing.
         var delegated = await service.GetOverviewAsync(
-            subjectId, new HashSet<string>(), AuthType.OAuthAccessToken, OverviewRuleSet.All);
+            subjectId, new HashSet<string>(), AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
         delegated.Tenants.Should().BeEmpty();
     }
 
@@ -172,7 +174,7 @@ public partial class TenantOverviewServiceTests
 
         (await service.GetGlucoseReadTenantsAsync(subjectId, new HashSet<string>(), AuthType.SessionCookie))
             .Select(t => t.Tenant.Slug).Should().Equal("ending-later");
-        (await service.GetOverviewAsync(subjectId, new HashSet<string>(), AuthType.SessionCookie, OverviewRuleSet.All))
+        (await service.GetOverviewAsync(subjectId, new HashSet<string>(), AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty))
             .Tenants.Select(i => i.Slug).Should().Equal("ending-later");
         (await service.GetPersonAsync(subjectId, ended, new HashSet<string>(), AuthType.SessionCookie, OverviewRuleSet.All)).Should().BeNull();
     }
@@ -233,7 +235,7 @@ public partial class TenantOverviewServiceTests
 
         var service = NewService(options);
         var response = await service.GetOverviewAsync(
-            subjectId, new HashSet<string> { Scope.GlucoseRead }, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+            subjectId, new HashSet<string> { Scope.GlucoseRead }, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         var item = response.Tenants.Should().ContainSingle().Subject;
         item.ActiveAlertCount.Should().BeNull();
@@ -251,7 +253,7 @@ public partial class TenantOverviewServiceTests
         SeedActiveExcursion(options, tenantId, AlertRuleSeverity.Warning);
 
         var service = NewService(options);
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         var item = response.Tenants.Should().ContainSingle().Subject;
         item.ActiveAlertCount.Should().BeNull();
@@ -317,7 +319,7 @@ public partial class TenantOverviewServiceTests
         };
         var service = NewService(options, latest);
 
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         var item = response.Tenants.Should().ContainSingle().Subject;
         item.Latest.Should().NotBeNull();
@@ -355,7 +357,7 @@ public partial class TenantOverviewServiceTests
             Trackers = [EventTracker("b-tracker", hoursUntil: 1, NotificationUrgency.Urgent)],
         };
         var service = NewService(options, latest, fakes: fakes);
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         var item = response.Tenants.Should().ContainSingle().Subject;
         item.TenantId.Should().Be(tenantA);
@@ -398,7 +400,7 @@ public partial class TenantOverviewServiceTests
         };
 
         var response = await NewService(options, fakes: fakes)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         var a = response.Tenants.Single(t => t.TenantId == tenantA);
         a.RecentReadings.Select(r => r.Mgdl).Should().Equal(100);
@@ -427,7 +429,7 @@ public partial class TenantOverviewServiceTests
         var latest = new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-2) };
         var service = NewService(options, latest, failingTenantId: badTenant);
 
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         response.Tenants.Should().HaveCount(2);
 
@@ -460,7 +462,7 @@ public partial class TenantOverviewServiceTests
 
         var service = NewService(options, latest: null, failingTenantId: badTenant);
 
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         var bad = response.Tenants.Single();
         bad.Status.Should().Be(GlucoseStatus.Unknown);
@@ -478,7 +480,7 @@ public partial class TenantOverviewServiceTests
 
         var service = NewService(options, latest: null, failingTenantId: badTenant);
 
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         var bad = response.Tenants.Single();
         bad.Status.Should().Be(GlucoseStatus.Stale);
@@ -518,7 +520,7 @@ public partial class TenantOverviewServiceTests
 
         var latest = new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-2) };
         var service = NewService(options, latest);
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         var item = response.Tenants.Should().ContainSingle().Subject;
         // The bad rule is skipped, the good rule still applies, and the reading survives.
@@ -546,7 +548,7 @@ public partial class TenantOverviewServiceTests
             directPermissions: [Scope.FullAccess], limitTo24Hours: true, lastReadingAt: oldReading);
 
         var (service, clampSeen, contextClampSeen) = NewClampObservingService(options);
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
 
         contextClampSeen.Should().Equal(clampSeen, "the alert and threshold reads run under the same clamp as the glucose read");
 
@@ -570,7 +572,7 @@ public partial class TenantOverviewServiceTests
 
         var (service, clampSeen, _) = NewClampObservingService(options);
         await service.GetOverviewAsync(
-            subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, credentialLimitTo24Hours: true);
+            subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty, credentialLimitTo24Hours: true);
 
         clampSeen[tenantId].Should().BeTrue();
         clampSeen[ownerTenant].Should().BeTrue("the exemption covers the membership flag, not a limit on the token");
@@ -661,7 +663,7 @@ public partial class TenantOverviewServiceTests
         };
 
         var item = (await NewService(options, fakes: fakes)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All)).Tenants.Single();
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty)).Tenants.Single();
 
         item.RecentReadings.Should().Equal(
             new TenantOverviewPoint(bucketStart.AddMinutes(4).AddSeconds(50), 111),
@@ -679,7 +681,7 @@ public partial class TenantOverviewServiceTests
 
         var before = DateTime.UtcNow;
         var item = (await NewService(options, fakes: fakes)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All)).Tenants.Single();
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty)).Tenants.Single();
         var after = DateTime.UtcNow;
 
         item.RecentReadings.Should().BeEmpty();
@@ -701,7 +703,7 @@ public partial class TenantOverviewServiceTests
         };
 
         var item = (await NewService(options, fakes: fakes)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All)).Tenants.Single();
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty)).Tenants.Single();
 
         item.RecentReadings.Should().ContainSingle().Which.Mgdl.Should().Be(110);
     }
@@ -718,7 +720,7 @@ public partial class TenantOverviewServiceTests
         fakes.Default = new TenantData { OnBoard = OnBoard(iob: 2.348, cob: 12.4) };
 
         var item = (await NewService(options, fakes: fakes)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All)).Tenants.Single();
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty)).Tenants.Single();
 
         item.Therapy.Should().BeNull();
         fakes.IobCob.Verify(
@@ -735,12 +737,12 @@ public partial class TenantOverviewServiceTests
         fakes.Default = new TenantData { OnBoard = OnBoard(iob: 2.348, cob: 12.4) };
 
         var service = NewService(options, fakes: fakes);
-        var item = (await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All))
+        var item = (await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty))
             .Tenants.Single();
         item.Therapy.Should().Be(new TenantOverviewTherapy(2.35, true, 12, true));
 
         fakes.Default = new TenantData { OnBoard = OnBoard(iob: 0, cob: 0, insulin: false, carbs: false) };
-        item = (await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All))
+        item = (await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty))
             .Tenants.Single();
         item.Therapy.Should().Be(new TenantOverviewTherapy(0, false, 0, false));
     }
@@ -755,7 +757,7 @@ public partial class TenantOverviewServiceTests
         fakes.Default = new TenantData { Pump = new PumpSnapshot { Reservoir = 50, Timestamp = DateTime.UtcNow } };
 
         var item = (await NewService(options, fakes: fakes)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All)).Tenants.Single();
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty)).Tenants.Single();
 
         item.Devices.Should().BeNull();
         fakes.Pumps.Verify(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -775,12 +777,12 @@ public partial class TenantOverviewServiceTests
         };
 
         var service = NewService(options, fakes: fakes);
-        var item = (await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All))
+        var item = (await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty))
             .Tenants.Single();
         item.Devices.Should().Be(new TenantOverviewDevices(87.5, 60, snapshotAt));
 
         fakes.Default = new TenantData();
-        item = (await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All))
+        item = (await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty))
             .Tenants.Single();
         item.Devices.Should().Be(new TenantOverviewDevices(null, null, null));
     }
@@ -795,7 +797,7 @@ public partial class TenantOverviewServiceTests
         fakes.Default = new TenantData { Trackers = [EventTracker("site", hoursUntil: 1, NotificationUrgency.Urgent)] };
 
         var item = (await NewService(options, fakes: fakes)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All)).Tenants.Single();
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty)).Tenants.Single();
 
         item.Trackers.Should().BeNull();
         item.Attention.Should().NotContain(r => r.Kind == TenantOverviewAttentionKind.TrackerDue);
@@ -812,7 +814,7 @@ public partial class TenantOverviewServiceTests
         fakes.Default = new TenantData { Trackers = [EventTracker("site", hoursUntil: 1, NotificationUrgency.Warn)] };
 
         var item = (await NewService(options, fakes: fakes)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All)).Tenants.Single();
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty)).Tenants.Single();
 
         item.Trackers.Should().ContainSingle().Which.Name.Should().Be("site");
     }
@@ -893,7 +895,7 @@ public partial class TenantOverviewServiceTests
 
         var latest = new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-1) };
         var response = await NewService(options, latest)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         response.Tenants.Single(t => t.TenantId == withScope).Attention.Should().ContainSingle().Which.Should().Be(
             new TenantOverviewAttention(TenantOverviewAttentionKind.ActiveAlert, NotificationUrgency.Urgent));
@@ -919,7 +921,7 @@ public partial class TenantOverviewServiceTests
         };
 
         var item = (await NewService(options, fakes: fakes)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All)).Tenants.Single();
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty)).Tenants.Single();
 
         item.Trackers.Should().HaveCount(3);
         item.Attention.Should().HaveCount(2);
@@ -943,7 +945,7 @@ public partial class TenantOverviewServiceTests
         };
 
         var item = (await NewService(options, fakes: fakes)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All)).Tenants.Single();
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty)).Tenants.Single();
 
         item.Attention.Select(r => r.Kind).Should().Equal(
             TenantOverviewAttentionKind.GlucoseOutOfRange, TenantOverviewAttentionKind.ActiveAlert);
@@ -986,7 +988,7 @@ public partial class TenantOverviewServiceTests
         fakes.Data[stale] = new TenantData { Latest = new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-90) } };
 
         var response = await NewService(options, fakes: fakes)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All);
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty);
 
         response.Tenants.Select(t => t.Slug).Should().Equal("low", "stale", "calm");
     }
@@ -997,7 +999,7 @@ public partial class TenantOverviewServiceTests
         var options = NewOptions();
         SeedMembership(options, subjectId, "family", [Scope.GlucoseRead]);
         return (await NewService(options, latest)
-            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All)).Tenants.Single();
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken, OverviewRuleSet.All, PeopleQuery.Empty)).Tenants.Single();
     }
 
     private static TenantOverviewReading Reading() =>
@@ -1118,6 +1120,8 @@ public partial class TenantOverviewServiceTests
         services.AddScoped<ICategoryReadContext>(_ => new Nocturne.Infrastructure.Data.Services.CategoryReadContext());
         services.AddScoped<INocturneDbContextFactory>(_ => new ScopeContextFactory(options, () => current!.TenantId));
         services.AddScoped<IAlertRepository>(sp => new AlertRepository(sp.GetRequiredService<INocturneDbContextFactory>()));
+        services.AddScoped<IPatientRecordRepository>(sp => new PatientRecordRepository(
+            sp.GetRequiredService<INocturneDbContextFactory>(), NullLogger<PatientRecordRepository>.Instance));
         var provider = services.BuildServiceProvider();
 
         return new TenantOverviewService(

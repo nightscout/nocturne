@@ -19,14 +19,22 @@ public static class TenantReviewPeriods
 /// <param name="To">End of the period, exclusive, UTC.</param>
 /// <param name="PreviousFrom">Start of the period directly before it, inclusive, UTC.</param>
 /// <param name="PreviousTo">End of the previous period, exclusive, UTC.</param>
-/// <param name="People">One entry per person, in no meaningful order: join on
-/// <see cref="TenantReviewPerson.TenantId"/>.</param>
+/// <param name="People">
+/// One entry per person the query keeps. Ordered by its sort when that is a review column, flagged people first;
+/// otherwise in the overview's order when the query filters by a fact or by flagged, or sorts, and in no meaningful
+/// order when it does none of these: join on <see cref="TenantReviewPerson.TenantId"/>.
+/// </param>
+/// <param name="PeopleWithRulesPending">
+/// As <see cref="TenantOverviewResponse.PeopleWithRulesPending"/>, for a query the overview's items were judged for;
+/// zero otherwise.
+/// </param>
 public record TenantReviewResponse(
     DateTime From,
     DateTime To,
     DateTime PreviousFrom,
     DateTime PreviousTo,
-    List<TenantReviewPerson> People);
+    List<TenantReviewPerson> People,
+    int PeopleWithRulesPending);
 
 /// <summary>One person's entry in a <see cref="TenantReviewResponse"/>.</summary>
 /// <param name="Unavailable">Why the caller has no figures for the person. Null when

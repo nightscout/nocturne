@@ -9,8 +9,10 @@ namespace Nocturne.API.Reports;
 
 /// <inheritdoc cref="IViewerFlagRules"/>
 /// <remarks>
-/// Team and personal rules are judged by one <see cref="FlagFactEvaluator.FlagJudging"/>, so a team's rule and a
-/// viewer's rule on one read share it, its keep and its audit mark. A team's rule is judged only for the people the team
+/// Team and personal rules, and the fact filters of the viewer's query, are judged by one
+/// <see cref="FlagFactEvaluator.FlagJudging"/>, so a rule and a filter on one read share it, its keep and its audit mark,
+/// and a person still being checked for either is counted once. A filter matches where a rule would give a reason
+/// (<see cref="FlagJudgement.Matches"/>): never on no data, and never for a person it cannot be checked for. A team's rule is judged only for the people the team
 /// follows, so nothing is read for it of anyone else. A rule whose fact no longer checks (a dataset or field gone since
 /// it was saved) is left out. A person is judged by <see cref="FlagFactEvaluator"/>, which reads nothing on the caller's
 /// flow: a read that fails does so in the background (<see cref="FlagFactReads"/>), and leaves only that person with the
@@ -25,28 +27,33 @@ internal sealed class ViewerFlagRules(
     public async Task<IViewerFlagRuleRun?> BeginAsync(
         Guid subjectId,
         OverviewRuleSet rules,
+        IReadOnlyList<PeopleFilter> facts,
         IReadOnlyList<GlucoseReadTenant> people,
         bool credentialLimitTo24Hours,
         CancellationToken ct)
     {
         var held = new List<HeldRule>();
-        var staffed = (await teams.GetTeamsAndTheirPeopleAsync(subjectId, time.GetUtcNow().UtcDateTime, ct))
-            .Where(team => team.CallerIsStaff && people.Any(person => team.People.Contains(person.Tenant.Id)))
-            .ToList();
-        if (staffed.Count > 0)
+        if (rules != OverviewRuleSet.Fixed)
         {
-            var ofTeams = await flagRules.GetOfTeamsAsync(subjectId, [.. staffed.Select(t => t.Id)], ct);
-            foreach (var team in staffed)
-                foreach (var rule in ofTeams.GetValueOrDefault(team.Id) ?? [])
-                    Hold(held, rule, new TenantOverviewRuleTeam(team.Id, team.Name), team.People);
+            var staffed = (await teams.GetTeamsAndTheirPeopleAsync(subjectId, time.GetUtcNow().UtcDateTime, ct))
+                .Where(team => team.CallerIsStaff && people.Any(person => team.People.Contains(person.Tenant.Id)))
+                .ToList();
+            if (staffed.Count > 0)
+            {
+                var ofTeams = await flagRules.GetOfTeamsAsync(subjectId, [.. staffed.Select(t => t.Id)], ct);
+                foreach (var team in staffed)
+                    foreach (var rule in ofTeams.GetValueOrDefault(team.Id) ?? [])
+                        Hold(held, rule, new TenantOverviewRuleTeam(team.Id, team.Name), team.People);
+            }
+            if (rules == OverviewRuleSet.All)
+                foreach (var rule in await flagRules.GetOfSubjectAsync(subjectId, ct))
+                    Hold(held, rule, team: null, people: null);
         }
-        if (rules == OverviewRuleSet.All)
-            foreach (var rule in await flagRules.GetOfSubjectAsync(subjectId, ct))
-                Hold(held, rule, team: null, people: null);
 
-        if (held.Count == 0)
+        if (held.Count == 0 && facts.Count == 0)
             return null;
 
+        var filters = facts.Select(ConditionOf).ToList();
         var applied = held
             .Where(h => h.Team is not null)
             .Select(h => h.Team!)
@@ -54,8 +61,15 @@ internal sealed class ViewerFlagRules(
             .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(t => t.Id)
             .ToList();
-        return new Run(held, applied, evaluator.Begin([.. held.Select(h => h.Condition)], credentialLimitTo24Hours));
+        var conditions = held.Select(h => h.Condition).Concat(filters.OfType<FlagFactCondition>()).ToList();
+        return new Run(held, filters, applied, evaluator.Begin(conditions, credentialLimitTo24Hours));
     }
+
+    /// <summary>A fact filter's condition; null when its fact no longer checks, and then it matches no one.</summary>
+    private FlagFactCondition? ConditionOf(PeopleFilter filter) =>
+        filter is { Dataset: { } dataset, Field: { } field, Comparison: { } comparison, Value: { } value }
+            ? evaluator.CheckRule(dataset, field, filter.Days, comparison, value).Condition
+            : null;
 
     private void Hold(List<HeldRule> held, FlagRule rule, TenantOverviewRuleTeam? team, IReadOnlySet<Guid>? people)
     {
@@ -117,8 +131,10 @@ internal sealed class ViewerFlagRules(
     /// <param name="People">The sites the rule applies to; null for the viewer's own rule, which applies to everyone.</param>
     private sealed record HeldRule(FlagRule Rule, FlagFactCondition Condition, TenantOverviewRuleTeam? Team, IReadOnlySet<Guid>? People);
 
+    /// <param name="filters">The condition of each fact filter, in order; null for one whose fact no longer checks.</param>
     private sealed class Run(
         IReadOnlyList<HeldRule> held,
+        IReadOnlyList<FlagFactCondition?> filters,
         IReadOnlyList<TenantOverviewRuleTeam> teams,
         FlagFactEvaluator.FlagJudging judging) : IViewerFlagRuleRun
     {
@@ -126,7 +142,7 @@ internal sealed class ViewerFlagRules(
 
         public IReadOnlyList<TenantOverviewRuleTeam> Teams => teams;
 
-        public async Task<IReadOnlyList<TenantOverviewAttention>> ReasonsAsync(
+        public async Task<ViewerJudgement> JudgeAsync(
             GlucoseReadTenant person,
             IServiceProvider personScope,
             SensorGlucose? latest,
@@ -134,25 +150,28 @@ internal sealed class ViewerFlagRules(
             PumpSnapshot? pump,
             CancellationToken ct)
         {
-            var applicable = Enumerable.Range(0, held.Count)
+            var ruled = Enumerable.Range(0, held.Count)
                 .Where(i => held[i].People is not { } people || people.Contains(person.Tenant.Id))
                 .ToList();
-            if (applicable.Count == 0)
-                return [];
+            var filtered = Enumerable.Range(held.Count, filters.Count(f => f is not null)).ToList();
+            var checkable = filters.All(f => f is not null);
+            if (ruled.Count == 0 && filtered.Count == 0)
+                return new ViewerJudgement([], checkable);
 
             var judged = await judging.JudgeAsync(
-                person, personScope, new FlagLiveReads(latest, activeTrackers, pump), applicable, ct);
+                person, personScope, new FlagLiveReads(latest, activeTrackers, pump), [.. ruled, .. filtered], ct);
             if (judged.State != FlagPersonState.Judged)
-                return [];
+                return new ViewerJudgement([], filters.Count == 0);
 
             var reasons = new List<TenantOverviewAttention>();
-            for (var k = 0; k < applicable.Count; k++)
+            for (var k = 0; k < ruled.Count; k++)
             {
-                var rule = held[applicable[k]];
+                var rule = held[ruled[k]];
                 if (ReasonOf(rule.Rule, rule.Team, rule.Condition, judged.Judgements[k]) is { } reason)
                     reasons.Add(reason);
             }
-            return ShownOnce(reasons);
+            var matches = checkable && judged.Judgements.Skip(ruled.Count).All(j => j.Matches);
+            return new ViewerJudgement(ShownOnce(reasons), matches);
         }
 
         public void Finish() => judging.Finish();

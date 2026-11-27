@@ -61,7 +61,9 @@ public class SleepReportService : ISleepReportService
     private async Task<SleepStageReferenceRangeSet> ResolveReferenceRangesAsync(CancellationToken ct)
     {
         var record = await _patientRecord.GetAsync(ct);
-        var age = record?.DateOfBirth is { } dob ? AgeInYears(dob) : (int?)null;
+        var age = record?.DateOfBirth is { } dob
+            ? PatientAge.InYears(dob, DateOnly.FromDateTime(_time.GetUtcNow().UtcDateTime))
+            : (int?)null;
         return SleepStageReferenceRangeSet.Resolve(age, record?.Sex);
     }
 
@@ -78,15 +80,6 @@ public class SleepReportService : ISleepReportService
         return FirstDayOfWeek.Resolve(
             preferences.RegionFormat,
             string.IsNullOrEmpty(subject.PreferredLanguage) ? UserDisplayPreferences.DefaultLanguage : subject.PreferredLanguage);
-    }
-
-    /// <summary>Completed years between <paramref name="dob"/> and today (UTC).</summary>
-    private int AgeInYears(DateOnly dob)
-    {
-        var today = DateOnly.FromDateTime(_time.GetUtcNow().UtcDateTime);
-        var age = today.Year - dob.Year;
-        if (dob > today.AddYears(-age)) age--;
-        return age;
     }
 
     /// <inheritdoc/>

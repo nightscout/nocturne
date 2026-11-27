@@ -308,6 +308,10 @@ public class V4WriteScopeGatingTests
             ["CoachMarkController.DeleteAll"] = NotDataCategory.PresentationState,
             ["UserPreferencesController.UpdatePreferences"] = NotDataCategory.PresentationState,
             ["DebugController.PreviewEntries"] = NotDataCategory.ComputesAndReturns,
+            // Reads the query's body forced off GET: the service reads each person under the caller's own
+            // access to them, as the overview's GET did, and stores nothing.
+            ["MyTenantsController.GetOverview"] = NotDataCategory.ComputesAndReturns,
+            ["MyTenantsController.GetReview"] = NotDataCategory.ComputesAndReturns,
             ["SupportController.CreateIssue"] = NotDataCategory.OutboundOnly,
 
             ["RecoveryEmailController.SetRecoveryEmail"] = NotDataCategory.OwnIdentity,
@@ -318,6 +322,11 @@ public class V4WriteScopeGatingTests
             ["FlagRulesController.CreateTeamFlagRule"] = NotDataCategory.OwnTeams,
             ["FlagRulesController.UpdateTeamFlagRule"] = NotDataCategory.OwnTeams,
             ["FlagRulesController.DeleteTeamFlagRule"] = NotDataCategory.OwnTeams,
+            // A view is found only on a context pinned to the caller's subject, under a strict subject_pin.
+            ["PeopleViewsController.CreatePeopleView"] = NotDataCategory.OwnIdentity,
+            ["PeopleViewsController.UpdatePeopleView"] = NotDataCategory.OwnIdentity,
+            ["PeopleViewsController.DeletePeopleView"] = NotDataCategory.OwnIdentity,
+            ["PeopleViewsController.ReorderPeopleViews"] = NotDataCategory.OwnIdentity,
             ["RecoveryEmailController.DeleteRecoveryEmail"] = NotDataCategory.OwnIdentity,
             ["AvatarController.Upload"] = NotDataCategory.OwnIdentity,
             ["AvatarController.Delete"] = NotDataCategory.OwnIdentity,

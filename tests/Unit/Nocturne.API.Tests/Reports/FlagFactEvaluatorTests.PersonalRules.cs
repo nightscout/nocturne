@@ -289,7 +289,7 @@ public partial class FlagFactEvaluatorTests
 
         var reasons = await RulesJudgedAsync(harness, [gone, Rule("glucose_statistics", "timeBelow", 14, FlagRuleComparison.Above, 4)], [person]);
         var run = await Rules(harness, harness.Evaluator, [gone], [])
-            .BeginAsync(Viewer, OverviewRuleSet.All, [person], false, CancellationToken.None);
+            .BeginAsync(Viewer, OverviewRuleSet.All, [], [person], false, CancellationToken.None);
 
         reasons.Single().Should().ContainSingle().Which.Rule!.Field.Should().Be("timeBelow");
         run.Should().BeNull();
@@ -341,7 +341,7 @@ public partial class FlagFactEvaluatorTests
         bool credentialLimitTo24Hours)
     {
         var run = await Rules(harness, evaluator, personal, teams)
-            .BeginAsync(Viewer, set, people, credentialLimitTo24Hours, CancellationToken.None);
+            .BeginAsync(Viewer, set, [], people, credentialLimitTo24Hours, CancellationToken.None);
         run.Should().NotBeNull();
         var reasons = new List<IReadOnlyList<TenantOverviewAttention>>();
         foreach (var person in people)
@@ -353,7 +353,7 @@ public partial class FlagFactEvaluatorTests
                 ? null
                 : await scope.ServiceProvider.GetRequiredService<ICanonicalGlucoseService>().GetLatestAsync(CancellationToken.None);
             var pump = await Harness.NewestPumpAsync(person, scope.ServiceProvider, CancellationToken.None);
-            reasons.Add(await run!.ReasonsAsync(person, scope.ServiceProvider, latest, [], pump, CancellationToken.None));
+            reasons.Add((await run!.JudgeAsync(person, scope.ServiceProvider, latest, [], pump, CancellationToken.None)).Reasons);
         }
         run!.Finish();
         return (reasons, run.PeopleWithRulesPending, run.Teams);

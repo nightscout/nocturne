@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Reports;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Identity;
@@ -53,6 +54,7 @@ public class SelfServiceTenantCreationTests
         return new MyTenantsController(
             tenantService.Object,
             overviewService.Object,
+            new Mock<IFlagRuleCatalogue>(MockBehavior.Strict).Object,
             Options.Create(new OperatorConfiguration { AllowSelfServiceCreation = allowSelfService }))
         {
             ControllerContext = AuthenticatedContext(),

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -6,6 +7,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
+using Nocturne.API.Reports;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -31,15 +33,18 @@ public class MyTenantsController : ControllerBase
 {
     private readonly ITenantService _tenantService;
     private readonly ITenantOverviewService _overviewService;
+    private readonly IFlagRuleCatalogue _catalogue;
     private readonly OperatorConfiguration _config;
 
     public MyTenantsController(
         ITenantService tenantService,
         ITenantOverviewService overviewService,
+        IFlagRuleCatalogue catalogue,
         IOptions<OperatorConfiguration> config)
     {
         _tenantService = tenantService;
         _overviewService = overviewService;
+        _catalogue = catalogue;
         _config = config.Value;
     }
 
@@ -91,29 +96,33 @@ public class MyTenantsController : ControllerBase
     }
 
     /// <summary>
-    /// Returns every person the caller may read glucose for, as <see cref="ITenantOverviewService.GetOverviewAsync"/>
-    /// orders them, or with <paramref name="group"/> only that group's
-    /// (<see cref="ITenantOverviewService.GetGroupOverviewAsync"/>).
+    /// Returns the people the caller may read glucose for that the query keeps, in its order: everyone, as
+    /// <see cref="ITenantOverviewService.GetOverviewAsync"/> orders them, or with a group only that group's
+    /// (<see cref="ITenantOverviewService.GetGroupOverviewAsync"/>). A read: a POST only so the query travels in the body.
     /// </summary>
-    /// <param name="group">One of the caller's groups (<see cref="GetGroups"/>); 404 for any other.</param>
-    /// <param name="rules">The flag rules judged beside the fixed reasons; the fixed reasons only when not given.</param>
+    /// <param name="request">The group, the flag rules and the query.</param>
     /// <param name="ct">Cancels the operation.</param>
-    [HttpGet("overview")]
+    [HttpPost("overview")]
     [RemoteQuery]
     [ProducesResponseType(typeof(TenantOverviewResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TenantOverviewResponse>> GetOverview(
-        [FromQuery] Guid? group, [FromQuery] OverviewRuleSet? rules, CancellationToken ct)
+        [FromBody] PeopleOverviewRequest request, CancellationToken ct)
     {
         var caller = HttpContext.GetAuthContext() ?? AuthContext.Unauthenticated();
         if (!caller.IsAuthenticated)
             return Unauthorized();
 
-        var flagRules = FlagRulesOf(rules);
-        if (group is { } groupId)
+        var query = request.Query ?? PeopleQuery.Empty;
+        if (FactRefusal(query) is { } refusal)
+            return refusal;
+
+        var flagRules = FlagRulesOf(request.Rules);
+        if (request.Group is { } groupId)
             return caller.SubjectId is { } member
                 && await _overviewService.GetGroupOverviewAsync(
-                    member, groupId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, flagRules,
+                    member, groupId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, flagRules, query,
                     caller.LimitTo24Hours, ct)
                     is { } groupOverview
                 ? Ok(groupOverview)
@@ -124,7 +133,8 @@ public class MyTenantsController : ControllerBase
             return Ok(new TenantOverviewResponse([], null, 0, []));
 
         var overview = await _overviewService.GetOverviewAsync(
-            subjectId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, flagRules, caller.LimitTo24Hours, ct);
+            subjectId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, flagRules, query,
+            caller.LimitTo24Hours, ct);
         return Ok(overview);
     }
 
@@ -142,19 +152,18 @@ public class MyTenantsController : ControllerBase
     }
 
     /// <summary>
-    /// Returns the period statistics of every person <see cref="GetOverview"/> lists for the same
-    /// <paramref name="group"/> (<see cref="ITenantOverviewService.GetReviewAsync"/>).
+    /// Returns the period statistics of every person <see cref="GetOverview"/> lists for the same group, rules and query
+    /// (<see cref="ITenantOverviewService.GetReviewAsync"/>). A read: a POST only so the query travels in the body.
     /// </summary>
-    /// <param name="group">One of the caller's groups (<see cref="GetGroups"/>); 404 for any other.</param>
-    /// <param name="days">The length of the period: 14, 30 or 90.</param>
+    /// <param name="request">The group, the period, the flag rules and the query.</param>
     /// <param name="ct">Cancels the operation.</param>
-    [HttpGet("overview/review")]
+    [HttpPost("overview/review")]
     [RemoteQuery]
     [ProducesResponseType(typeof(TenantReviewResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TenantReviewResponse>> GetReview(
-        [FromQuery] Guid? group, [FromQuery] int days = 14, CancellationToken ct = default)
+        [FromBody] PeopleReviewRequest request, CancellationToken ct)
     {
         // A caller without a subject is answered by the service, which states the periods: see
         // ResolveOwnSubject for why it is not refused.
@@ -162,27 +171,41 @@ public class MyTenantsController : ControllerBase
         if (!caller.IsAuthenticated)
             return Unauthorized();
 
+        var days = request.Days;
         if (!TenantReviewPeriods.IsSupported(days))
             return Problem(
                 detail: $"The period must be one of {string.Join(", ", TenantReviewPeriods.Days)} days.",
                 statusCode: StatusCodes.Status400BadRequest,
                 title: "Bad Request");
 
-        if (group is { } groupId)
+        var query = request.Query ?? PeopleQuery.Empty;
+        if (FactRefusal(query) is { } refusal)
+            return refusal;
+
+        var flagRules = FlagRulesOf(request.Rules);
+        if (request.Group is { } groupId)
             return caller.SubjectId is { } subjectId
                 && await _overviewService.GetGroupReviewAsync(
-                    subjectId, groupId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, days, caller.LimitTo24Hours, ct)
+                    subjectId, groupId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, days, flagRules,
+                    query, caller.LimitTo24Hours, ct)
                     is { } groupReview
                 ? Ok(groupReview)
                 : NoSuchGroup();
 
         var review = await _overviewService.GetReviewAsync(
-            caller.SubjectId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, days, caller.LimitTo24Hours, ct);
+            caller.SubjectId, HttpContext.GetTenantlessTokenScopes(caller), caller.AuthType, days, flagRules, query,
+            caller.LimitTo24Hours, ct);
         return Ok(review);
     }
 
     /// <summary>Rules are judged only when asked for by name.</summary>
     private static OverviewRuleSet FlagRulesOf(OverviewRuleSet? rules) => rules ?? OverviewRuleSet.Fixed;
+
+    /// <summary>What is wrong with the facts the query's fact filters name (<see cref="IFlagRuleCatalogue.CheckFacts"/>); null when they check.</summary>
+    private ActionResult? FactRefusal(PeopleQuery query) =>
+        _catalogue.CheckFacts(query) is { Count: > 0 } errors
+            ? ValidationProblem(new ValidationProblemDetails(errors.ToDictionary(e => e.Key, e => e.Value)))
+            : null;
 
     /// <summary>A group the caller is not in as current staff reads as one that does not exist.</summary>
     private ObjectResult NoSuchGroup() =>
@@ -269,3 +292,15 @@ public class MyTenantsController : ControllerBase
 }
 
 public record CreateMyTenantRequest(string Slug, string DisplayName);
+
+/// <summary>A read of the people the caller follows.</summary>
+/// <param name="Group">One of the caller's groups (<see cref="MyTenantsController.GetGroups"/>); 404 for any other. Everyone the caller follows when left out.</param>
+/// <param name="Rules">The flag rules judged beside the fixed reasons; the fixed reasons only when left out.</param>
+/// <param name="Query">The slice of them to read; everyone, in the read's own order, when left out.</param>
+public sealed record PeopleOverviewRequest(Guid? Group, OverviewRuleSet? Rules, PeopleQuery? Query);
+
+/// <summary>A read of the period statistics of the people the caller follows.</summary>
+/// <param name="Days">The length of the period: 14, 30 or 90.</param>
+/// <inheritdoc cref="PeopleOverviewRequest"/>
+public sealed record PeopleReviewRequest(
+    Guid? Group, [property: Required] int Days, OverviewRuleSet? Rules, PeopleQuery? Query);

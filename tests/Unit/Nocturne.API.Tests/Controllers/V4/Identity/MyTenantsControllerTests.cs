@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Reports;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Identity;
@@ -24,6 +25,7 @@ public class MyTenantsControllerTests
 {
     private readonly Mock<ITenantService> _tenantService = new();
     private readonly Mock<ITenantOverviewService> _overviewService = new();
+    private readonly Mock<IFlagRuleCatalogue> _catalogue = new();
     private readonly Guid _subjectId = Guid.CreateVersion7();
 
     [Theory]
@@ -50,7 +52,7 @@ public class MyTenantsControllerTests
     {
         var controller = CreateController(Subjectless(authType));
 
-        var result = await controller.GetOverview(null, null, CancellationToken.None);
+        var result = await controller.GetOverview(new(null, null, null), CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<TenantOverviewResponse>()
@@ -58,7 +60,7 @@ public class MyTenantsControllerTests
         _overviewService.Verify(
             s => s.GetOverviewAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(),
-                It.IsAny<OverviewRuleSet>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<OverviewRuleSet>(), It.IsAny<PeopleQuery>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -68,14 +70,14 @@ public class MyTenantsControllerTests
     [InlineData(90)]
     public async Task A_review_is_read_for_a_supported_period(int days)
     {
-        var review = new TenantReviewResponse(default, default, default, default, []);
+        var review = new TenantReviewResponse(default, default, default, default, [], 0);
         _overviewService
             .Setup(s => s.GetReviewAsync(
-                _subjectId, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, days,
+                _subjectId, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, days, It.IsAny<OverviewRuleSet>(), It.IsAny<PeopleQuery>(),
                 false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(review);
 
-        var result = await CreateController(Member()).GetReview(null, days, CancellationToken.None);
+        var result = await CreateController(Member()).GetReview(new(null, days, null, null), CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(review);
     }
@@ -92,13 +94,13 @@ public class MyTenantsControllerTests
     [InlineData(365)]
     public async Task A_review_of_any_other_period_is_refused_and_nothing_is_read(int days)
     {
-        var result = await CreateController(Member()).GetReview(null, days, CancellationToken.None);
+        var result = await CreateController(Member()).GetReview(new(null, days, null, null), CancellationToken.None);
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         _overviewService.Verify(
             s => s.GetReviewAsync(
-                It.IsAny<Guid?>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<int>(),
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<int>(), It.IsAny<OverviewRuleSet>(), It.IsAny<PeopleQuery>(),
                 It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
@@ -107,14 +109,14 @@ public class MyTenantsControllerTests
     [MemberData(nameof(SubjectlessCredentials))]
     public async Task A_subjectless_session_is_answered_by_the_service_with_no_subject(AuthType authType)
     {
-        var review = new TenantReviewResponse(default, default, default, default, []);
+        var review = new TenantReviewResponse(default, default, default, default, [], 0);
         _overviewService
             .Setup(s => s.GetReviewAsync(
-                null, It.IsAny<IReadOnlySet<string>>(), authType, 14,
+                null, It.IsAny<IReadOnlySet<string>>(), authType, 14, It.IsAny<OverviewRuleSet>(), It.IsAny<PeopleQuery>(),
                 It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(review);
 
-        var result = await CreateController(Subjectless(authType)).GetReview(null, 14, CancellationToken.None);
+        var result = await CreateController(Subjectless(authType)).GetReview(new(null, 14, null, null), CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(review);
     }
@@ -126,17 +128,17 @@ public class MyTenantsControllerTests
         var overview = new TenantOverviewResponse([], 2, 0, []);
         _overviewService
             .Setup(s => s.GetGroupOverviewAsync(
-                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, OverviewRuleSet.All, false,
+                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, OverviewRuleSet.All, It.IsAny<PeopleQuery>(), false,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(overview);
 
-        var result = await CreateController(Member()).GetOverview(group, OverviewRuleSet.All, CancellationToken.None);
+        var result = await CreateController(Member()).GetOverview(new(group, OverviewRuleSet.All, null), CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(overview);
         _overviewService.Verify(
             s => s.GetOverviewAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(),
-                It.IsAny<OverviewRuleSet>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<OverviewRuleSet>(), It.IsAny<PeopleQuery>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -161,16 +163,16 @@ public class MyTenantsControllerTests
         var overview = new TenantOverviewResponse([], ofAGroup ? 0 : null, 4, []);
         _overviewService
             .Setup(s => s.GetOverviewAsync(
-                _subjectId, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, expected, false,
+                _subjectId, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, expected, It.IsAny<PeopleQuery>(), false,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(overview);
         _overviewService
             .Setup(s => s.GetGroupOverviewAsync(
-                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, expected, false,
+                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, expected, It.IsAny<PeopleQuery>(), false,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(overview);
 
-        var result = await CreateController(Member()).GetOverview(ofAGroup ? group : null, rules, CancellationToken.None);
+        var result = await CreateController(Member()).GetOverview(new(ofAGroup ? group : null, rules, null), CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(overview);
     }
@@ -178,7 +180,7 @@ public class MyTenantsControllerTests
     [Fact]
     public async Task A_group_the_caller_is_not_in_is_not_found()
     {
-        var result = await CreateController(Member()).GetOverview(Guid.CreateVersion7(), null, CancellationToken.None);
+        var result = await CreateController(Member()).GetOverview(new(Guid.CreateVersion7(), null, null), CancellationToken.None);
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
@@ -192,9 +194,9 @@ public class MyTenantsControllerTests
 
         (await controller.GetGroups(CancellationToken.None)).Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeAssignableTo<IEnumerable<StaffGroup>>().Which.Should().BeEmpty();
-        (await controller.GetOverview(Guid.CreateVersion7(), null, CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
+        (await controller.GetOverview(new(Guid.CreateVersion7(), null, null), CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
-        (await controller.GetReview(Guid.CreateVersion7(), 14, CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
+        (await controller.GetReview(new(Guid.CreateVersion7(), 14, null, null), CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
         _overviewService.VerifyNoOtherCalls();
     }
@@ -213,19 +215,19 @@ public class MyTenantsControllerTests
     public async Task A_review_of_a_group_is_read_for_that_group_and_one_the_caller_is_not_in_is_not_found()
     {
         var group = Guid.CreateVersion7();
-        var review = new TenantReviewResponse(default, default, default, default, []);
+        var review = new TenantReviewResponse(default, default, default, default, [], 0);
         _overviewService
             .Setup(s => s.GetGroupReviewAsync(
-                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, 30, false, It.IsAny<CancellationToken>()))
+                _subjectId, group, It.IsAny<IReadOnlySet<string>>(), AuthType.SessionCookie, 30, It.IsAny<OverviewRuleSet>(), It.IsAny<PeopleQuery>(), false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(review);
 
-        (await CreateController(Member()).GetReview(group, 30, CancellationToken.None)).Result.Should().BeOfType<OkObjectResult>()
+        (await CreateController(Member()).GetReview(new(group, 30, null, null), CancellationToken.None)).Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().Be(review);
-        (await CreateController(Member()).GetReview(Guid.CreateVersion7(), 30, CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
+        (await CreateController(Member()).GetReview(new(Guid.CreateVersion7(), 30, null, null), CancellationToken.None)).Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
         _overviewService.Verify(
             s => s.GetReviewAsync(
-                It.IsAny<Guid?>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<int>(),
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<int>(), It.IsAny<OverviewRuleSet>(), It.IsAny<PeopleQuery>(),
                 It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
@@ -333,7 +335,7 @@ public class MyTenantsControllerTests
     [MemberData(nameof(SubjectlessCredentials))]
     public async Task A_subjectless_session_is_refused_an_unsupported_period(AuthType authType)
     {
-        var result = await CreateController(Subjectless(authType)).GetReview(null, 15, CancellationToken.None);
+        var result = await CreateController(Subjectless(authType)).GetReview(new(null, 15, null, null), CancellationToken.None);
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -428,6 +430,7 @@ public class MyTenantsControllerTests
         return new MyTenantsController(
             _tenantService.Object,
             _overviewService.Object,
+            _catalogue.Object,
             Options.Create(new OperatorConfiguration()))
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

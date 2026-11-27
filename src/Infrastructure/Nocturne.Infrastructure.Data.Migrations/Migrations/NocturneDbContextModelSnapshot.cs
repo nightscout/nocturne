@@ -4160,6 +4160,75 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("passkey_credentials");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PeopleViewEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Lens")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("lens");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NameKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_key")
+                        .HasComputedColumnSql("lower(name)", true);
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<string>("Query")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("query");
+
+                    b.Property<int?>("ReviewDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("review_days");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubjectId", "NameKey")
+                        .IsUnique();
+
+                    b.ToTable("people_views", t =>
+                        {
+                            t.HasCheckConstraint("ck_people_views_lens", "(lens = 'now' AND review_days IS NULL) OR (lens = 'review' AND review_days IS NOT NULL AND review_days IN (14, 30, 90))");
+
+                            t.HasCheckConstraint("ck_people_views_position", "position >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PlatformPolicyEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -12321,6 +12390,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Subject");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PeopleViewEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", null)
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ReadAccessLogEntity", b =>

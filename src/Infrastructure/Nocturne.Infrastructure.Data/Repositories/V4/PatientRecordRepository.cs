@@ -44,6 +44,22 @@ public class PatientRecordRepository : IPatientRecordRepository
         return entity is null ? null : PatientRecordMapper.ToDomainModel(entity);
     }
 
+    /// <inheritdoc/>
+    public async Task<PatientFacts> GetFactsAsync(bool withTherapy, CancellationToken ct)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var record = await ctx.PatientRecords.AsNoTracking()
+            .Select(r => new { r.DateOfBirth, r.TakesNoInsulin })
+            .FirstOrDefaultAsync(ct);
+        if (!withTherapy)
+            return new PatientFacts(record?.DateOfBirth, record?.TakesNoInsulin == true, null, false);
+
+        var devices = await PatientDeviceRepository.InCurrentOrder(ctx.PatientDevices.AsNoTracking()).ToListAsync(ct);
+        var insulin = await ctx.PatientInsulins.AnyAsync(i => i.IsCurrent, ct);
+        return new PatientFacts(
+            record?.DateOfBirth, record?.TakesNoInsulin == true, [.. devices.Select(PatientDeviceMapper.ToDomainModel)], insulin);
+    }
+
     /// <summary>
     /// Gets the existing patient record or creates a new one if it doesn't exist.
     /// </summary>

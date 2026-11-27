@@ -875,6 +875,33 @@ public class TenantMembershipRepository : ITenantMembershipRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<IReadOnlyDictionary<Guid, MembershipSources>> ListSourcesOfSubjectAsync(
+        Guid subjectId, DateTime now, CancellationToken ct)
+    {
+        await using var db = await Pinnable.CreateForSubjectAsync(subjectId, ct);
+        var memberships = await db.TenantMembers.AsNoTracking()
+            .LiveAt(now)
+            .Where(m => m.SubjectId == subjectId)
+            .Select(m => new
+            {
+                m.TenantId,
+                Adopted = !m.Reasons.Any(),
+                Direct = m.Reasons.Any(r =>
+                    r.Kind == MembershipReasonKind.Direct && (r.AccessEndsAt == null || r.AccessEndsAt > now)),
+                Teams = m.Reasons
+                    .Where(r => r.Kind == MembershipReasonKind.Team
+                        && r.TeamAccess != null
+                        && (r.AccessEndsAt == null || r.AccessEndsAt > now))
+                    .Select(r => r.TeamAccess!.TeamId)
+                    .ToList(),
+            })
+            .ToListAsync(ct);
+        return memberships.ToDictionary(
+            m => m.TenantId,
+            m => new MembershipSources(m.Adopted || m.Direct, m.Teams.ToHashSet()));
+    }
+
+    /// <inheritdoc/>
     public virtual async Task<SetupGate?> ReadSetupGateAsync(Guid tenantId, DateTime now, CancellationToken ct)
     {
         await using var db = await Pinnable.CreateSystemPinnedAsync(tenantId, ct);
