@@ -281,6 +281,39 @@ public class StateSpanRepositoryTests : IDisposable
         spans.First(s => s.OriginalId == "auto-new").IsActive.Should().BeTrue();
     }
 
+    /// <summary>
+    /// A pump-mode span that ends at its own start holds no time, so it ends no earlier span of its
+    /// state; in other exclusive categories a zero-length span still ends the one before it.
+    /// </summary>
+    [Theory]
+    [InlineData(StateSpanCategory.PumpMode, true)]
+    [InlineData(StateSpanCategory.TemporaryTarget, false)]
+    public async Task UpsertStateSpanAsync_AZeroLengthLaterSpan_EndsAnEarlierOneOnlyOutsidePumpMode(
+        StateSpanCategory category, bool staysOpen)
+    {
+        var ahead = new DateTime(2026, 1, 2, 10, 0, 0, DateTimeKind.Utc);
+        await _repository.UpsertStateSpanAsync(new StateSpan
+        {
+            Category = category,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = ahead,
+            EndTimestamp = ahead,
+            OriginalId = "zero-length",
+        });
+
+        await _repository.UpsertStateSpanAsync(new StateSpan
+        {
+            Category = category,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = ahead.AddDays(-1),
+            EndTimestamp = null,
+            OriginalId = "earlier",
+        });
+
+        var earlier = (await _repository.GetStateSpansAsync(category: category)).Single(s => s.OriginalId == "earlier");
+        earlier.EndTimestamp.Should().Be(staysOpen ? null : ahead);
+    }
+
     [Fact]
     public async Task UpsertStateSpanAsync_NewTemporaryTarget_SupersedesExistingOpenTarget()
     {

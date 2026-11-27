@@ -1001,81 +1001,84 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// <para>Assumes a single insulin pump per tenant — the open-span lookup does not filter by
     /// <c>Source</c>, so a second pump's resume could close a first pump's open span. Out of scope
     /// per the alerting model (one tenant = one diabetic person).</para>
+    /// <para>A span that starts after the transition is judged by <see cref="PumpModeSpanClock"/>.</para>
     /// </remarks>
     /// <returns>The spans the transition opened or changed.</returns>
-    private List<StateSpan> FoldSuspension(V4Models.PumpSnapshot snapshot, V4Models.PumpSnapshot? prior, SpanState spans)
+    private List<StateSpan> FoldSuspension(
+        V4Models.PumpSnapshot snapshot, V4Models.PumpSnapshot? prior, SpanState spans)
     {
         var priorSuspended = prior?.Suspended ?? false;
         var nowSuspended = snapshot.Suspended ?? false;
         if (priorSuspended == nowSuspended)
             return [];
 
-        // Prefer the pump's own clock for the transition; fall back to the ingestion timestamp.
-        var transitionAt = ParseTimestampToDateTime(snapshot.Clock) ?? snapshot.Timestamp;
+        var transition = TransitionOf(snapshot);
+        var transitionAt = transition.At;
         var suspended = PumpModeState.Suspended.ToString();
-        var open = spans[StateSpanCategory.PumpMode].Where(s => s.State == suspended && s.EndTimestamp == null).ToList();
+        var pumpModes = spans[StateSpanCategory.PumpMode];
 
         if (nowSuspended)
         {
+            // A span already keyed to this snapshot was opened by it, and upserting it again would
+            // reopen a suspension a later resume closed.
+            var key = $"pump-suspended:{snapshot.Id}";
+            if (pumpModes.Any(s => s.OriginalId == key))
+                return [];
+
+            DateTime? Overtaken(StateSpan s) => PumpModeSpanClock.OvertakenEnd(s, transition);
+            var reading = PumpModeSpanClock.OpenAfterRelease(pumpModes, suspended, Overtaken);
+            var overtaken = End(reading, Overtaken, spans);
+
             // Guard against duplicate open spans. An uploader can emit two device statuses for the
             // same suspend event sharing the SAME ingest Timestamp but different pump clocks (e.g.
             // Trio uploads paired snapshots). Because the prior snapshot is read strictly before the
             // Timestamp, the second such snapshot cannot see its sibling as prior and reads
             // prior=not-suspended — a spurious false→true transition. Opening a second span here
             // leaves an orphan the single resume can't fully close, latching the pump "suspended"
-            // indefinitely. If a Suspended span is already open, this observation is already covered.
-            // A span already keyed to this snapshot was opened by it, and upserting it again would
-            // reopen a suspension a later resume closed.
-            var key = $"pump-suspended:{snapshot.Id}";
-            if (open.Count > 0 || spans[StateSpanCategory.PumpMode].Any(s => s.OriginalId == key))
-                return [];
+            // indefinitely. If a Suspended span is still open, this observation is already covered.
+            if (reading.Count > overtaken.Count)
+                return overtaken;
 
-            var span = PumpModeSpan(suspended, transitionAt, snapshot.Device, key);
+            var span = PumpModeSpan(suspended, transitionAt, snapshot.Device, key, snapshot.CreatedAt);
             spans.Open(span);
-            return [span];
+            return [.. overtaken, span];
         }
 
-        // A Suspended span already ending at this transition means this resume was folded before; a
-        // span starting after it belongs to a later suspension, which an older resume must not end.
-        if (spans[StateSpanCategory.PumpMode].Any(s => s.State == suspended && s.EndTimestamp == transitionAt))
+        // A Suspended span already ending where this transition ends one means this resume was folded before.
+        if (pumpModes.Any(s => s.State == suspended && transition.Ended(s)))
             return [];
-        var closable = open.Where(s => s.StartTimestamp <= transitionAt).ToList();
 
-        if (closable.Count == 0)
+        // Every open span the resume reaches is ended, not just one: leftover duplicates (created
+        // before the open-guard above, or by concurrent decomposition) would keep the pump latched
+        // "suspended".
+        DateTime? EndAt(StateSpan s) => PumpModeSpanClock.EndAt(s, transition);
+        var ended = End(PumpModeSpanClock.OpenAfterRelease(pumpModes, suspended, EndAt), EndAt, spans);
+        if (ended.Any(s => s.StartTimestamp <= transitionAt))
+            return ended;
+
+        // No open span exists: the suspended=true state predates the StateSpan feature or the
+        // opening snapshot was never decomposed. A retroactive closed span anchored at the prior
+        // snapshot's timestamp keeps the suspension timeline complete.
+        if (prior is null)
         {
-            // No open span exists — the suspended=true state predates the StateSpan feature or the
-            // opening snapshot was never decomposed. A retroactive closed span anchored at the prior
-            // snapshot's timestamp keeps the suspension timeline complete.
-            if (prior is null)
-            {
-                Logger.LogWarning(
-                    "PumpMode/Suspended transition true→false detected but no prior snapshot or open StateSpan (snapshot {SnapshotId})",
-                    snapshot.Id);
-                return [];
-            }
-
-            // A span keyed to the prior snapshot already records this suspension.
-            var backfillKey = $"pump-suspended:{prior.Id}";
-            if (spans[StateSpanCategory.PumpMode].Any(s => s.OriginalId == backfillKey))
-                return [];
-
-            var backfilled = PumpModeSpan(
-                suspended, ParseTimestampToDateTime(prior.Clock) ?? prior.Timestamp, snapshot.Device, backfillKey);
-            backfilled.EndTimestamp = transitionAt;
-            spans.Open(backfilled);
-            return [backfilled];
+            Logger.LogWarning(
+                "PumpMode/Suspended transition true→false detected but no prior snapshot or open StateSpan (snapshot {SnapshotId})",
+                snapshot.Id);
+            return ended;
         }
 
-        // Close ALL active Suspended spans, not just one: leftover duplicates (created before the
-        // open-guard above, or by concurrent decomposition) must all be closed on resume, otherwise an
-        // orphan keeps the pump latched "suspended".
-        foreach (var span in closable)
-        {
-            span.EndTimestamp = transitionAt;
-            spans.Change(span);
-        }
+        // A span keyed to the prior snapshot already records this suspension.
+        var backfillKey = $"pump-suspended:{prior.Id}";
+        if (pumpModes.Any(s => s.OriginalId == backfillKey))
+            return ended;
 
-        return closable;
+        var backfilled = PumpModeSpan(suspended, TransitionOf(prior).At, snapshot.Device, backfillKey, prior.CreatedAt);
+        if (PumpModeSpanClock.EndAt(backfilled, transition) is not { } backfilledEnd
+            || backfilledEnd == backfilled.StartTimestamp)
+            return ended;
+        backfilled.EndTimestamp = backfilledEnd;
+        spans.Open(backfilled);
+        return [.. ended, backfilled];
     }
 
     /// <summary>
@@ -1095,39 +1098,68 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// <para>Idempotency: the open span carries a deterministic
     /// <c>OriginalId = "pump-mode:{snapshotId}"</c>, and the open-span guard prevents duplicates when
     /// the same device status is re-decomposed.</para>
+    /// <para>A span that starts after the transition is judged by <see cref="PumpModeSpanClock"/>.</para>
     /// </remarks>
     /// <returns>The spans the transition opened or changed.</returns>
-    private static List<StateSpan> FoldPumpMode(V4Models.PumpSnapshot snapshot, V4Models.PumpSnapshot? prior, SpanState spans)
+    private static List<StateSpan> FoldPumpMode(
+        V4Models.PumpSnapshot snapshot, V4Models.PumpSnapshot? prior, SpanState spans)
     {
         if (ParsePumpMode(snapshot.PumpMode) is not { } mode || ParsePumpMode(prior?.PumpMode) == mode)
             return [];
 
-        var transitionAt = ParseTimestampToDateTime(snapshot.Clock) ?? snapshot.Timestamp;
+        var transition = TransitionOf(snapshot);
+        var state = mode.ToString();
         var opposite = (mode == PumpModeState.Automatic ? PumpModeState.Manual : PumpModeState.Automatic).ToString();
+        var pumpModes = spans[StateSpanCategory.PumpMode];
 
-        // A span starting after the transition stays open, so re-decomposing an older snapshot can't
-        // invert a newer span's range.
-        var touched = spans[StateSpanCategory.PumpMode]
-            .Where(s => s.State == opposite && s.EndTimestamp == null && s.StartTimestamp <= transitionAt)
-            .ToList();
-        foreach (var span in touched)
-        {
-            span.EndTimestamp = transitionAt;
-            spans.Change(span);
-        }
+        DateTime? EndAt(StateSpan s) => PumpModeSpanClock.EndAt(s, transition);
+        var touched = End(PumpModeSpanClock.OpenAfterRelease(pumpModes, opposite, EndAt), EndAt, spans);
 
         // A span already keyed to this snapshot was opened by it; upserting it again would reopen it.
         var key = $"pump-mode:{snapshot.Id}";
-        if (spans[StateSpanCategory.PumpMode].Any(s => (s.State == mode.ToString() && s.EndTimestamp == null) || s.OriginalId == key))
+        if (pumpModes.Any(s => s.OriginalId == key))
             return touched;
 
-        var opened = PumpModeSpan(mode.ToString(), transitionAt, snapshot.Device, key);
+        DateTime? Overtaken(StateSpan s) => PumpModeSpanClock.OvertakenEnd(s, transition);
+        touched.AddRange(End(PumpModeSpanClock.OpenAfterRelease(pumpModes, state, Overtaken), Overtaken, spans));
+        if (pumpModes.Any(s => s.State == state && s.EndTimestamp == null))
+            return touched;
+
+        var opened = PumpModeSpan(state, transition.At, snapshot.Device, key, snapshot.CreatedAt);
         spans.Open(opened);
         touched.Add(opened);
         return touched;
     }
 
-    private static StateSpan PumpModeSpan(string state, DateTime start, string? source, string originalId) => new()
+    /// <summary>Ends each of <paramref name="open"/> that <paramref name="endOf"/> gives an end, and returns those.</summary>
+    private static List<StateSpan> End(List<StateSpan> open, Func<StateSpan, DateTime?> endOf, SpanState spans)
+    {
+        var ended = new List<StateSpan>();
+        foreach (var span in open)
+        {
+            if (endOf(span) is not { } end)
+                continue;
+            span.EndTimestamp = end;
+            spans.Change(span);
+            ended.Add(span);
+        }
+
+        return ended;
+    }
+
+    /// <summary>
+    /// A snapshot's transition: the pump's own clock, else the ingestion timestamp, judged against when the
+    /// server stored the snapshot.
+    /// </summary>
+    private static PumpModeSpanClock.Transition TransitionOf(V4Models.PumpSnapshot snapshot) =>
+        new(ParseTimestampToDateTime(snapshot.Clock) ?? snapshot.Timestamp, snapshot.CreatedAt);
+
+    /// <summary>
+    /// A pump-mode span whose arrival, until it is stored, is <paramref name="arrivedAt"/>: when the snapshot
+    /// that opens it was stored (<see cref="PumpModeSpanClock"/>).
+    /// </summary>
+    private static StateSpan PumpModeSpan(
+        string state, DateTime start, string? source, string originalId, DateTime arrivedAt) => new()
     {
         Category = StateSpanCategory.PumpMode,
         State = state,
@@ -1135,6 +1167,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         EndTimestamp = null,
         Source = source,
         OriginalId = originalId,
+        CreatedAt = arrivedAt,
     };
 
     #endregion

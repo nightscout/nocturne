@@ -92,7 +92,8 @@ internal static partial class TreatmentDecomposerDoubles
         IPatientInsulinRepository? insulin = null,
         RelativeTempBasalRates? relativeTempBasalRates = null,
         IDeviceEventReactor? deviceEventReactor = null,
-        IRecordChangePublisher? changes = null)
+        IRecordChangePublisher? changes = null,
+        TimeProvider? time = null)
     {
         if (foods is null)
         {
@@ -121,6 +122,7 @@ internal static partial class TreatmentDecomposerDoubles
             relativeTempBasalRates: relativeTempBasalRates,
             audit: audit,
             deviceEventReactor: deviceEventReactor,
-            changes: changes);
+            changes: changes,
+            time: time);
     }
 }

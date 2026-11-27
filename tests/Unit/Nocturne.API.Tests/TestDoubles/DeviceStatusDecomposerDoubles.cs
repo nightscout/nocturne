@@ -45,7 +45,8 @@ internal static class DeviceStatusDecomposerDoubles
         INocturneDbContextFactory contexts,
         IAuditContext audit,
         IStateSpanService? stateSpans = null,
-        IRecordChangePublisher? uploaderBroadcaster = null) =>
+        IRecordChangePublisher? uploaderBroadcaster = null,
+        TimeProvider? time = null) =>
         Build(
             aps: new ApsSnapshotRepository(contexts, audit, NullLogger<ApsSnapshotRepository>.Instance),
             pump: new PumpSnapshotRepository(contexts, audit, NullLogger<PumpSnapshotRepository>.Instance),
@@ -53,5 +54,6 @@ internal static class DeviceStatusDecomposerDoubles
             extras: new DeviceStatusExtrasRepository(contexts, audit, NullLogger<DeviceStatusExtrasRepository>.Instance),
             sensorState: new SensorStateReportRepository(contexts, audit, NullLogger<SensorStateReportRepository>.Instance),
             stateSpans: stateSpans,
-            audit: audit);
+            audit: audit,
+            time: time);
 }

@@ -43,6 +43,13 @@ internal static class AlertReadings
     public static DateTime Bound(DateTime now) => now + RustAlertEngine.ClockTolerance();
 
     /// <summary>
+    /// Whether a record dated <paramref name="at"/> was dated beyond the <see cref="Bound"/> when the
+    /// server stored it at <paramref name="storedAt"/>. Judged at arrival, it does not change when the
+    /// record is read or folded again.
+    /// </summary>
+    public static bool AheadOfArrival(DateTime at, DateTime storedAt) => at > Bound(storedAt);
+
+    /// <summary>
     /// The selected reading and the newest stored one. One read when the newest is within the
     /// tolerance; a second, bounded one only when it is not.
     /// </summary>

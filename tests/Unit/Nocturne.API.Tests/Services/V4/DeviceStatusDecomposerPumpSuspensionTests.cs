@@ -304,7 +304,8 @@ public class DeviceStatusDecomposerPumpSuspensionTests
         _spans.Should().BeEmpty();
     }
 
-
+    /// <summary>
+    /// An uploader can send two suspended statuses of one suspension under the same ingest timestamp but
     /// not a pump clock, so the second cannot see the first as prior and reads a false → true
     /// transition. At most one Suspended span is open: a transition while one is open opens none.
     /// </summary>

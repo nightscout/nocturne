@@ -236,7 +236,10 @@ internal static class StateSpanSupersessionExtensions
     /// span named before the release, are written over the release's.
     /// </remarks>
     /// <param name="ctx">The context that tracks the upload's spans.</param>
-    /// <param name="moved">Stored spans whose start or category the upload changes.</param>
+    /// <param name="moved">
+    /// Stored spans whose start or category the upload changes, or that it makes
+    /// <see cref="StateSpanSuccession.EndsNothing"/>.
+    /// </param>
     /// <param name="written">
     /// The spans, as mapped, that settle after the save: every one an upload wrote, or the ones a fold left open.
     /// </param>
