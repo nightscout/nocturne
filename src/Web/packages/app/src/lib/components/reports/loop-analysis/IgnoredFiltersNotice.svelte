@@ -8,6 +8,7 @@
 <script lang="ts">
   import * as Alert from "#lib/components/ui/alert/index.js";
   import FilterX from "@lucide/svelte/icons/funnel-x";
+  import { formatList } from "#lib/utils/formatting.js";
   import { ignoredFilterLabel } from "./filter-labels.svelte";
 
   let { ignored }: { ignored: string[] | undefined } = $props();
@@ -29,19 +30,19 @@
       {#if noAccess.length > 0}
         <p>
           Your access does not include the data for these filters, so the report did not use them:
-          {noAccess.map(ignoredFilterLabel).join(", ")}.
+          {formatList(noAccess.map(ignoredFilterLabel))}.
         </p>
       {/if}
       {#if food.length > 0}
         <p>
           Your access does not include food data, so these cohorts show no events:
-          {food.map(ignoredFilterLabel).join(", ")}.
+          {formatList(food.map(ignoredFilterLabel))}.
         </p>
       {/if}
       {#if outOfLimits.length > 0}
         <p>
           These values are outside the limits of the report, so the report used its default values:
-          {outOfLimits.map(ignoredFilterLabel).join(", ")}.
+          {formatList(outOfLimits.map(ignoredFilterLabel))}.
         </p>
       {/if}
     </Alert.Description>

@@ -1,5 +1,6 @@
 import { EventAnchorKind, type EventCohortDefinition } from "#lib/api/index.js";
-import { bg, bgDelta, bgLabel, time, weekdayLabel } from "#lib/utils/formatting.js";
+import { bg, bgDelta, bgLabel, formatList, time, weekdayLabel } from "#lib/utils/formatting.js";
+import { plural } from "#lib/utils/plural.js";
 import type { EventMetricKey, MetricKind } from "./event-response-view";
 import { atMinute } from "./daily-profile-view";
 
@@ -29,23 +30,33 @@ export function anchorLabel(kind: EventAnchorKind | undefined): string {
 
 /**
  * A cohort as the response applied it, told from every other by its number and its filters as well
- * as its colour: "Cohort 1: Meals 05:00–10:00, 30–80 g, Pasta, Mon Tue".
+ * as its colour: "Cohort 1: Meals 05:00–10:00, 30–80 g, Pasta, Mon and Tue".
  * @param foodName The name of a food by its id, where the catalogue is at hand.
  */
 export function cohortLabel(cohort: EventCohortDefinition, foodName?: (id: string) => string | undefined): string {
-  const parts = [anchorLabel(cohort.anchor)];
-  if (cohort.fromMinute != null || cohort.toMinute != null)
-    parts.push(`${time(atMinute(cohort.fromMinute ?? 0))}–${time(atMinute(cohort.toMinute ?? 0))}`);
-  const filters = [parts.join(" ")];
+  let head = anchorLabel(cohort.anchor);
+  if (cohort.fromMinute != null || cohort.toMinute != null) {
+    const range = `${time(atMinute(cohort.fromMinute ?? 0))}–${time(atMinute(cohort.toMinute ?? 0))}`;
+    // @wc-include
+    // @wc-context: cohort-anchor-and-times
+    head = `${head} ${range}`;
+  }
+  const filters = [head];
   if (cohort.minGrams != null && cohort.maxGrams != null) filters.push(`${cohort.minGrams}–${cohort.maxGrams} g`);
-  else if (cohort.minGrams != null) filters.push(`at least ${cohort.minGrams} g`);
-  else if (cohort.maxGrams != null) filters.push(`at most ${cohort.maxGrams} g`);
+  else if (cohort.minGrams != null)
+    // @wc-include
+    filters.push(`at least ${cohort.minGrams} g`);
+  else if (cohort.maxGrams != null)
+    // @wc-include
+    filters.push(`at most ${cohort.maxGrams} g`);
   const foods = cohort.foodIds ?? [];
-  if (foods.length === 1) filters.push(foodName?.(foods[0]) ?? "1 food");
-  else if (foods.length > 1) filters.push(`${foods.length} foods`);
+  if (foods.length > 0)
+    filters.push((foods.length === 1 ? foodName?.(foods[0]) : undefined) ?? plural(foods.length, ["# food", "# foods"]));
   if (cohort.foodCategory) filters.push(cohort.foodCategory);
-  if ((cohort.daysOfWeek?.length ?? 0) > 0) filters.push((cohort.daysOfWeek ?? []).map((day) => weekdayLabel(day)).join(" "));
-  return `Cohort ${cohort.cohort}: ${filters.join(", ")}`;
+  if ((cohort.daysOfWeek?.length ?? 0) > 0) filters.push(formatList((cohort.daysOfWeek ?? []).map((day) => weekdayLabel(day))));
+  const described = formatList(filters, "unit");
+  // @wc-include
+  return `Cohort ${cohort.cohort}: ${described}`;
 }
 
 /** One event's anchor, in the event list. */

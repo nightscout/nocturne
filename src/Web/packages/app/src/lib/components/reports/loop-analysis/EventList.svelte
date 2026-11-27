@@ -52,6 +52,18 @@
   const showGrams = $derived(events.some((e) => e.grams != null));
   const cohortIndex = (cohort: number) => Math.max(0, cohorts.findIndex((c) => c.cohort === cohort));
 
+  /** The cohorts an event belongs to, one sentence each, for a screen reader. */
+  function cohortsText(event: EventResponseEvent): string {
+    return (event.cohorts ?? [])
+      .map((n) => cohorts.find((c) => c.cohort === n))
+      .filter((c) => c != null)
+      .map((c) => {
+        const label = cohortLabel(c);
+        return `In ${label}.`;
+      })
+      .join(" ");
+  }
+
   function sortBy(key: EventSortKey) {
     if (sortKey === key) descending = !descending;
     else {
@@ -107,13 +119,7 @@
               {/each}
               {anchorEventLabel(event.anchor)}
             </span>
-            <span class="sr-only">
-              , in {(event.cohorts ?? [])
-                .map((n) => cohorts.find((c) => c.cohort === n))
-                .filter((c) => c != null)
-                .map((c) => cohortLabel(c))
-                .join("; ")}
-            </span>
+            {#if event.cohorts?.length}<span class="sr-only">. {cohortsText(event)}</span>{/if}
           </td>
           {#if showGrams}
             <td class="px-2 py-1.5 text-right">{event.grams != null ? `${event.grams} g` : "–"}</td>

@@ -19,9 +19,9 @@ describe("AppliedFiltersSummary", () => {
     });
 
     const summary = page.getByTestId("loop-analysis-applied-filters");
-    await expect.element(summary).toHaveTextContent(/Days: Mon, Tue\./);
+    await expect.element(summary).toHaveTextContent(/Days: Mon and Tue\./);
     await expect.element(summary).toHaveTextContent(/Profile: Weekday\./);
-    await expect.element(summary).toHaveTextContent(/Time not used: Exercise, Time not in closed loop\./);
+    await expect.element(summary).toHaveTextContent(/Time not used: Exercise and Time not in closed loop\./);
     await expect.element(summary).not.toHaveTextContent(/Illness/);
   });
 

@@ -8,6 +8,7 @@
   import { formatMinutesDuration } from "#lib/utils/duration.js";
   import { parseCalendarDate, weekdayIndex, weekdayLabels } from "#lib/components/calendar/calendar-date.js";
   import { formatLocale } from "#lib/utils/formatting.js";
+  import { plural } from "#lib/utils/plural.js";
 
   interface Props {
     weeks: SleepWeekSummary[];
@@ -59,11 +60,21 @@
   );
 
   function statsParts(week: SleepWeekSummary): string[] {
-    const parts: string[] = [`avg ${formatMinutesDuration(week.meanAsleepMinutes ?? 0)}`];
-    if (week.meanScore != null) parts.push(`score ${Math.round(week.meanScore)}`);
+    const nights = plural(week.daysInRange ?? 0, ["# night", "# nights"]);
+    const average = formatMinutesDuration(week.meanAsleepMinutes ?? 0);
+    const tracked = (week.nightCount ?? 0).toLocaleString(formatLocale());
+    // @wc-include
+    const parts: string[] = [`${tracked} of ${nights}`, `avg ${average}`];
+    if (week.meanScore != null) {
+      const score = Math.round(week.meanScore);
+      // @wc-include
+      parts.push(`score ${score}`);
+    }
     if (week.meanTirPct != null) {
-      parts.push(`TIR ${Math.round(week.meanTirPct)}%`);
-      parts.push(`${week.totalHypoCount ?? 0} low${week.totalHypoCount === 1 ? "" : "s"}`);
+      const tir = Math.round(week.meanTirPct);
+      // @wc-include
+      parts.push(`TIR ${tir}%`);
+      parts.push(plural(week.totalHypoCount ?? 0, ["# low", "# lows"]));
     }
     return parts;
   }
@@ -76,8 +87,7 @@
         <div class="text-sm font-medium">{week.label}</div>
         {#if (week.nightCount ?? 0) > 0}
           <div class="text-xs text-muted-foreground">
-            {week.nightCount} of {week.daysInRange} night{week.daysInRange === 1 ? "" : "s"}
-            · {statsParts(week).join(" · ")}
+            {statsParts(week).join(" · ")}
           </div>
         {:else}
           <div class="text-xs text-muted-foreground">No nights tracked</div>

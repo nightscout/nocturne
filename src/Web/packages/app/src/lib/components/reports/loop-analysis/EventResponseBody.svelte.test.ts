@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { LoopAnalysisSeries, TimeZoneUnavailableReason } from "#lib/api/index.js";
+import { DayOfWeek, LoopAnalysisSeries, TimeZoneUnavailableReason } from "#lib/api/index.js";
 import EventResponseBody from "./EventResponseBody.svelte";
 import { eventResponse, TREATMENT_SERIES } from "./event-response.test-fixtures";
 import { time } from "#lib/utils/formatting.js";
@@ -57,7 +57,7 @@ describe("EventResponseBody", () => {
     await expect.element(page.getByRole("list", { name: "Cohorts" })).toHaveTextContent(MEALS);
     await expect.element(page.getByRole("columnheader", { name: new RegExp(MEALS) })).toBeVisible();
     await expect.element(page.getByRole("columnheader", { name: new RegExp(RISES) })).toBeVisible();
-    await expect.element(page.getByRole("row", { name: /in Cohort 2: Unannounced rises/ })).toBeVisible();
+    await expect.element(page.getByRole("row", { name: /In Cohort 2: Unannounced rises\./ })).toBeVisible();
   });
 
   it("is one tab stop, and reads each cohort's median and n at the slot", async () => {
@@ -73,12 +73,27 @@ describe("EventResponseBody", () => {
       .element(slider)
       .toHaveAttribute(
         "aria-valuetext",
-        `Event to +5 min: ${MEALS}: median 0, 12 events; ${RISES}: median +5, 3 events`
+        `Event to +5 min: ${MEALS}: median 0, 12 events. ${RISES}: median +5, 3 events.`
       );
     await userEvent.keyboard("{End}");
     await expect.element(slider).toHaveAttribute("aria-valuenow", "71");
     await userEvent.keyboard("{ArrowDown}");
     expect(document.activeElement?.getAttribute("aria-label")).toBe("Glucose");
+  });
+
+  it("reads the cohorts at a slot as consecutive sentences, whatever lists their labels hold", async () => {
+    const response = eventResponse({ fall: true });
+    response.definition!.cohorts![0].daysOfWeek = [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday];
+    render(EventResponseBody, { props: { response } });
+
+    const slider = focusSlider("Glucose change from the event");
+    await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+    await expect
+      .element(slider)
+      .toHaveAttribute(
+        "aria-valuetext",
+        `Event to +5 min: ${MEALS}, Mon, Tue, and Wed: median 0, 12 events. ${RISES}: median +5, 3 events. Cohort 3: Correction boluses: median 0, 4 events.`
+      );
   });
 
   it("lists the events behind a picked slot, each opening Day in Review", async () => {
@@ -193,7 +208,7 @@ describe("EventResponseBody", () => {
     render(EventResponseBody, { props: { response } });
 
     await expect.element(page.getByText(/This page uses only the data from the last 24 hours/)).toBeVisible();
-    await expect.element(page.getByText(/Cohort 2, Isolated events only\./)).toBeVisible();
+    await expect.element(page.getByText(/Cohort 2 and Isolated events only\./)).toBeVisible();
   });
 
   it("says a cohort with a food filter the access does not include shows no events", async () => {
@@ -220,7 +235,7 @@ describe("EventResponseBody", () => {
     render(EventResponseBody, { props: { response } });
 
     await expect.element(page.getByText("The report did not use some filters")).toBeVisible();
-    await expect.element(page.getByText(/outside the limits of the report, so the report used its default values:\s+After the event, Cohort 1, at most \(g\)\./)).toBeVisible();
+    await expect.element(page.getByText(/outside the limits of the report, so the report used its default values:\s+After the event and Cohort 1, at most \(g\)\./)).toBeVisible();
     await expect.element(page.getByText(/so the report did not use them:\s+Isolated events only\./)).toBeVisible();
   });
 

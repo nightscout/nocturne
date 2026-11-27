@@ -1116,16 +1116,22 @@ export class Report {
         // @wc-include
         return `${this.sourceLabel(block)}: ${figures} ${range}`;
       }
-      case "table":
+      case "table": {
         if (block.source === this.#vocab.eventDataset) {
           const texts = block.events.moments.map((m, i) =>
             i === 0
               ? momentHeading(m, this.#clock, block.events.glucoseUnits, this.#vocab)
               : momentText(m, true, this.#clock, block.events.glucoseUnits, this.#vocab)
           );
-          return `${joinAgainst(texts)}, one row for each event ${range}`;
+          const groups = joinAgainst(texts);
+          // @wc-include
+          return `${groups}, one row for each event ${range}`;
         }
-        return `${this.sourceLabel(block)} ${range}`;
+        const source = this.sourceLabel(block);
+        // @wc-include
+        // @wc-context: table-block-caption
+        return `${source} ${range}`;
+      }
       case "comparison": {
         if (block.preset)
           return (

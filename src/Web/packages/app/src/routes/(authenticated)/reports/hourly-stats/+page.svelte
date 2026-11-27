@@ -15,7 +15,7 @@
   } from "#lib/api/index.js";
   import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
   import { contextResource } from "#lib/hooks/resource-context.svelte.js";
-  import { bg, bgLabel, bgRange, formatNumber, formatShortDate } from "#lib/utils/formatting.js";
+  import { bg, bgLabel, bgRange, formatList, formatNumber, formatShortDate } from "#lib/utils/formatting.js";
   import HourlyRangeBars from "#lib/components/reports/hourly-patterns/HourlyRangeBars.svelte";
   import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import HourlyGlance from "#lib/components/reports/hourly-patterns/HourlyGlance.svelte";
@@ -54,7 +54,7 @@
 
   const percent = (value: number | undefined, digits = 0) => `${(value ?? 0).toFixed(digits)}%`;
 
-  const hourList = (list: HourlyPattern[]) => list.map((h) => hourSpan(h.hour ?? 0)).join(", ");
+  const hourList = (list: HourlyPattern[]) => formatList(list.map((h) => hourSpan(h.hour ?? 0)));
 </script>
 
 {#if report}

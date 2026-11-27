@@ -72,31 +72,31 @@
   /** The events a cohort left out, by why. */
   function droppedText(result: EventCohortResult | undefined): string {
     const n = (count: number | undefined) => count ?? 0;
-    return [
-      n(result?.mealsWithFoodRecord) + n(result?.mealsWithoutFoodRecord) > 0
-        ? `${plural(n(result?.mealsWithFoodRecord), ["# meal with a food record", "# meals with a food record"])}, ${plural(
-            n(result?.mealsWithoutFoodRecord),
-            [
-              "# meal with only carbs not included because the food filter cannot apply to it",
-              "# meals with only carbs not included because the food filter cannot apply to them",
-            ]
-          )}`
+    const hasMeals = n(result?.mealsWithFoodRecord) + n(result?.mealsWithoutFoodRecord) > 0;
+    const reasons = [
+      hasMeals
+        ? plural(n(result?.mealsWithFoodRecord), ["# meal with a food record.", "# meals with a food record."])
+        : null,
+      hasMeals
+        ? plural(n(result?.mealsWithoutFoodRecord), [
+            "# meal with only carbs not included because the food filter cannot apply to it.",
+            "# meals with only carbs not included because the food filter cannot apply to them.",
+          ])
         : null,
       n(result?.notIsolated) > 0
-        ? plural(n(result?.notIsolated), ["# not included because of another event in its window", "# not included because of another event in their window"])
+        ? plural(n(result?.notIsolated), ["# not included because of another event in its window.", "# not included because of another event in their window."])
         : null,
       n(result?.missingAnchorGlucose) > 0
-        ? plural(n(result?.missingAnchorGlucose), ["# without a glucose reading at the time", "# without a glucose reading at the time"])
+        ? plural(n(result?.missingAnchorGlucose), ["# without a glucose reading at the time.", "# without a glucose reading at the time."])
         : null,
       n(result?.beforeVisibleHistory) > 0
         ? plural(n(result?.beforeVisibleHistory), [
-            "# not included because the time before it is outside the history that you can see",
-            "# not included because the time before them is outside the history that you can see",
+            "# not included because the time before it is outside the history that you can see.",
+            "# not included because the time before them is outside the history that you can see.",
           ])
         : null,
-    ]
-      .filter((text) => text !== null)
-      .join("; ");
+    ];
+    return reasons.filter((text) => text !== null).join(" ");
   }
 
   interface Panel {
@@ -209,11 +209,16 @@
       .map((cohort) => {
         const value = panel.pick(slotOf(primary, cohort.cohort, slot));
         const label = cohortLabel(cohort);
-        return value
-          ? `${label}: median ${panel.format(value.p50 ?? 0)}, ${plural(value.n ?? 0, ["# event", "# events"])}`
-          : `${label}: no data`;
+        if (!value) {
+          // @wc-include
+          return `${label}: no data.`;
+        }
+        const median = panel.format(value.p50 ?? 0);
+        const events = plural(value.n ?? 0, ["# event", "# events"]);
+        // @wc-include
+        return `${label}: median ${median}, ${events}.`;
       })
-      .join("; ");
+      .join(" ");
   }
 
   const emptyText = (panel: Panel) =>

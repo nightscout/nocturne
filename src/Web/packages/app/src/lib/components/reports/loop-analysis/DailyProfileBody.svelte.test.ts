@@ -268,7 +268,7 @@ describe("DailyProfileBody", () => {
     });
 
     await expect.element(page.getByText("The report did not use some filters")).toBeVisible();
-    await expect.element(page.getByText(/Profile, Time not in closed loop\./)).toBeVisible();
+    await expect.element(page.getByText(/Profile and Time not in closed loop\./)).toBeVisible();
   });
 
   it("tells a keyboard user what Enter and Escape do on this page", async () => {

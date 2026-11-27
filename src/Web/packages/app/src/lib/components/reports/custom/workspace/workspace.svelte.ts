@@ -1286,7 +1286,11 @@ export function momentText(
         `all ${phrase}`
       : // @wc-include
         "all";
-  return withAnchor ? `${phrase} ${formatList(parts, "unit")}` : formatList(parts, "unit");
+  const narrowings = formatList(parts, "unit");
+  if (!withAnchor) return narrowings;
+  // @wc-include
+  // @wc-context: moment-in-sentence
+  return `${phrase} ${narrowings}`;
 }
 
 /** A moment with its anchor, as words that begin a sentence: "Meals 06:00 to 08:30". */
@@ -1302,6 +1306,7 @@ export function momentHeading(
   return parts.length === 0
     ? `All ${anchorPhrase(moment.what)}`
     : // @wc-include
+      // @wc-context: moment-heading
       `${anchorHeading(moment.what)} ${narrowings}`;
 }
 
@@ -2646,7 +2651,11 @@ export class Workspace {
     else if (s.event.show === "spread")
       head = `How many ${phrase} had each ${outcomePhrase(this.figure)}`;
     else {
-      head = `${whenPhrase(anchors, phrase)}, ${whenAxisLabel(s.event.when)}`;
+      const when = whenPhrase(anchors, phrase);
+      const axis = whenAxisLabel(s.event.when);
+      // @wc-include
+      // @wc-context: when-caption
+      head = `${when}, ${axis}`;
     }
     const parts: Omit<CaptionPart, "before">[] = [{ kind: "signals", text: head }];
     // The groups are worth naming when one narrows its events, or two share an anchor.
@@ -2687,9 +2696,11 @@ export class Workspace {
         const around = `around ${formatList(anchors.map((a) => anchorPhrase(a)))}`;
         const windows = this.#vocab.windows;
         const isDefault = s.event.before === windows.defaultBefore && s.event.after === windows.defaultAfter;
-        return isDefault
-          ? around
-          : `${around}, ${windowPhrase(s.event.before, s.event.after)}`;
+        if (isDefault) return around;
+        const window = windowPhrase(s.event.before, s.event.after);
+        // @wc-include
+        // @wc-context: around-window-caption
+        return `${around}, ${window}`;
       }
       default:
         return "";
