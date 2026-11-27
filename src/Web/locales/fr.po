@@ -535,6 +535,8 @@ msgstr ""
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
+#: src/lib/components/people/FlagRuleForm.svelte
+#: src/lib/components/people/FlagRuleForm.svelte
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileSwitchDialog.svelte
@@ -5203,6 +5205,7 @@ msgstr ""
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/people/FlagRuleForm.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -5825,6 +5828,7 @@ msgstr ""
 #: src/lib/components/alerts/HistoryCheck.svelte
 #: src/lib/components/members/PublicAccessCard.svelte
 #: src/lib/components/members/TeamAccessCard.svelte
+#: src/lib/components/people/FlagRulesEditor.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PeopleWall.svelte
@@ -7037,6 +7041,7 @@ msgid "Info"
 msgstr ""
 
 #: src/lib/components/alerts/severityLabel.svelte.ts
+#: src/lib/components/people/FlagRuleForm.svelte
 #: src/lib/components/trackers/TrackerReservoirFields.svelte
 #: src/lib/components/trackers/TrackerReservoirFields.svelte
 #: src/lib/components/trackers/TrackerThresholdRow.svelte
@@ -7046,6 +7051,7 @@ msgstr ""
 msgid "Warning"
 msgstr ""
 
+#: src/lib/components/people/FlagRuleForm.svelte
 #: src/lib/components/trackers/TrackerReservoirFields.svelte
 #: src/lib/components/trackers/TrackerReservoirFields.svelte
 #: src/lib/components/trackers/TrackerThresholdRow.svelte
@@ -7070,6 +7076,7 @@ msgstr ""
 msgid "Add thresholds to get notified as the tracker ages"
 msgstr ""
 
+#: src/lib/components/people/FlagRuleForm.svelte
 #: src/lib/components/trackers/TrackerThresholdRow.svelte
 msgid "Level"
 msgstr ""
@@ -14128,6 +14135,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/lib/components/alerts/DndPanel.svelte
+#: src/lib/components/people/FlagRulesEditor.svelte
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/PersonPanel.svelte
 #: src/lib/components/therapy-timeline/ChangeDetail.svelte
@@ -23587,11 +23595,13 @@ msgstr ""
 msgid "In range"
 msgstr ""
 
+#: src/lib/components/people/FlagRuleForm.svelte
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
 msgid "Below"
 msgstr ""
 
+#: src/lib/components/people/FlagRuleForm.svelte
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
 msgid "Above"
@@ -26572,6 +26582,7 @@ msgstr ""
 #: src/lib/components/alerts/wizard/templates.svelte.ts
 #: src/lib/components/people/PeoplePage.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
+#: src/lib/components/people/flag-rule-text.svelte.ts
 #: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
 #: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
@@ -51303,4 +51314,165 @@ msgstr ""
 
 #: src/lib/components/people/WallGroupHeading.svelte
 msgid "Not in your groups"
+msgstr ""
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "Consensus range"
+msgstr ""
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "Own range"
+msgstr ""
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "Information"
+msgstr ""
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "Choose a fact"
+msgstr ""
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "Fact"
+msgstr ""
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "More facts"
+msgstr ""
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "Suggested rules"
+msgstr ""
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "Last number of days"
+msgstr ""
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "Flag when the value is"
+msgstr ""
+
+#: src/lib/components/people/FlagRuleForm.svelte
+msgid "<0/> Save rule"
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "You have the maximum number of flag rules. Delete a rule to add a new rule."
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "Could not add the rule. Try again."
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "Could not change the rule. Try again."
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "Could not delete the rule. Try again."
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "Your flag rules - Nocturne"
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "Your flag rules"
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "A person who meets one of your rules shows in Flagged on the People page. Only you see your rules."
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "<0/> People"
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "Your flag rules did not load."
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "You have no flag rules."
+msgstr ""
+
+#. 0: summary.cannotCheckCount
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "Cannot be checked for {0} of the people you follow"
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "Edit rule"
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "Delete rule"
+msgstr ""
+
+#. 0: limit
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "You have {0} rules, the maximum. Delete a rule to add a new rule."
+msgstr ""
+
+#: src/lib/components/people/FlagRulesEditor.svelte
+msgid "<0/> Add a rule"
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "<0/> Your flag rules"
+msgstr ""
+
+#. 0: label; 1: value; 2: threshold
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0}: {1} (your rule: below {2})"
+msgstr ""
+
+#. 0: label; 1: value; 2: threshold
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0}: {1} (your rule: above {2})"
+msgstr ""
+
+#. 0: label; 1: value; 2: period; 3: threshold
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0}: {1} in the last {2} (your rule: below {3})"
+msgstr ""
+
+#. 0: label; 1: value; 2: period; 3: threshold
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0}: {1} in the last {2} (your rule: above {3})"
+msgstr ""
+
+#. 0: range
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "Own range {0}, varies by time of day"
+msgstr ""
+
+#. 0: range
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "Own range {0}"
+msgstr ""
+
+#. 0: worn
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "Sensor worn {0}% of the time"
+msgstr ""
+
+#. 0: label; 1: value
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0} is below {1}"
+msgstr ""
+
+#. 0: label; 1: value
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0} is above {1}"
+msgstr ""
+
+#. 0: label; 1: period; 2: value
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0} in the last {1} is below {2}"
+msgstr ""
+
+#. 0: label; 1: period; 2: value
+#: src/lib/components/people/flag-rule-text.svelte.ts
+msgid "{0} in the last {1} is above {2}"
 msgstr ""
