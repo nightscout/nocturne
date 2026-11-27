@@ -607,7 +607,7 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         var services = new ServiceCollection();
         services.AddMetrics();
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(_app).Options;
-        services.AddSingleton<IDbContextFactory<NocturneDbContext>>(new Contexts(options));
+        services.AddSingleton<IDbContextFactory<NocturneDbContext>>(TestDbContextFactory.ForOptions(options));
         services.AddSingleton(sp => sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
         services.AddSingleton<TimeProvider>(_clock);
         services.AddTransient<IJobLedger, JobLedgerRepository>();
@@ -627,7 +627,7 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
     }
 
     private IJobLedger Ledger() => new JobLedgerRepository(
-        new Contexts(new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(_app).Options).AsNocturneFactory(),
+        TestDbContextFactory.ForOptions(new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(_app).Options),
         _clock);
 
     private async Task<JobLedgerEntry> RowAsync(string job, Guid tenant) =>
@@ -640,11 +640,6 @@ public sealed class JobSchedulerPostgresTests(JobSchedulerPostgresTests.Database
         await conn.OpenAsync();
         await conn.SeedTenantAsync(tenant, tenant.ToString("N"), "T");
         return tenant;
-    }
-
-    private sealed class Contexts(DbContextOptions<NocturneDbContext> options) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
     }
 
     /// <summary>Walks pages 1 to <see cref="DoneAfter"/>, one a run.</summary>

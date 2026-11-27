@@ -185,7 +185,7 @@ public class TenantOverviewGroupTests
         services.AddScoped(_ => canonical.Object);
 
         return new TenantOverviewService(
-            new TenantMembershipRepository(new InMemoryContextFactory(_options).AsNocturneFactory(), AccountLinkRoutes.Off),
+            new TenantMembershipRepository(TestDbContextFactory.ForOptions(_options), AccountLinkRoutes.Off),
             _teams.Object,
             services.BuildServiceProvider().CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),

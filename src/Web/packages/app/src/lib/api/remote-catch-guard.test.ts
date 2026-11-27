@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { TREE_SCAN_TIMEOUT_MS } from "../test-utils/tree-scan";
 
 /**
  * A `catch` around a generated remote call that never reads the reason throws
@@ -179,13 +180,6 @@ function sources(): SourceFile[] {
   return cachedSources;
 }
 
-/**
- * Budget for a guard that reads the whole source tree. The default five seconds
- * is sized for logic tests; a cold file cache alone can put these reads an order
- * of magnitude above it.
- */
-const WALK_TIMEOUT_MS = 60_000;
-
 function offences(files: SourceFile[] = sources()): {
   found: Offence[];
   scanned: number;
@@ -263,7 +257,7 @@ describe("fallbacks beside a remote call's reason", () => {
       expect(scanned).toBeGreaterThan(400);
       expect(found).toEqual([]);
     },
-    WALK_TIMEOUT_MS
+    TREE_SCAN_TIMEOUT_MS
   );
 
   it("still recognises a raw fallback when it sees one", () => {
@@ -293,7 +287,7 @@ describe("catches around generated remote calls", () => {
       expect(scanned).toBeGreaterThan(20);
       expect(found).toEqual([]);
     },
-    WALK_TIMEOUT_MS
+    TREE_SCAN_TIMEOUT_MS
   );
 
   it("still recognises a discarded reason when it sees one", () => {

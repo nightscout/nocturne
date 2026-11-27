@@ -55,7 +55,7 @@ public sealed class TestNocturneDbContextFactory : INocturneDbContextFactory, ID
     public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => Create(_source.TenantId);
 
     /// <inheritdoc />
-    NocturneDbContext IDbContextFactory<NocturneDbContext>.CreateDbContext() => Create(_source.TenantId).Result;
+    public NocturneDbContext CreateDbContext() => Create(_source.TenantId).Result;
 
     /// <inheritdoc />
     public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>

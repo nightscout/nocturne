@@ -268,16 +268,6 @@ public class AlertDeliveryTimeoutTests
             factory.Object, configuration, accessor, NullLogger<ChatBotProvider>.Instance);
     }
 
-    private sealed class SharedInMemoryFactory(string dbName) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext()
-        {
-            var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
-            ctx.TenantId = Tenant;
-            return ctx;
-        }
-    }
-
     private sealed record Seam(AlertDeliveryService Service, Guid InstanceId, IDbContextFactory<NocturneDbContext> Db)
     {
         public async Task<AlertDeliveryEntity> RowAsync()
@@ -289,7 +279,7 @@ public class AlertDeliveryTimeoutTests
 
     private static async Task<Seam> SeamAsync(TimeSpan? webhookTimeout = null, TimeSpan? chatBotTimeout = null)
     {
-        IDbContextFactory<NocturneDbContext> db = new SharedInMemoryFactory($"delivery_timeout_{Guid.NewGuid()}");
+        IDbContextFactory<NocturneDbContext> db = TestDbContextFactory.ForInMemoryDatabase($"delivery_timeout_{Guid.NewGuid()}", Tenant);
 
         var excursion = new AlertExcursionEntity
         {

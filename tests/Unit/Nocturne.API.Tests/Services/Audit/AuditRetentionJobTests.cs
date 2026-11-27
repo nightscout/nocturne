@@ -23,8 +23,10 @@ public class AuditRetentionJobTests
 
     private readonly string _database = Guid.NewGuid().ToString();
 
-    private NocturneDbContext CreateInMemoryContext() =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>().UseInMemoryDatabase(_database).Options);
+    private DbContextOptions<NocturneDbContext> InMemoryOptions =>
+        new DbContextOptionsBuilder<NocturneDbContext>().UseInMemoryDatabase(_database).Options;
+
+    private NocturneDbContext CreateInMemoryContext() => new(InMemoryOptions);
 
     /// <summary>
     /// Column names are relational metadata, which the InMemory provider does not build. The
@@ -60,7 +62,7 @@ public class AuditRetentionJobTests
         var job = new RecordingAuditRetentionJob(
             new ConfigurationBuilder().AddInMemoryCollection(settings ?? []).Build(), purgeFails);
         await using var services = new ServiceCollection()
-            .AddSingleton(new InMemoryContexts(CreateInMemoryContext).AsNocturneFactory(tenantId))
+            .AddSingleton<INocturneDbContextFactory>(TestDbContextFactory.ForOptions(InMemoryOptions, tenantId))
             .BuildServiceProvider();
 
         var started = DateTimeOffset.UtcNow;
@@ -218,10 +220,5 @@ public class AuditRetentionJobTests
             Purges.Add((tenantId, table, minAge));
             return Task.FromResult(0);
         }
-    }
-
-    private sealed class InMemoryContexts(Func<NocturneDbContext> create) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => create();
     }
 }

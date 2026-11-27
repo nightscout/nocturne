@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { TREE_SCAN_TIMEOUT_MS } from "../test-utils/tree-scan";
 
 /**
  * Copy in an inline `{@attach}` is not extracted, so it lives in functions in
@@ -49,12 +50,16 @@ function inlineCopyIn(text: string): string[] {
 }
 
 describe("coachmark copy", () => {
-  it("is not written inline at a call site", () => {
-    const offenders = sourceFiles(SRC).filter(
-      (file) => inlineCopyIn(readFileSync(file, "utf8")).length > 0
-    );
-    expect(offenders.map((file) => file.slice(SRC.length))).toEqual([]);
-  });
+  it(
+    "is not written inline at a call site",
+    () => {
+      const offenders = sourceFiles(SRC).filter(
+        (file) => inlineCopyIn(readFileSync(file, "utf8")).length > 0
+      );
+      expect(offenders.map((file) => file.slice(SRC.length))).toEqual([]);
+    },
+    TREE_SCAN_TIMEOUT_MS
+  );
 
   it("recognises each inline shape", () => {
     expect(

@@ -35,18 +35,8 @@ public class HomeAssistantHubTests
         public HttpContext? HttpContext { get; set; }
     }
 
-    private sealed class SharedInMemoryFactory(string dbName) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext()
-        {
-            var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
-            ctx.TenantId = Tenant;
-            return ctx;
-        }
-    }
-
     private readonly IDbContextFactory<NocturneDbContext> _contexts =
-        new SharedInMemoryFactory($"ha_hub_{Guid.NewGuid()}");
+        TestDbContextFactory.ForInMemoryDatabase($"ha_hub_{Guid.NewGuid()}", Tenant);
 
     private readonly HomeAssistantConnections _connections = new();
 

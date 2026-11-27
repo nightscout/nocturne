@@ -23,12 +23,6 @@ public class RefreshTokenRotationLivenessPostgresTests(RefreshTokenRotationLiven
 {
     public sealed class Database() : MigratedDatabase("refresh_token_rotation_liveness");
 
-    private sealed class Factory(string connectionString, params IInterceptor[] interceptors) : SingleReaderDbContextFactory
-    {
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-            ValueTask.FromResult(TestContexts.Context(connectionString, null, interceptors));
-    }
-
     /// <summary>
     /// Holds the transaction open once the statement that revokes a refresh token has run, until
     /// the test releases it.
@@ -52,8 +46,11 @@ public class RefreshTokenRotationLivenessPostgresTests(RefreshTokenRotationLiven
         }
     }
 
+    private SuppliedContextFactory Contexts(params IInterceptor[] interceptors) =>
+        new(() => TestContexts.Context(database.AppConnectionString, null, interceptors));
+
     private EfFirstPartyTokenRepository Tokens(params IInterceptor[] interceptors) =>
-        new(new Factory(database.AppConnectionString, interceptors));
+        new(Contexts(interceptors));
 
     private static RefreshTokenRecord Token(Guid subjectId, string sessionId) => new(
         Id: Guid.CreateVersion7(),
@@ -73,7 +70,7 @@ public class RefreshTokenRotationLivenessPostgresTests(RefreshTokenRotationLiven
     [Fact]
     public async Task A_session_reads_live_from_another_connection_between_the_revoke_and_the_successor()
     {
-        var subjectId = await new SubjectRepository(new Factory(database.AppConnectionString), AccountLinkRoutes.Off)
+        var subjectId = await new SubjectRepository(Contexts(), AccountLinkRoutes.Off)
             .CreateAsync(new NewSubject($"rotating-{Guid.NewGuid():N}"), CancellationToken.None);
         var sessionId = Guid.CreateVersion7().ToString();
         var presented = Token(subjectId, sessionId);

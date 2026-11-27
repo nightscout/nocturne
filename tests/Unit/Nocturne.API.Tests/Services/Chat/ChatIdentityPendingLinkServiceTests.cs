@@ -243,7 +243,7 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
         var token = await _service.CreateAsync(Platform, UserA, null, null, "connect-slash", default);
         var fault = new FirstTransactionFault(TransactionFault.AfterCommit);
         var retrying = new ChatIdentityPendingLinkService(
-            (new RetryingFactory(TransactionFaultOptions.RetryingSqlite(_db.Connection, fault))).AsNocturneFactory(),
+            TestDbContextFactory.ForOptions(TransactionFaultOptions.RetryingSqlite(_db.Connection, fault)),
             TimeProvider.System, Mock.Of<ILogger<ChatIdentityPendingLinkService>>());
 
         var consumed = await retrying.TryConsumeAsync(token, default);
@@ -255,9 +255,4 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
         consumed!.Token.Should().Be(token);
     }
 
-    private sealed class RetryingFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-    }
 }

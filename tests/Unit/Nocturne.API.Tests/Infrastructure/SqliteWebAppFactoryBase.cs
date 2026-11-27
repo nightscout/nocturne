@@ -89,7 +89,7 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
                 .ReturnsAsync(() => mockFactory.Object.CreateDbContext());
             services.AddSingleton(mockFactory.Object);
             services.AddScoped<INocturneDbContextFactory>(sp =>
-                new TestNocturneDbContextFactory(mockFactory.Object, sp.GetService<ITenantAccessor>()));
+                new AccessorPinnedContextFactory(mockFactory.Object, sp.GetService<ITenantAccessor>()));
 
             ConfigureTestServices(services);
 
@@ -165,7 +165,7 @@ public abstract class SqliteWebAppFactoryBase<TEntryPoint> : WebApplicationFacto
 /// Test-only <see cref="INocturneDbContextFactory"/> that creates tenant-scoped contexts
 /// from the shared <see cref="IDbContextFactory{NocturneDbContext}"/> mock.
 /// </summary>
-file sealed class TestNocturneDbContextFactory(
+file sealed class AccessorPinnedContextFactory(
     IDbContextFactory<NocturneDbContext> pool,
     ITenantAccessor? tenantAccessor) : SingleReaderDbContextFactory
 {

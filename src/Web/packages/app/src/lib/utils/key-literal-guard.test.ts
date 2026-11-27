@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { Key } from "@nocturne/ui/keys";
+import { TREE_SCAN_TIMEOUT_MS } from "../test-utils/tree-scan";
 
 /**
  * wuchale extracts a string literal that looks like a word, so `e.key === "Enter"` in a component
@@ -51,15 +52,19 @@ function offences(source: string): string[] {
 }
 
 describe("key names in wuchale-extracted files", () => {
-  it("compares KeyboardEvent.key through Key, never a string literal", () => {
-    const found = readdirSync(PACKAGES, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .filter((entry) => existsSync(join(PACKAGES, entry.name, "src")))
-      .flatMap((entry) => sourceFiles(join(PACKAGES, entry.name, "src")))
-      .flatMap((file) => offences(readFileSync(file, "utf8")).map((line) => `${file}: ${line}`));
+  it(
+    "compares KeyboardEvent.key through Key, never a string literal",
+    () => {
+      const found = readdirSync(PACKAGES, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .filter((entry) => existsSync(join(PACKAGES, entry.name, "src")))
+        .flatMap((entry) => sourceFiles(join(PACKAGES, entry.name, "src")))
+        .flatMap((file) => offences(readFileSync(file, "utf8")).map((line) => `${file}: ${line}`));
 
-    expect(found).toEqual([]);
-  });
+      expect(found).toEqual([]);
+    },
+    TREE_SCAN_TIMEOUT_MS
+  );
 
   it("recognises a literal comparison", () => {
     for (const line of [

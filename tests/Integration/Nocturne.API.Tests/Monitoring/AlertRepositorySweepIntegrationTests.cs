@@ -47,7 +47,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         // interceptor refuses it.
         await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
         var options = TestContexts.Options(dataSource);
-        var factory = new InterceptingContextFactory(options);
+        var factory = TestDbContextFactory.ForOptions(options);
 
         // Seed rules through EF so the enum/jsonb mapping matches the live schema. The interceptor
         // sets the RLS GUC from context.TenantId, satisfying the WITH CHECK policy on insert.
@@ -82,7 +82,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var tenant = await AuthTestHelpers.SeedTenantAsync(Fixture, $"on-unknown-{suffix}", "On unknown");
         await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
-        var factory = new InterceptingContextFactory(TestContexts.Options(dataSource));
+        var factory = TestDbContextFactory.ForOptions(TestContexts.Options(dataSource));
         var writer = new AlertRuleRepository(factory.AsNocturneFactory(tenant), TimeProvider.System);
         var reader = new AlertRepository(factory.AsNocturneFactory(tenant));
         static NewAlertRule Rule(string name, string? onUnknown) => new(
@@ -114,7 +114,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
 
         await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
         var options = TestContexts.Options(dataSource);
-        var factory = new InterceptingContextFactory(options);
+        var factory = TestDbContextFactory.ForOptions(options);
 
         await SeedRuleAsync(factory, stale, "Readable", AlertConditionType.Threshold);
         await SeedRuleAsync(factory, other, "Other tenant", AlertConditionType.Threshold);
@@ -153,7 +153,7 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
     }
 
     private static async Task SeedRuleAsync(
-        InterceptingContextFactory factory, Guid tenantId, string name, AlertConditionType type)
+        IDbContextFactory<NocturneDbContext> factory, Guid tenantId, string name, AlertConditionType type)
     {
         await using var ctx = factory.CreateDbContext();
         ctx.TenantId = tenantId; // pins the RLS GUC so the insert's WITH CHECK passes
@@ -174,9 +174,4 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         await ctx.SaveChangesAsync();
     }
 
-    private sealed class InterceptingContextFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-    }
 }

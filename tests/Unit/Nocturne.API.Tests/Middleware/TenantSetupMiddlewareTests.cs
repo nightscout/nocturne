@@ -26,14 +26,6 @@ public class TenantSetupMiddlewareTests : IDisposable
     private readonly IDbContextFactory<NocturneDbContext> _dbFactory;
     private readonly SettableTenantAccessor _tenantAccessor;
 
-    /// <summary>
-    /// Hands the middleware contexts over the test's own SQLite connection.
-    /// </summary>
-    private sealed class SharedSqliteFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-    }
     private readonly Guid _tenantId = Guid.CreateVersion7();
 
     // Default validator with no instance key configured — Classify() always returns
@@ -48,7 +40,7 @@ public class TenantSetupMiddlewareTests : IDisposable
 
         _dbContext = _db.CreateContext();
         _dbContext.TenantId = _tenantId;
-        _dbFactory = new SharedSqliteFactory(_db.Options);
+        _dbFactory = _db.ContextFactory;
 
         // Seed the tenant entity so FK constraints are satisfied for TenantMembers
         _dbContext.Set<TenantEntity>().Add(new TenantEntity

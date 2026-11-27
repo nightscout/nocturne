@@ -64,8 +64,7 @@ public sealed class TrackerAlertRuleBackfillJobTests : IDisposable
     private async Task<JobOutcome> RunAsync(ITrackerAlertRuleSyncService sync)
     {
         var services = new ServiceCollection();
-        services.AddSingleton<IDbContextFactory<NocturneDbContext>>(new Contexts(_options));
-        services.AddSingleton(sp => sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory(_tenantId));
+        services.AddSingleton<INocturneDbContextFactory>(TestDbContextFactory.ForOptions(_options, _tenantId));
         services.AddSingleton(sync);
         services.AddSingleton<ITrackerRepository>(sp => new TrackerRepository(sp.GetRequiredService<INocturneDbContextFactory>()));
         await using var provider = services.BuildServiceProvider();
@@ -106,10 +105,5 @@ public sealed class TrackerAlertRuleBackfillJobTests : IDisposable
         });
         seed.SaveChanges();
         return definitionId;
-    }
-
-    private sealed class Contexts(DbContextOptions<NocturneDbContext> options) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
     }
 }

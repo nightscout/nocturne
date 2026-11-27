@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { TREE_SCAN_TIMEOUT_MS } from "./test-utils/tree-scan";
 
 const packages = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -69,14 +70,18 @@ function packageSources(): string[] {
 }
 
 describe("context keys", () => {
-  it("are namespaced strings in every package", () => {
-    const offenders = packageSources().flatMap((path) => {
-      const found = contextKeyOffences(readFileSync(path, "utf8"));
-      return found.length ? [`${path}: ${found.join(", ")}`] : [];
-    });
+  it(
+    "are namespaced strings in every package",
+    () => {
+      const offenders = packageSources().flatMap((path) => {
+        const found = contextKeyOffences(readFileSync(path, "utf8"));
+        return found.length ? [`${path}: ${found.join(", ")}`] : [];
+      });
 
-    expect(offenders).toEqual([]);
-  });
+      expect(offenders).toEqual([]);
+    },
+    TREE_SCAN_TIMEOUT_MS
+  );
 
   it.each([
     ["a module Symbol", 'const KEY = Symbol("a");\nsetContext(KEY, 1);', "made in the module"],

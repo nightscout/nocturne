@@ -8,7 +8,6 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -22,21 +21,15 @@ namespace Nocturne.API.Tests.Services.Identity;
 [Trait("Category", "Unit")]
 public sealed class TenantServiceProvisionOwnerTests : IDisposable
 {
-    private sealed class SharedSqliteFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-    }
-
     private readonly SqliteTestDatabase _db = TestDbContextFactory.CreateSqlite();
 
     public void Dispose() => _db.Dispose();
 
     private TenantService Provisioner() => new(
-        new SharedSqliteFactory(_db.Options).AsNocturneFactory(),
-        new TenantRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory()),
-        new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory(), AccountLinkRoutes.Off),
-        new SubjectRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory(), AccountLinkRoutes.Off),
+        _db.ContextFactory.AsNocturneFactory(),
+        new TenantRepository(_db.ContextFactory.AsNocturneFactory()),
+        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
+        new SubjectRepository(_db.ContextFactory.AsNocturneFactory(), AccountLinkRoutes.Off),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { TREE_SCAN_TIMEOUT_MS } from "../test-utils/tree-scan";
 import ts from "typescript";
 
 /**
@@ -83,16 +84,20 @@ function offences(source: string, fileName = "module.svelte.ts"): string[] {
 }
 
 describe("exported top-level copy in .svelte.{js,ts} modules", () => {
-  it("keeps every extracted string out of an exported top-level initializer", () => {
-    const modules = svelteModules(SRC);
-    expect(modules.some((path) => path.replaceAll("\\", "/").endsWith("lib/forms/submit-messages.svelte.ts"))).toBe(true);
+  it(
+    "keeps every extracted string out of an exported top-level initializer",
+    () => {
+      const modules = svelteModules(SRC);
+      expect(modules.some((path) => path.replaceAll("\\", "/").endsWith("lib/forms/submit-messages.svelte.ts"))).toBe(true);
 
-    const found = modules.flatMap((path) =>
-      offences(readFileSync(path, "utf8"), path).map((offence) => `${path}: ${offence}`)
-    );
+      const found = modules.flatMap((path) =>
+        offences(readFileSync(path, "utf8"), path).map((offence) => `${path}: ${offence}`)
+      );
 
-    expect(found).toEqual([]);
-  });
+      expect(found).toEqual([]);
+    },
+    TREE_SCAN_TIMEOUT_MS
+  );
 
   it("recognises an exported string the transform would wrap", () => {
     for (const source of [

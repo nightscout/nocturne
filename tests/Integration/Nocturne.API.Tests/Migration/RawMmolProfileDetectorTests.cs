@@ -10,7 +10,6 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
@@ -206,7 +205,7 @@ public class RawMmolProfileDetectorTests : IClassFixture<RawMmolProfileStoresFix
     public async Task DisposeAsync() => await _dataSource.DisposeAsync();
 
     private INocturneDbContextFactory Contexts(Guid tenant) =>
-        new OptionsFactory(TestContexts.Options(_dataSource)).AsNocturneFactory(tenant);
+        TestDbContextFactory.ForOptions(TestContexts.Options(_dataSource), tenant);
 
     private RawMmolProfileDetector Detector(Guid tenant) => new(Contexts(tenant));
 
@@ -452,10 +451,5 @@ public class RawMmolProfileDetectorTests : IClassFixture<RawMmolProfileStoresFix
 
         listedA.Should().NotContain(i => i.Id == other.TargetId);
         listedB.Select(i => i.Id).Should().Equal(other.TargetId);
-    }
-
-    private sealed class OptionsFactory(DbContextOptions<NocturneDbContext> options) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
     }
 }

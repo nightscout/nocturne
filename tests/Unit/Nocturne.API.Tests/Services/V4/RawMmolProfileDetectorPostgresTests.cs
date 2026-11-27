@@ -2,7 +2,6 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Services;
@@ -22,12 +21,6 @@ public class RawMmolProfileDetectorPostgresTests(RawMmolProfileDetectorPostgresT
 {
     public sealed class Database() : MigratedDatabase("raw_mmol_detector");
 
-    private sealed class Contexts(string connectionString, Guid tenant) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() =>
-            TestContexts.Context(connectionString, tenant);
-    }
-
     private sealed record Store(Guid TargetId, Guid SensitivityId);
 
     private static readonly DateTime Uploaded = new(2026, 5, 1, 8, 0, 0, DateTimeKind.Utc);
@@ -41,7 +34,7 @@ public class RawMmolProfileDetectorPostgresTests(RawMmolProfileDetectorPostgresT
             await conn.SeedTenantAsync(tenant, $"raw-mmol-{tenant:N}", "raw-mmol-detector-test");
         }
 
-        return (new Contexts(database.AppConnectionString, tenant).AsNocturneFactory(tenant), tenant);
+        return (TestDbContextFactory.ForOptions(TestContexts.Options(database.AppConnectionString), tenant), tenant);
     }
 
     private static async Task<Store> SeedAsync(

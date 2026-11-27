@@ -45,17 +45,11 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
 
     private NocturneDbContext Context() => _db.CreateContext(_tenantId);
 
-    private sealed class Factory(DbContextOptions<NocturneDbContext> options, Guid tenantId)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options) { TenantId = tenantId };
-    }
-
     private TenantService Service() => new(
-        (new Factory(_db.Options, _tenantId)).AsNocturneFactory(),
-        new TenantRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory()),
-        new TenantMembershipRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory(), AccountLinkRoutes.Off),
-        new SubjectRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory(), AccountLinkRoutes.Off),
+        _db.ContextFactory.AsNocturneFactory(_tenantId),
+        new TenantRepository(_db.ContextFactory.AsNocturneFactory(_tenantId)),
+        new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(_tenantId), AccountLinkRoutes.Off),
+        new SubjectRepository(_db.ContextFactory.AsNocturneFactory(_tenantId), AccountLinkRoutes.Off),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
@@ -231,7 +225,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
 
         result.Ok.Should().BeTrue();
         var directory = new ChatIdentityDirectoryService(
-            (new Factory(_db.Options, _tenantId)).AsNocturneFactory(), new TenantMembershipRepository((new Factory(_db.Options, _tenantId)).AsNocturneFactory(), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            _db.ContextFactory.AsNocturneFactory(_tenantId), new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(_tenantId), AccountLinkRoutes.Off), TimeProvider.System, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
         (await directory.GetCandidatesAsync("discord", "chat-user", default))
             .Select(c => c.Label).Should().BeEquivalentTo(["elsewhere"]);
         (await directory.GetCandidatesAsync("discord", "another-chat-user", default))
