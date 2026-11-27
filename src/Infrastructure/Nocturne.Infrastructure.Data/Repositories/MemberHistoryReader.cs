@@ -42,31 +42,6 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </remarks>
 public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHistoryReader
 {
-    private static readonly string[] EventTypes =
-    [
-        AuthAuditEventType.RoleAssigned,
-        AuthAuditEventType.RoleRemoved,
-        AuthAuditEventType.HistoryLimitChanged,
-        AuthAuditEventType.AccessEndChanged,
-        AuthAuditEventType.RolePermissionsChanged,
-        AuthAuditEventType.MemberJoined,
-        AuthAuditEventType.MemberRemoved,
-        AuthAuditEventType.TeamAccessGiven,
-        AuthAuditEventType.TeamAccessStopped,
-        AuthAuditEventType.TeamAccessChanged,
-        AuthAuditEventType.TeamStaffApproved,
-        AuthAuditEventType.TeamStaffDeclined,
-        AuthAuditEventType.TeamStaffRuleChanged,
-        AuthAuditEventType.TeamStaffBlocked,
-        AuthAuditEventType.TeamStaffUnblocked,
-        AuthAuditEventType.TeamGroupPersonAdded,
-        AuthAuditEventType.TeamGroupPersonRemoved,
-        AuthAuditEventType.TeamGroupStaffAdded,
-        AuthAuditEventType.TeamGroupStaffRemoved,
-        AuthAuditEventType.TeamGroupDeleted,
-        AuthAuditEventType.TeamStaffReachChanged,
-    ];
-
     private const string MemberChangeRows =
         $"SELECT * FROM auth_audit_log WHERE details IS NULL OR details ->> '{AuthAuditKind.Key}' IN ('{AuthAuditKind.Tenant}', '{AuthAuditKind.TeamAccess}')";
 
@@ -78,7 +53,7 @@ public class MemberHistoryReader(INocturneDbContextFactory contexts) : IMemberHi
         var rows = db.AuthAuditLog
             .FromSqlRaw(MemberChangeRows)
             .AsNoTracking()
-            .Where(a => a.TenantId == tenantId && EventTypes.Contains(a.EventType));
+            .Where(a => a.TenantId == tenantId && EF.Constant(AuthAuditEventType.MemberChanges).Contains(a.EventType));
         if (memberSubjectId is { } member)
             rows = rows.Where(a => a.TargetSubjectId == member);
 

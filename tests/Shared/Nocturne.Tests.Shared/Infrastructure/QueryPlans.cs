@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 
@@ -20,6 +21,49 @@ public static class QueryPlans
 
         var json = (string)(await cmd.ExecuteScalarAsync())!;
         return JsonDocument.Parse(json).RootElement.Clone();
+    }
+
+    /// <summary>
+    /// Plans <paramref name="captured"/> as PostgreSQL may once it keeps one generic plan for a prepared
+    /// statement, the worst case: each parameter is a value the planner does not know, so a predicate a
+    /// partial index must prove has to hold for the parameter. <see cref="ExplainAsync"/> plans it for
+    /// the values it was sent with.
+    /// </summary>
+    /// <remarks>
+    /// <c>EXPLAIN (GENERIC_PLAN)</c> cannot do this through Npgsql: with no parameters bound the bind
+    /// message is refused, and with them bound the plan is made for their values.
+    /// </remarks>
+    public static async Task<JsonElement> ExplainGenericAsync(NpgsqlConnection conn, NpgsqlCommand captured)
+    {
+        const string statement = "query_plan_generic";
+        var parameters = captured.Parameters.Cast<NpgsqlParameter>().ToList();
+        var text = captured.CommandText;
+        for (var i = 0; i < parameters.Count; i++)
+            text = Regex.Replace(text, $@"@{Regex.Escape(parameters[i].ParameterName.TrimStart('@'))}\b", "$$" + (i + 1));
+
+        var types = parameters.Select(p => p.DataTypeName
+            ?? throw new InvalidOperationException($"Parameter {p.ParameterName} has no PostgreSQL type name."));
+
+        await using (var prepare = conn.CreateCommand())
+        {
+            prepare.CommandText =
+                $"SET plan_cache_mode = force_generic_plan; PREPARE {statement} ({string.Join(", ", types)}) AS {text}";
+            await prepare.ExecuteNonQueryAsync();
+        }
+
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"EXPLAIN (FORMAT JSON) EXECUTE {statement}({string.Join(", ", parameters.Select(_ => "NULL"))})";
+            var json = (string)(await cmd.ExecuteScalarAsync())!;
+            return JsonDocument.Parse(json).RootElement.Clone();
+        }
+        finally
+        {
+            await using var cleanup = conn.CreateCommand();
+            cleanup.CommandText = $"DEALLOCATE {statement}; RESET plan_cache_mode";
+            await cleanup.ExecuteNonQueryAsync();
+        }
     }
 
     public static IEnumerable<string> Descendants(this JsonElement element, string property)
