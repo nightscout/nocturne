@@ -27,26 +27,26 @@ public class ConditionNodeSerializationTests
     [Fact]
     public void Threshold_RoundTrips()
     {
-        var node = new ConditionNode("threshold", Threshold: new ThresholdCondition("below", 70m));
+        var node = new ConditionNode("threshold", Threshold: new ThresholdCondition("<", 70m));
 
         var result = RoundTrip(node);
 
         result.Type.Should().Be("threshold");
         result.Threshold.Should().NotBeNull();
-        result.Threshold!.Direction.Should().Be("below");
+        result.Threshold!.Operator.Should().Be("<");
         result.Threshold.Value.Should().Be(70m);
     }
 
     [Fact]
     public void RateOfChange_RoundTrips()
     {
-        var node = new ConditionNode("rate_of_change", RateOfChange: new RateOfChangeCondition("falling", 3m));
+        var node = new ConditionNode("rate_of_change", RateOfChange: new RateOfChangeCondition("<=", -3m));
 
         var result = RoundTrip(node);
 
         result.RateOfChange.Should().NotBeNull();
-        result.RateOfChange!.Direction.Should().Be("falling");
-        result.RateOfChange.Rate.Should().Be(3m);
+        result.RateOfChange!.Operator.Should().Be("<=");
+        result.RateOfChange.Value.Should().Be(-3m);
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class ConditionNodeSerializationTests
     [Fact]
     public void Not_RoundTrips()
     {
-        var inner = new ConditionNode("threshold", Threshold: new ThresholdCondition("above", 180m));
+        var inner = new ConditionNode("threshold", Threshold: new ThresholdCondition(">", 180m));
         var node = new ConditionNode("not", Not: new NotCondition(inner));
 
         var result = RoundTrip(node);
@@ -71,14 +71,14 @@ public class ConditionNodeSerializationTests
         result.Type.Should().Be("not");
         result.Not.Should().NotBeNull();
         result.Not!.Child.Type.Should().Be("threshold");
-        result.Not.Child.Threshold!.Direction.Should().Be("above");
+        result.Not.Child.Threshold!.Operator.Should().Be(">");
         result.Not.Child.Threshold.Value.Should().Be(180m);
     }
 
     [Fact]
     public void Sustained_RoundTrips()
     {
-        var inner = new ConditionNode("threshold", Threshold: new ThresholdCondition("below", 70m));
+        var inner = new ConditionNode("threshold", Threshold: new ThresholdCondition("<", 70m));
         var node = new ConditionNode("sustained", Sustained: new SustainedCondition(15, inner));
 
         var result = RoundTrip(node);
@@ -97,7 +97,7 @@ public class ConditionNodeSerializationTests
 
         result.Staleness.Should().NotBeNull();
         result.Staleness!.Operator.Should().Be(">=");
-        result.Staleness.Value.Should().Be(25);
+        result.Staleness.Minutes.Should().Be(25);
     }
 
     [Fact]
@@ -188,25 +188,25 @@ public class ConditionNodeSerializationTests
     [Fact]
     public void SiteAge_RoundTrips()
     {
-        var node = new ConditionNode("site_age", SiteAge: new SiteAgeCondition(">=", 72m));
+        var node = new ConditionNode("site_age", SiteAge: new SiteAgeCondition(">=", 4320));
 
         var result = RoundTrip(node);
 
         result.SiteAge.Should().NotBeNull();
         result.SiteAge!.Operator.Should().Be(">=");
-        result.SiteAge.Value.Should().Be(72m);
+        result.SiteAge.Minutes.Should().Be(4320);
     }
 
     [Fact]
     public void SensorAge_RoundTrips()
     {
-        var node = new ConditionNode("sensor_age", SensorAge: new SensorAgeCondition(">", 9.5m));
+        var node = new ConditionNode("sensor_age", SensorAge: new SensorAgeCondition(">", 13680));
 
         var result = RoundTrip(node);
 
         result.SensorAge.Should().NotBeNull();
         result.SensorAge!.Operator.Should().Be(">");
-        result.SensorAge.Value.Should().Be(9.5m);
+        result.SensorAge.Minutes.Should().Be(13680);
     }
 
     [Fact]
@@ -394,7 +394,7 @@ public class ConditionNodeSerializationTests
     public void Composite_OfNotSustainedThreshold_RoundTrips()
     {
         // composite { not { sustained { threshold } } }
-        var threshold = new ConditionNode("threshold", Threshold: new ThresholdCondition("below", 70m));
+        var threshold = new ConditionNode("threshold", Threshold: new ThresholdCondition("<", 70m));
         var sustained = new ConditionNode("sustained", Sustained: new SustainedCondition(15, threshold));
         var not = new ConditionNode("not", Not: new NotCondition(sustained));
         var composite = new ConditionNode("composite",
@@ -418,15 +418,15 @@ public class ConditionNodeSerializationTests
 
         var thresholdNode = sustainedNode.Sustained.Child;
         thresholdNode.Type.Should().Be("threshold");
-        thresholdNode.Threshold!.Direction.Should().Be("below");
+        thresholdNode.Threshold!.Operator.Should().Be("<");
         thresholdNode.Threshold.Value.Should().Be(70m);
     }
 
     [Fact]
     public void Composite_MultiChild_OrThresholdAndPredicted_RoundTrips()
     {
-        // composite { or, [ threshold(below, 70), predicted(<, 70, withinMinutes 20) ] }
-        var threshold = new ConditionNode("threshold", Threshold: new ThresholdCondition("below", 70m));
+        // composite { or, [ threshold(<, 70), predicted(<, 70, withinMinutes 20) ] }
+        var threshold = new ConditionNode("threshold", Threshold: new ThresholdCondition("<", 70m));
         var predicted = new ConditionNode("predicted", Predicted: new PredictedCondition("<", 70m, 20));
         var composite = new ConditionNode("composite",
             Composite: new CompositeCondition("or", new List<ConditionNode> { threshold, predicted }));
@@ -441,7 +441,7 @@ public class ConditionNodeSerializationTests
         var first = result.Composite.Conditions[0];
         first.Type.Should().Be("threshold");
         first.Threshold.Should().NotBeNull();
-        first.Threshold!.Direction.Should().Be("below");
+        first.Threshold!.Operator.Should().Be("<");
         first.Threshold.Value.Should().Be(70m);
 
         var second = result.Composite.Conditions[1];

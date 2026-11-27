@@ -39,7 +39,7 @@ public class WidgetSummaryServiceStatusTests
     [Fact]
     public async Task Current_isClassifiedAgainstTheTenantsThresholdRules()
     {
-        SeedThresholdRule("above", 140, AlertRuleSeverity.Warning);
+        SeedThresholdRule(">", 140, AlertRuleSeverity.Warning);
 
         var summary = await NewService(Reading(170, minutesAgo: 2)).GetSummaryAsync();
 
@@ -50,7 +50,7 @@ public class WidgetSummaryServiceStatusTests
     [Fact]
     public async Task Current_onAPublicShare_isClassifiedAgainstTheDefaultsWhateverRulesExist()
     {
-        SeedThresholdRule("above", 140, AlertRuleSeverity.Warning);
+        SeedThresholdRule(">", 140, AlertRuleSeverity.Warning);
 
         var summary = await NewService(failingContext: false, isShare: true, Reading(170, minutesAgo: 2))
             .GetSummaryAsync();
@@ -129,7 +129,7 @@ public class WidgetSummaryServiceStatusTests
         Mills = DateTimeOffset.UtcNow.AddMinutes(-minutesAgo).ToUnixTimeMilliseconds(),
     };
 
-    private void SeedThresholdRule(string direction, int value, AlertRuleSeverity severity)
+    private void SeedThresholdRule(string @operator, int value, AlertRuleSeverity severity)
     {
         using var db = new NocturneDbContext(_options) { TenantId = _tenantId };
         db.AlertRules.Add(new AlertRuleEntity
@@ -139,7 +139,7 @@ public class WidgetSummaryServiceStatusTests
             Severity = severity,
             IsEnabled = true,
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = $$"""{"direction":"{{direction}}","value":{{value}}}""",
+            ConditionParams = $$"""{"schema_version":2,"operator":"{{@operator}}","value":{{value}}}""",
         });
         db.SaveChanges();
     }

@@ -162,7 +162,7 @@ public class AlertTrackerTransitionLockTests
             TenantId = tenantId,
             Name = "transition-lock-test",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = """{"direction":"below","value":70}""",
+            ConditionParams = """{"schema_version":2,"operator":"<","value":70}""",
             ClientConfiguration = "{}",
             Severity = AlertRuleSeverity.Warning,
             IsEnabled = true,

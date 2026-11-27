@@ -38,7 +38,7 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
             Id = RuleId,
             TenantId = TenantId,
             Name = "low",
-            ConditionParams = """{"direction":"below","value":70}""",
+            ConditionParams = """{"schema_version":2,"operator":"<","value":70}""",
         });
         seed.SaveChanges();
     }

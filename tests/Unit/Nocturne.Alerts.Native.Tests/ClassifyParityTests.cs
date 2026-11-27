@@ -19,26 +19,26 @@ public class ClassifyParityTests
     public static TheoryData<string, string, string> Cases() => new()
     {
         // condition_type, condition_params (payload-only), expected scope_class
-        { "threshold", """{ "direction": "below", "value": 70 }""", "low" },
-        { "threshold", """{ "direction": "above", "value": 250 }""", "high" },
-        { "rate_of_change", """{ "direction": "falling", "rate": 2 }""", "low" },
-        { "rate_of_change", """{ "direction": "rising", "rate": 2 }""", "high" },
-        { "predicted", """{ "operator": "<", "value": 70, "within_minutes": 15 }""", "low" },
-        { "predicted", """{ "operator": ">=", "value": 250, "within_minutes": 15 }""", "high" },
-        { "predicted", """{ "operator": "==", "value": 100, "within_minutes": 15 }""", "undirected" },
-        { "glucose_bucket", """{ "buckets": ["very_low", "low"] }""", "low" },
-        { "glucose_bucket", """{ "buckets": ["high", "very_high"] }""", "high" },
-        { "glucose_bucket", """{ "buckets": ["very_low", "very_high"] }""", "composite" },
-        { "glucose_bucket", """{ "buckets": ["tight_range", "in_range"] }""", "undirected" },
-        { "signal_loss", """{ "timeout_minutes": 20 }""", "undirected" },
+        { "threshold", """{ "schema_version": 2, "operator": "<", "value": 70 }""", "low" },
+        { "threshold", """{ "schema_version": 2, "operator": ">", "value": 250 }""", "high" },
+        { "rate_of_change", """{ "schema_version": 2, "operator": "<=", "value": -2 }""", "low" },
+        { "rate_of_change", """{ "schema_version": 2, "operator": ">=", "value": 2 }""", "high" },
+        { "predicted", """{ "schema_version": 2, "operator": "<", "value": 70, "within_minutes": 15 }""", "low" },
+        { "predicted", """{ "schema_version": 2, "operator": ">=", "value": 250, "within_minutes": 15 }""", "high" },
+        { "predicted", """{ "schema_version": 2, "operator": "==", "value": 100, "within_minutes": 15 }""", "undirected" },
+        { "glucose_bucket", """{ "schema_version": 2, "buckets": ["very_low", "low"] }""", "low" },
+        { "glucose_bucket", """{ "schema_version": 2, "buckets": ["high", "very_high"] }""", "high" },
+        { "glucose_bucket", """{ "schema_version": 2, "buckets": ["very_low", "very_high"] }""", "composite" },
+        { "glucose_bucket", """{ "schema_version": 2, "buckets": ["tight_range", "in_range"] }""", "undirected" },
+        { "signal_loss", """{ "schema_version": 2, "timeout_minutes": 20 }""", "undirected" },
         // Composite of full child nodes — the stored shape.
         {
             "composite",
             """
-            { "operator": "and", "conditions": [
-                { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+            { "schema_version": 2, "operator": "and", "conditions": [
+                { "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
                 { "type": "iob", "iob": { "operator": "<", "value": 1 } },
-                { "type": "rate_of_change", "rate_of_change": { "direction": "falling", "rate": 1 } }
+                { "type": "rate_of_change", "rate_of_change": { "operator": "<=", "value": -1 } }
             ] }
             """,
             "low"
@@ -46,17 +46,17 @@ public class ClassifyParityTests
         {
             "composite",
             """
-            { "operator": "or", "conditions": [
-                { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
-                { "type": "threshold", "threshold": { "direction": "above", "value": 250 } }
+            { "schema_version": 2, "operator": "or", "conditions": [
+                { "type": "threshold", "threshold": { "operator": "<", "value": 70 } },
+                { "type": "threshold", "threshold": { "operator": ">", "value": 250 } }
             ] }
             """,
             "composite"
         },
         // A directional leaf under NOT taints the whole rule to undirected.
-        { "not", """{ "child": { "type": "threshold", "threshold": { "direction": "above", "value": 250 } } }""", "undirected" },
+        { "not", """{ "schema_version": 2, "child": {"type": "threshold", "threshold": {"operator": ">", "value": 250}} }""", "undirected" },
         // Sustained passes its child's direction through.
-        { "sustained", """{ "minutes": 15, "child": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } } }""", "low" },
+        { "sustained", """{ "schema_version": 2, "minutes": 15, "child": {"type": "threshold", "threshold": {"operator": "<", "value": 70}} }""", "low" },
         // Unknown type / malformed input silent-fail to the all-only default.
         { "teleport", "{}", "undirected" },
     };

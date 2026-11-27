@@ -54,7 +54,7 @@ public class AlertRulesControllerTrackerAgeTests
     }
 
     private static JsonElement TrackerAge(Guid definitionId) => JsonSerializer.Deserialize<JsonElement>(
-        $$"""{"tracker_definition_id":"{{definitionId}}","operator":">=","minutes":600}""");
+        $$"""{"schema_version":2,"tracker_definition_id":"{{definitionId}}","operator":">=","minutes":600}""");
 
     [Fact]
     public async Task CreateRule_naming_an_unknown_tracker_definition_is_a_bad_request_and_saves_nothing()
@@ -85,7 +85,7 @@ public class AlertRulesControllerTrackerAgeTests
             TenantId = Tenant,
             Name = "Stored",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = """{"direction":"below","value":70}""",
+            ConditionParams = """{"schema_version":2,"operator":"<","value":70}""",
         });
         await db.SaveChangesAsync();
         var unknown = Guid.NewGuid();

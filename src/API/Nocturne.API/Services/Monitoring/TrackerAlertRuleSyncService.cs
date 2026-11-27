@@ -180,12 +180,12 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                 continue;
             }
 
-            var conditionParams = JsonSerializer.Serialize(new
+            var conditionParams = ConditionSchema.Stamp(JsonSerializer.Serialize(new
             {
                 tracker_definition_id = definitionId,
                 @operator = ">=",
                 minutes = minutes.Value,
-            });
+            }));
 
             var name = Truncate($"{definition.Name}: {ThresholdLabel(definition, threshold)}", ColumnLengths.AlertRule.Name);
             var severity = MapSeverity(threshold.Urgency);
@@ -327,7 +327,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             return;
 
         // Snake_case, the condition models' wire form (ReservoirCondition).
-        var conditionParams = JsonSerializer.Serialize(new { @operator = "<", value = units });
+        var conditionParams = ConditionSchema.Stamp(JsonSerializer.Serialize(new { @operator = "<", value = units }));
         var name = Truncate($"{definition.Name}: below {units} U", ColumnLengths.AlertRule.Name);
         var severity = MapSeverity(definition.LowReservoirUrgency);
         var scopeClass = _scopeClassifier.Classify(AlertConditionType.Reservoir, conditionParams);

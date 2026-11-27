@@ -150,13 +150,13 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
         (await AlertRulesByNameAsync()).Should().HaveCount(4, "saving again updates the starter rules rather than adding more");
     }
 
-    private static (bool Enabled, string? Direction, decimal? Value) ResolveOf(JsonElement rule)
+    private static (bool Enabled, string? Operator, decimal? Value) ResolveOf(JsonElement rule)
     {
         var enabled = rule.GetProperty("autoResolveEnabled").GetBoolean();
         if (rule.GetProperty("autoResolveParams").ValueKind != JsonValueKind.Object)
             return (enabled, null, null);
         var threshold = rule.GetProperty("autoResolveParams").GetProperty("threshold");
-        return (enabled, threshold.GetProperty("direction").GetString(), threshold.GetProperty("value").GetDecimal());
+        return (enabled, threshold.GetProperty("operator").GetString(), threshold.GetProperty("value").GetDecimal());
     }
 
     [Fact]
@@ -165,18 +165,18 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
         await SaveAsync(Rules(55, 70, 250));
 
         var rules = await AlertRulesByNameAsync();
-        ResolveOf(rules["Urgent low"]).Should().Be((true, "above", 55m));
-        ResolveOf(rules["Low"]).Should().Be((true, "above", 70m));
-        ResolveOf(rules["High"]).Should().Be((true, "below", 250m));
+        ResolveOf(rules["Urgent low"]).Should().Be((true, ">", 55m));
+        ResolveOf(rules["Low"]).Should().Be((true, ">", 70m));
+        ResolveOf(rules["High"]).Should().Be((true, "<", 250m));
         ResolveOf(rules["No readings for 20 minutes"]).Should().Be((false, null, null));
 
         await SaveAsync(Rules(55, 80, 250));
-        ResolveOf((await AlertRulesByNameAsync())["Low"]).Should().Be((true, "above", 80m), "the resolve condition follows the threshold");
+        ResolveOf((await AlertRulesByNameAsync())["Low"]).Should().Be((true, ">", 80m), "the resolve condition follows the threshold");
 
         await using (var db = Fixture.CreateDbContext(Fixture.TenantId))
         {
             var high = await db.AlertRules.SingleAsync(r => r.Name == "High");
-            high.AutoResolveParams = """{"type":"threshold","threshold":{"direction":"below","value":180}}""";
+            high.AutoResolveParams = """{"schema_version":2,"type":"threshold","threshold":{"operator":"<","value":180}}""";
             var urgentLow = await db.AlertRules.SingleAsync(r => r.Name == "Urgent low");
             urgentLow.AutoResolveEnabled = false;
             await db.SaveChangesAsync();
@@ -185,8 +185,8 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
         await SaveAsync(Rules(60, 80, 240));
         rules = await AlertRulesByNameAsync();
         StoredValue(rules["High"]).Should().Be(240);
-        ResolveOf(rules["High"]).Should().Be((true, "below", 180m), "a resolve condition the owner edited stays");
-        ResolveOf(rules["Urgent low"]).Should().Be((false, "above", 55m), "one the owner switched off stays off and unchanged");
+        ResolveOf(rules["High"]).Should().Be((true, "<", 180m), "a resolve condition the owner edited stays");
+        ResolveOf(rules["Urgent low"]).Should().Be((false, ">", 55m), "one the owner switched off stays off and unchanged");
     }
 
     /// <summary>
@@ -248,21 +248,21 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task AStarterHeldForATime_IsShownAsSetInTheRuleEditor_AndALevelSentForItIsIgnored() =>
         await AssertSetInTheRuleEditorAndLeftAlone(
-            """{"minutes":15,"child":{"type":"threshold","threshold":{"direction":"below","value":65}}}""",
+            """{"schema_version":2,"minutes":15,"child":{"type":"threshold","threshold":{"operator":"<","value":65}}}""",
             AlertConditionType.Sustained);
 
     [Fact]
     public async Task AStarterMadeIntoAnotherKindWithAValue_IsShownAsSetInTheRuleEditor() =>
         await AssertSetInTheRuleEditorAndLeftAlone(
-            """{"operator":"<","value":70,"within_minutes":30}""", AlertConditionType.Predicted);
+            """{"schema_version":2,"operator":"<","value":70,"within_minutes":30}""", AlertConditionType.Predicted);
 
     [Fact]
     public async Task AStarterWhoseLimitNamesAFactThisBuildDoesNotKnow_IsShownAsSetInTheRuleEditor() =>
-        await AssertSetInTheRuleEditorAndLeftAlone("""{"direction":"below","value_from":{"fact":"no_such_fact","offset":0}}""");
+        await AssertSetInTheRuleEditorAndLeftAlone("""{"schema_version":2,"operator":"<","value_from":{"fact":"no_such_fact","offset":0}}""");
 
     [Theory]
-    [InlineData("""{"direction":"below","value":"70"}""")]
-    [InlineData("""{"direction":"below","value":null}""")]
+    [InlineData("""{"schema_version":2,"operator":"<","value":"70"}""")]
+    [InlineData("""{"schema_version":2,"operator":"<","value":null}""")]
     [InlineData("""[70]""")]
     public async Task AStarterWhoseValueIsNotANumber_IsShownAsSetInTheRuleEditor(string conditionParams) =>
         await AssertSetInTheRuleEditorAndLeftAlone(conditionParams);
@@ -281,7 +281,7 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
     public async Task AStarterWhoseLevelIsATarget_IsShownAsSetInTheRuleEditor_AndASaveLeavesItAsItIs()
     {
         await SaveAsync(Rules(55, 70, 250));
-        const string belowTarget = """{"direction":"below","value_from":{"fact":"target_low","offset":15}}""";
+        const string belowTarget = """{"schema_version":2,"operator":"<","value_from":{"fact":"target_low","offset":15}}""";
         var low = await EditStarterAsync("Low", belowTarget);
         var before = (await StoredAsync(low)).ConditionParams;
 
@@ -306,7 +306,7 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
     public async Task AStarterWithAClearMargin_KeepsItsConditionsByteForByte_WhenItsNumberIsUnchanged()
     {
         await SaveAsync(Rules(55, 70, 250));
-        const string withMargin = """{"direction":"below","value":70,"clear_margin":5}""";
+        const string withMargin = """{"schema_version":2,"operator":"<","value":70,"clear_margin":5}""";
         var low = await EditStarterAsync("Low", withMargin);
         var before = (await StoredAsync(low)).ConditionParams;
 
@@ -319,14 +319,14 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
     public async Task AStarterWithAClearMargin_KeepsTheMargin_WhenItsNumberChanges()
     {
         await SaveAsync(Rules(55, 70, 250));
-        var low = await EditStarterAsync("Low", """{"direction":"below","value":70,"clear_margin":5}""");
+        var low = await EditStarterAsync("Low", """{"schema_version":2,"operator":"<","value":70,"clear_margin":5}""");
 
         await SaveAsync(Rules(55, 75, 250));
 
         var (conditionParams, awaitingRearm) = await StoredAsync(low);
         var stored = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(conditionParams)!;
-        stored.Keys.Should().BeEquivalentTo("direction", "value", "clear_margin");
-        stored["direction"].GetString().Should().Be("below");
+        stored.Keys.Should().BeEquivalentTo("schema_version", "operator", "value", "clear_margin");
+        stored["operator"].GetString().Should().Be("<");
         stored["value"].GetDecimal().Should().Be(75);
         stored["clear_margin"].GetDecimal().Should().Be(5);
         awaitingRearm.Should().BeFalse("a changed threshold re-arms the rule");

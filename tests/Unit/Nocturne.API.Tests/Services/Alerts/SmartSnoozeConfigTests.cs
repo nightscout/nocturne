@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.API.Services.Alerts;
 using Xunit;
@@ -29,14 +31,14 @@ public class SmartSnoozeConfigTests
     {
         var config = SmartSnoozeConfig.Parse("""
             {"snooze":{"smartSnooze":true,"smartSnoozeExtendMinutes":20,"maxCount":4,
-              "conditions":[{"type":"threshold","threshold":{"direction":"above","value":70}}]}}
+              "conditions":[{"schema_version":2,"type":"threshold","threshold":{"operator":">","value":70}}]}}
             """);
 
         config.SmartSnooze.Should().BeTrue();
         config.ExtendMinutes.Should().Be(20);
         config.MaxCount.Should().Be(4);
         config.Conditions!.Value.GetRawText().Should().Be(
-            """[{"type":"threshold","threshold":{"direction":"above","value":70}}]""");
+            """[{"schema_version":2,"type":"threshold","threshold":{"operator":">","value":70}}]""");
         config.Malformed.Should().BeFalse();
     }
 
@@ -123,5 +125,47 @@ public class SmartSnoozeConfigTests
 
         config.ConditionsUnreadable.Should().BeTrue();
         config.Malformed.Should().BeTrue();
+    }
+
+    private const string Low =
+        """{"schema_version":2,"type":"threshold","threshold":{"operator":"<","value":70}}""";
+
+    private const string Rising = """{"schema_version":2,"type":"trend","trend":{"bucket":"rising"}}""";
+
+    private static JsonElement List(params string[] conditions) =>
+        JsonDocument.Parse("[" + string.Join(",", conditions) + "]").RootElement.Clone();
+
+    [Fact]
+    public void Conditions_that_all_name_the_schema_compose_a_body_that_names_it_at_its_root_only()
+    {
+        var body = SmartSnoozeConfig.AndBody(List(Low, Rising));
+
+        JsonNode.DeepEquals(JsonNode.Parse(body), JsonNode.Parse("""
+            {"schema_version":2,"operator":"and","conditions":[
+              {"type":"threshold","threshold":{"operator":"<","value":70}},
+              {"type":"trend","trend":{"bucket":"rising"}}]}
+            """)).Should().BeTrue(body);
+    }
+
+    [Fact]
+    public void A_condition_that_does_not_name_the_schema_leaves_the_composite_naming_none()
+    {
+        var body = JsonNode.Parse(SmartSnoozeConfig.AndBody(
+            List(Low, """{"type":"trend","trend":{"bucket":"rising"}}""")))!.AsObject();
+
+        body.ContainsKey("schema_version").Should().BeFalse();
+        body["conditions"]!.AsArray().Should().OnlyContain(c => !c!.AsObject().ContainsKey("schema_version"));
+    }
+
+    [Fact]
+    public void The_condition_tree_names_the_schema_on_the_composite_node()
+    {
+        var tree = JsonNode.Parse(SmartSnoozeConfig.ConditionTree(List(Low, Rising)).GetRawText())!;
+
+        tree["schema_version"]!.GetValue<int>().Should().Be(2);
+        tree["type"]!.GetValue<string>().Should().Be("composite");
+        tree["composite"]!.AsObject().ContainsKey("schema_version").Should().BeFalse();
+        tree["composite"]!["conditions"]!.AsArray()
+            .Should().OnlyContain(c => !c!.AsObject().ContainsKey("schema_version"));
     }
 }

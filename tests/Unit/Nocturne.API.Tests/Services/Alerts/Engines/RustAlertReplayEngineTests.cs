@@ -20,6 +20,7 @@ public class RustAlertReplayEngineTests
         "",
         "{\"direction\":\"below\"",
         """["not","an","object"]""",
+        """{"direction":"below","value":70}""",
     };
 
     private static async Task<AlertReplayRun> ReplayAsync(string conditionParams)

@@ -29,7 +29,7 @@ public class AlertRulesControllerReviewReasonTests
     private static readonly Guid Tenant = Guid.Parse("85385385-aaaa-7aaa-8aaa-aaaaaaaaaaaa");
     private static readonly Guid RuleId = Guid.Parse("85385385-bbbb-7bbb-8bbb-bbbbbbbbbbbb");
 
-    private const string Body = """{"direction":"below","value":54}""";
+    private const string Body = """{"schema_version":2,"operator":"<","value":54}""";
 
     private static readonly RustValidationIssue Issue = new("condition", "threshold", "field_missing", "value");
 
@@ -105,7 +105,7 @@ public class AlertRulesControllerReviewReasonTests
         {
             Name = "Urgent Low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = JsonSerializer.Deserialize<JsonElement>("""{"direction":"below","value":55}"""),
+            ConditionParams = JsonSerializer.Deserialize<JsonElement>("""{"schema_version":2,"operator":"<","value":55}"""),
             IsEnabled = true,
         }, CancellationToken.None);
 

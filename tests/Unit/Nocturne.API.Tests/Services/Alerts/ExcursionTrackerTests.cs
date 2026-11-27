@@ -887,9 +887,9 @@ public class ExcursionTrackerTests
             Name = _defaultRule.Name,
             IsEnabled = field != "enabled",
             ConditionType = field == "type" ? AlertConditionType.Composite : _defaultRule.ConditionType,
-            ConditionParams = field == "body" ? """{"direction":"below","value":60}""" : _defaultRule.ConditionParams,
+            ConditionParams = field == "body" ? """{"schema_version":2,"operator":"<","value":60}""" : _defaultRule.ConditionParams,
             AutoResolveEnabled = field == "autoResolveEnabled",
-            AutoResolveParams = field == "autoResolve" ? """{"type":"threshold"}""" : null,
+            AutoResolveParams = field == "autoResolve" ? """{"schema_version":2,"type":"threshold"}""" : null,
         };
         SetupRule(edited);
 

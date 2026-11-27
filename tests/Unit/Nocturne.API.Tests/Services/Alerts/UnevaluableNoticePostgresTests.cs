@@ -57,7 +57,7 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
             TenantId = tenant,
             Name = "Urgent Low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = """{"threshold": 54}""",
+            ConditionParams = """{"schema_version": 2, "threshold": 54}""",
             Severity = AlertRuleSeverity.Critical,
             IsEnabled = true,
             CreatedAt = At,
@@ -69,7 +69,7 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
 
     /// <summary>The rule <see cref="SeedAsync"/> stores, as a run reads it.</summary>
     private static AlertRuleSnapshot Snapshot(Guid tenant, Guid rule) =>
-        new(rule, tenant, "Urgent Low", AlertConditionType.Threshold, """{"threshold": 54}""",
+        new(rule, tenant, "Urgent Low", AlertConditionType.Threshold, """{"schema_version": 2, "threshold": 54}""",
             AlertRuleSeverity.Critical, "{}", 0, false, null);
 
     [Fact]
@@ -78,7 +78,7 @@ public class UnevaluableNoticePostgresTests(UnevaluableNoticePostgresTests.Datab
         var (tenant, rule) = await SeedAsync();
         await using (var db = Context(tenant))
         {
-            (await db.AlertRules.SingleAsync(r => r.Id == rule)).ConditionParams = """{"threshold": 55}""";
+            (await db.AlertRules.SingleAsync(r => r.Id == rule)).ConditionParams = """{"schema_version": 2, "threshold": 55}""";
             await db.SaveChangesAsync();
         }
 

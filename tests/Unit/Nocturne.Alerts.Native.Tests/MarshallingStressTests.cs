@@ -38,10 +38,10 @@ public class MarshallingStressTests
             conditions.Add(new JsonObject
             {
                 ["type"] = "threshold",
-                ["threshold"] = new JsonObject { ["direction"] = "below", ["value"] = i },
+                ["threshold"] = new JsonObject { ["operator"] = "<", ["value"] = i },
             });
         }
-        var conditionParams = new JsonObject { ["operator"] = "or", ["conditions"] = conditions };
+        var conditionParams = new JsonObject { ["schema_version"] = 2, ["operator"] = "or", ["conditions"] = conditions };
 
         var rule = new RustAlertRule
         {
@@ -59,7 +59,7 @@ public class MarshallingStressTests
             rule, context, new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc), includeLeaves: true);
 
         var result = JsonNode.Parse(response.Result!.Value.GetRawText())!;
-        // threshold below is strict (latest < value): leaves 0..100 are false, 101..399 true.
+        // the threshold is strict (latest < value): leaves 0..100 are false, 101..399 true.
         result["root"]!.GetValue<bool>().Should().BeTrue();
         var leaves = result["leaves"]!.AsArray();
         leaves.Should().HaveCount(leafCount);
@@ -67,7 +67,9 @@ public class MarshallingStressTests
         leaves[250]!["value"]!.GetValue<bool>().Should().BeTrue();
 
         // leaf_paths over the same tree: a full ConditionNode wrapping the payload.
-        var node = new JsonObject { ["type"] = "composite", ["composite"] = conditionParams.DeepClone() };
+        var payload = conditionParams.DeepClone().AsObject();
+        payload.Remove("schema_version");
+        var node = new JsonObject { ["schema_version"] = 2, ["type"] = "composite", ["composite"] = payload };
         var paths = RustAlertEngine.LeafPaths(Element(node));
         paths.Root.Should().Be("composite");
         paths.Leaves.Should().HaveCount(leafCount);
@@ -89,6 +91,7 @@ public class MarshallingStressTests
             ConditionType = "state_span_active",
             ConditionParams = Element(new JsonObject
             {
+                ["schema_version"] = 2,
                 ["category"] = "Exercise",
                 ["state"] = spanState,
                 ["is_active"] = true,
@@ -133,7 +136,7 @@ public class MarshallingStressTests
 
     [NativeTheory]
     [InlineData("null", "payload_missing at 'threshold'")]
-    [InlineData("{}", "field_missing at 'threshold' (field 'direction'); field_missing at 'threshold' (field 'value')")]
+    [InlineData("""{"schema_version":2}""", "field_missing at 'threshold' (field 'operator'); field_missing at 'threshold' (field 'value')")]
     public void Condition_params_that_cannot_be_evaluated_throw_typed_exception(string conditionParams, string issues)
     {
         var rule = new RustAlertRule
@@ -216,6 +219,7 @@ public class MarshallingStressTests
     {
         var node = Element(new JsonObject
         {
+            ["schema_version"] = 2,
             ["type"] = "sustained",
             ["sustained"] = new JsonObject
             {
@@ -223,7 +227,7 @@ public class MarshallingStressTests
                 ["child"] = new JsonObject
                 {
                     ["type"] = "threshold",
-                    ["threshold"] = new JsonObject { ["direction"] = "above", ["value"] = 180 },
+                    ["threshold"] = new JsonObject { ["operator"] = ">", ["value"] = 180 },
                 },
             },
         });
@@ -245,11 +249,12 @@ public class MarshallingStressTests
             ConditionType = "sustained",
             ConditionParams = Element(new JsonObject
             {
+                ["schema_version"] = 2,
                 ["minutes"] = 10,
                 ["child"] = new JsonObject
                 {
                     ["type"] = "threshold",
-                    ["threshold"] = new JsonObject { ["direction"] = "below", ["value"] = 70 },
+                    ["threshold"] = new JsonObject { ["operator"] = "<", ["value"] = 70 },
                 },
             }),
         };

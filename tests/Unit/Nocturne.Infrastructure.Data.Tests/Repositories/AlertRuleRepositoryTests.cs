@@ -34,7 +34,7 @@ public class AlertRuleRepositoryTests
     private AlertRuleRepository Repository(NocturneDbContext seed) =>
         new(new TestNocturneDbContextFactory(seed), _clock);
 
-    private static AlertRuleWrite Low(string body = """{"direction":"below","value":70}""") => new(
+    private static AlertRuleWrite Low(string body = """{"schema_version":2,"operator":"<","value":70}""") => new(
         "Low", "desc", AlertConditionType.Threshold, body, RuleScopeClass.Low, AlertRuleSeverity.Warning,
         IsEnabled: true, SortOrder: 3, AllowThroughDnd: false, AutoResolveEnabled: false,
         AutoResolveParams: null, ClientConfiguration: "{}");

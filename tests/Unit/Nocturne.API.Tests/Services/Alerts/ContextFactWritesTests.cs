@@ -27,7 +27,7 @@ public class ContextFactWritesTests
             .Select(type => (Type: type, Params: "{}"))
             .Concat(Enum.GetValues<AlertLimitFact>().Select(fact => (
                 Type: AlertConditionType.Predicted,
-                Params: $$$"""{"operator":"<","within_minutes":30,"value_from":{"fact":"{{{JsonSerializer.Serialize(fact).Trim('"')}}}"}}""")))
+                Params: $$$"""{"schema_version":2,"operator":"<","within_minutes":30,"value_from":{"fact":"{{{JsonSerializer.Serialize(fact).Trim('"')}}}"}}""")))
             .SelectMany(probe => RuleTrees.Reads(new AlertRuleSnapshot(
                 Guid.NewGuid(), Guid.NewGuid(), "probe", probe.Type, probe.Params, AlertRuleSeverity.Info, "{}", 0,
                 AutoResolveEnabled: false, AutoResolveParams: null)))

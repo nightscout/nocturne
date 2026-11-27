@@ -10,8 +10,8 @@ public class SmartSnoozeTrendGateTests
 {
     private static readonly DateTime Now = new(2026, 9, 23, 12, 0, 0, DateTimeKind.Utc);
 
-    private const string Low = """{"direction":"below","value":70}""";
-    private const string High = """{"direction":"above","value":180}""";
+    private const string Low = """{"schema_version":2,"operator":"<","value":70}""";
+    private const string High = """{"schema_version":2,"operator":">","value":180}""";
 
     /// <summary>Readings at 5-minute cadence, newest last, the newest <paramref name="ageMinutes"/> old.</summary>
     private static List<GlucosePoint> FiveMinute(double tMinus10, double tMinus5, double latest, double ageMinutes = 1) =>
@@ -166,25 +166,25 @@ public class SmartSnoozeTrendGateTests
     }
 
     [Theory]
-    [InlineData("""{"direction":"sideways","value":70}""")]
-    [InlineData("""{"value":70}""")]
+    [InlineData("""{"schema_version":2,"operator":"sideways","value":70}""")]
+    [InlineData("""{"schema_version":2,"operator":"==","value":70}""")]
+    [InlineData("""{"schema_version":2,"value":70}""")]
     [InlineData("not json")]
-    public void UnreadableDirection_IsNotApplicable(string conditionParams)
+    public void UnreadableOperator_IsNotApplicable(string conditionParams)
     {
         Evaluate(conditionParams, FiveMinute(50, 60, 75)).Should().Be(TrendGateOutcome.NotApplicable);
     }
 
     [Fact]
-    public void Direction_IsTheWireSpelling()
+    public void Operator_IsTheWireSpelling()
     {
-        Evaluate("""{"direction":"below","value":70}""", FiveMinute(58, 60, 65))
+        Evaluate("""{"schema_version":2,"operator":"<","value":70}""", FiveMinute(58, 60, 65))
             .Should().Be(TrendGateOutcome.Favorable);
     }
 
     [Theory]
-    [InlineData("""{"Direction":"below","value":70}""")]
-    [InlineData("""{"direction":"BELOW","value":70}""")]
-    public void Direction_InAnotherCase_IsNotRead(string conditionParams)
+    [InlineData("""{"schema_version":2,"Operator":"<","value":70}""")]
+    public void Operator_InAnotherCase_IsNotRead(string conditionParams)
     {
         Evaluate(conditionParams, FiveMinute(58, 60, 65)).Should().Be(TrendGateOutcome.NotApplicable);
     }
@@ -194,7 +194,7 @@ public class SmartSnoozeTrendGateTests
     {
         // A value typed in mmol/L would be nonsense as mg/dL; the gate reads only the direction
         // and the readings, which are stored in mg/dL.
-        const string mmolLookingLow = """{"direction":"below","value":3.9}""";
+        const string mmolLookingLow = """{"schema_version":2,"operator":"<","value":3.9}""";
         Evaluate(mmolLookingLow, FiveMinute(58, 60, 65)).Should().Be(TrendGateOutcome.Favorable);
         Evaluate(mmolLookingLow, FiveMinute(60, 60.5, 61)).Should().Be(TrendGateOutcome.NotFavorable);
     }

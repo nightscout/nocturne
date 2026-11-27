@@ -94,7 +94,7 @@ public class SensorContextEnricherTests
     private SensorContext ReadingOf(ReadingSource? source) => BaseContext() with { LatestSource = source };
 
     private static AlertRuleSnapshot LowRule() =>
-        MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+        MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""");
 
     [Fact]
     public async Task A_glucose_rule_reads_the_state_its_readings_source_reports_until_it_lapses()
@@ -144,7 +144,7 @@ public class SensorContextEnricherTests
     [Fact]
     public async Task A_rule_with_no_glucose_leaf_reads_no_status()
     {
-        var rule = MakeRule(AlertConditionType.SignalLoss, """{"timeout_minutes":15}""");
+        var rule = MakeRule(AlertConditionType.SignalLoss, """{"schema_version":2,"timeout_minutes":15}""");
 
         await BuildEnricher().EnrichAsync(ReadingOf(CareLink), [rule], CancellationToken.None);
 
@@ -172,7 +172,7 @@ public class SensorContextEnricherTests
     {
         NewestIs(CareLink, Newest(1, state: null));
         var low = LowRule();
-        var error = MakeRule(AlertConditionType.SensorState, """{"states":["error"]}""");
+        var error = MakeRule(AlertConditionType.SensorState, """{"schema_version":2,"states":["error"]}""");
         var reading = ReadingOf(CareLink) with { LatestValue = 55m };
 
         var enriched = await BuildEnricher().EnrichAsync(reading, [low, error], CancellationToken.None);
@@ -218,7 +218,7 @@ public class SensorContextEnricherTests
     public async Task A_state_that_is_not_ok_says_why_a_reading_has_no_value_and_ok_does_not(SensorState reported, SensorState expected)
     {
         NewestIs(CareLink, Newest(1, reported));
-        var rule = MakeRule(AlertConditionType.SensorState, """{"states":["error"]}""");
+        var rule = MakeRule(AlertConditionType.SensorState, """{"schema_version":2,"states":["error"]}""");
         var noValue = ReadingOf(CareLink) with
         {
             LatestValue = null,
@@ -241,8 +241,8 @@ public class SensorContextEnricherTests
             TrendRate = null,
             SensorState = new SensorStateSnapshot(SensorState.NoValue, now.AddMinutes(-10)),
         };
-        var noValueFor15 = MakeRule(AlertConditionType.SensorState, """{"states":["no_value"],"for_minutes":15}""");
-        var error = MakeRule(AlertConditionType.SensorState, """{"states":["error"]}""");
+        var noValueFor15 = MakeRule(AlertConditionType.SensorState, """{"schema_version":2,"states":["no_value"],"for_minutes":15}""");
+        var error = MakeRule(AlertConditionType.SensorState, """{"schema_version":2,"states":["error"]}""");
         var enriched = await BuildEnricher().EnrichAsync(noValue, [noValueFor15, error], CancellationToken.None);
 
         enriched.SensorState.Should().Be(new SensorStateSnapshot(
@@ -263,7 +263,7 @@ public class SensorContextEnricherTests
     public async Task BgAndTrend_only_rule_triggers_no_external_fetches()
     {
         var enricher = BuildEnricher();
-        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""");
+        var rule = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""");
 
         await enricher.EnrichAsync(BaseContext(trendRate: 1.5m), new[] { rule }, CancellationToken.None);
 
@@ -290,6 +290,7 @@ public class SensorContextEnricherTests
 
         var json = """
         {
+          "schema_version": 2,
           "operator": "and",
           "conditions": [
             { "type": "iob", "iob": { "operator": ">", "value": 1 } },
@@ -325,6 +326,7 @@ public class SensorContextEnricherTests
             .ReturnsAsync(new CobResult { Cob = 24.0 });
         var rule = MakeRule(AlertConditionType.Composite, """
         {
+          "schema_version": 2,
           "operator": "and",
           "conditions": [
             { "type": "iob", "iob": { "operator": ">", "value": 1 } },
@@ -349,6 +351,7 @@ public class SensorContextEnricherTests
             .ThrowsAsync(new InvalidOperationException("cob"));
         var rule = MakeRule(AlertConditionType.Composite, """
         {
+          "schema_version": 2,
           "operator": "and",
           "conditions": [
             { "type": "iob", "iob": { "operator": ">", "value": 1 } },
@@ -371,6 +374,7 @@ public class SensorContextEnricherTests
             .ReturnsAsync(new IobResult { Iob = 0.5 });
         var rule = MakeRule(AlertConditionType.Composite, """
         {
+          "schema_version": 2,
           "operator": "and",
           "conditions": [ { "type": "iob", "iob": { "operator": ">", "value": 1 } } ]
         }
@@ -414,6 +418,7 @@ public class SensorContextEnricherTests
 
         var json = """
         {
+          "schema_version": 2,
           "operator": "and",
           "conditions": [
             { "type": "iob", "iob": { "operator": "<=", "value": 1 } },
@@ -447,7 +452,7 @@ public class SensorContextEnricherTests
     public async Task Predictions_returns_empty_when_service_unregistered()
     {
         var enricher = BuildEnricher(includePredictionService: false);
-        var rule = MakeRule(AlertConditionType.Predicted, """{"operator":"<","value":70,"within_minutes":30}""");
+        var rule = MakeRule(AlertConditionType.Predicted, """{"schema_version":2,"operator":"<","value":70,"within_minutes":30}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -460,7 +465,7 @@ public class SensorContextEnricherTests
         var enricher = BuildEnricher();
         _predictionService.Setup(p => p.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("no readings available"));
-        var rule = MakeRule(AlertConditionType.Predicted, """{"operator":"<","value":70,"within_minutes":30}""");
+        var rule = MakeRule(AlertConditionType.Predicted, """{"schema_version":2,"operator":"<","value":70,"within_minutes":30}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -477,7 +482,7 @@ public class SensorContextEnricherTests
                 IntervalMinutes = 5,
                 Predictions = new PredictionCurves { Default = new List<double> { 110, 120, 130 } }
             });
-        var rule = MakeRule(AlertConditionType.Predicted, """{"operator":"<","value":70,"within_minutes":30}""");
+        var rule = MakeRule(AlertConditionType.Predicted, """{"schema_version":2,"operator":"<","value":70,"within_minutes":30}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -505,7 +510,7 @@ public class SensorContextEnricherTests
                 IntervalMinutes = 5,
                 Predictions = new PredictionCurves { Default = new List<double> { 100 } },
             });
-        var rule = MakeRule(AlertConditionType.Predicted, """{"operator":"<","value":70,"within_minutes":30}""");
+        var rule = MakeRule(AlertConditionType.Predicted, """{"schema_version":2,"operator":"<","value":70,"within_minutes":30}""");
         var tick = new DateTime(2026, 3, 22, 10, 0, 0, DateTimeKind.Utc);
 
         var enriched = await enricher.EnrichAsOfAsync(
@@ -522,7 +527,7 @@ public class SensorContextEnricherTests
         var enricher = BuildEnricher();
         _reservoirEstimator.Setup(e => e.GetEstimateAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ReservoirEstimate(42.5m, IsLowerBound: false, IsEstimated: true));
-        var rule = MakeRule(AlertConditionType.Reservoir, """{"operator":"<","value":50}""");
+        var rule = MakeRule(AlertConditionType.Reservoir, """{"schema_version":2,"operator":"<","value":50}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -536,7 +541,7 @@ public class SensorContextEnricherTests
         var enricher = BuildEnricher();
         _reservoirEstimator.Setup(e => e.GetEstimateAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ReservoirEstimate(50m, IsLowerBound: true, IsEstimated: false));
-        var rule = MakeRule(AlertConditionType.Reservoir, """{"operator":"<","value":50}""");
+        var rule = MakeRule(AlertConditionType.Reservoir, """{"schema_version":2,"operator":"<","value":50}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -550,7 +555,7 @@ public class SensorContextEnricherTests
         var enricher = BuildEnricher();
         _reservoirEstimator.Setup(e => e.GetEstimateAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync((ReservoirEstimate?)null);
-        var rule = MakeRule(AlertConditionType.Reservoir, """{"operator":"<","value":50}""");
+        var rule = MakeRule(AlertConditionType.Reservoir, """{"schema_version":2,"operator":"<","value":50}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -567,7 +572,7 @@ public class SensorContextEnricherTests
                 It.Is<IReadOnlyCollection<DeviceEventType>>(t => t.Contains(DeviceEventType.SiteChange)),
                 It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DeviceEvent { Timestamp = siteChangeAt, EventType = DeviceEventType.SiteChange });
-        var rule = MakeRule(AlertConditionType.SiteAge, """{"operator":">","value":72}""");
+        var rule = MakeRule(AlertConditionType.SiteAge, """{"schema_version":2,"operator":">","minutes":4320}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -585,7 +590,7 @@ public class SensorContextEnricherTests
                 It.IsAny<IReadOnlyCollection<DeviceEventType>>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .Callback((IReadOnlyCollection<DeviceEventType> types, DateTime? _, CancellationToken _) => asked = types)
             .ReturnsAsync((DeviceEvent?)null);
-        var rule = MakeRule(AlertConditionType.SiteAge, """{"operator":">","value":72}""");
+        var rule = MakeRule(AlertConditionType.SiteAge, """{"schema_version":2,"operator":">","minutes":4320}""");
 
         await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -601,7 +606,7 @@ public class SensorContextEnricherTests
         _alertRepository.Setup(r => r.GetActiveAlertSnapshotsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(dict);
 
-        var json = $$"""{"alert_id":"{{Guid.NewGuid()}}","state":"firing"}""";
+        var json = $$"""{"schema_version":2,"alert_id":"{{Guid.NewGuid()}}","state":"firing"}""";
         var rule = MakeRule(AlertConditionType.AlertState, json);
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
@@ -619,7 +624,7 @@ public class SensorContextEnricherTests
         var lastCycle = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-7);
         _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsOfAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(lastCycle);
-        var rule = MakeRule(AlertConditionType.LoopStale, """{"operator":">","minutes":15}""");
+        var rule = MakeRule(AlertConditionType.LoopStale, """{"schema_version":2,"operator":">","minutes":15}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -644,7 +649,7 @@ public class SensorContextEnricherTests
             .ReturnsAsync(now.AddMinutes(-3));
         _apsSnapshotRepository.Setup(r => r.GetLatestEnactedTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(now.AddMinutes(-3));
-        var rule = MakeRule(AlertConditionType.LoopEnactionStale, """{"operator":">","minutes":15}""");
+        var rule = MakeRule(AlertConditionType.LoopEnactionStale, """{"schema_version":2,"operator":">","minutes":15}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -660,7 +665,7 @@ public class SensorContextEnricherTests
         _pumpSnapshotRepository.Setup(r => r.GetLatestAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PumpSnapshot { Timestamp = now.AddMinutes(-2), BatteryPercent = 65 });
         SpansStored(PumpSpan(PumpModeState.Suspended.ToString(), now.AddMinutes(-3)));
-        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"is_active":true}""");
+        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"schema_version":2,"is_active":true}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -740,7 +745,7 @@ public class SensorContextEnricherTests
 
     private async Task<IReadOnlyList<PumpModeSnapshot>> PumpModesFor(string ruleMode)
     {
-        var rule = MakeRule(AlertConditionType.PumpState, $$"""{"mode":"{{ruleMode}}","is_active":false}""");
+        var rule = MakeRule(AlertConditionType.PumpState, $$"""{"schema_version":2,"mode":"{{ruleMode}}","is_active":false}""");
         var enriched = await BuildEnricher().EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
         return enriched.ActivePumpModes;
     }
@@ -804,7 +809,7 @@ public class SensorContextEnricherTests
     [Fact]
     public async Task A_rule_with_no_pump_state_leaf_loads_no_pump_modes()
     {
-        var rule = MakeRule(AlertConditionType.Iob, """{"operator":">","value":2}""");
+        var rule = MakeRule(AlertConditionType.Iob, """{"schema_version":2,"operator":">","value":2}""");
 
         var enriched = await BuildEnricher().EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -815,10 +820,10 @@ public class SensorContextEnricherTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private const string SuspendedRule = """{"is_active":true}""";
-    private const string SuspendedModeRule = """{"mode":"Suspended","is_active":true}""";
-    private const string SuspendedFiveMinutesRule = """{"is_active":true,"for_minutes":5}""";
-    private const string SuspendedModeFiveMinutesRule = """{"mode":"Suspended","is_active":true,"for_minutes":5}""";
+    private const string SuspendedRule = """{"schema_version":2,"is_active":true}""";
+    private const string SuspendedModeRule = """{"schema_version":2,"mode":"Suspended","is_active":true}""";
+    private const string SuspendedFiveMinutesRule = """{"schema_version":2,"is_active":true,"for_minutes":5}""";
+    private const string SuspendedModeFiveMinutesRule = """{"schema_version":2,"mode":"Suspended","is_active":true,"for_minutes":5}""";
 
     private void PumpIsFresh() =>
         _pumpSnapshotRepository.Setup(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
@@ -911,7 +916,7 @@ public class SensorContextEnricherTests
         var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         var evaluation = await EvaluatedWithSpansAsync(
-            AlertConditionType.PumpState, """{"mode":"Automatic","is_active":false}""",
+            AlertConditionType.PumpState, """{"schema_version":2,"mode":"Automatic","is_active":false}""",
             PumpSpan("Manual", now.AddMinutes(-60)), PumpSpan("Automatic", now.AddDays(365)));
 
         evaluation.ConditionMet.Should().BeTrue("the pump is not in Automatic now");
@@ -941,9 +946,9 @@ public class SensorContextEnricherTests
         };
 
         var mode = await EvaluatedWithSpansAsync(
-            AlertConditionType.PumpState, """{"mode":"Suspended","is_active":true,"for_minutes":15}""", spans);
+            AlertConditionType.PumpState, """{"schema_version":2,"mode":"Suspended","is_active":true,"for_minutes":15}""", spans);
         var suspended = await EvaluatedWithSpansAsync(
-            AlertConditionType.PumpSuspended, """{"is_active":true,"for_minutes":15}""", spans);
+            AlertConditionType.PumpSuspended, """{"schema_version":2,"is_active":true,"for_minutes":15}""", spans);
 
         mode.ConditionMet.Should().BeTrue();
         suspended.ConditionMet.Should().BeTrue();
@@ -976,8 +981,8 @@ public class SensorContextEnricherTests
         var rules = new[]
         {
             MakeRule(AlertConditionType.OverrideActive, SuspendedRule),
-            MakeRule(AlertConditionType.StateSpanActive, """{"category":"TemporaryTarget","state":"Planned","is_active":true}"""),
-            MakeRule(AlertConditionType.StateSpanActive, """{"category":"Exercise","is_active":true}"""),
+            MakeRule(AlertConditionType.StateSpanActive, """{"schema_version":2,"category":"TemporaryTarget","state":"Planned","is_active":true}"""),
+            MakeRule(AlertConditionType.StateSpanActive, """{"schema_version":2,"category":"Exercise","is_active":true}"""),
         };
 
         var enriched = await BuildEnricher().EnrichAsync(BaseContext(), rules, CancellationToken.None);
@@ -1398,7 +1403,7 @@ public class SensorContextEnricherTests
         _pumpSnapshotRepository.Setup(r => r.GetLatestAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PumpSnapshot { Timestamp = now.AddMinutes(-11), BatteryPercent = 50 });
         SpansStored(PumpSpan(PumpModeState.Suspended.ToString(), now.AddMinutes(-30)));
-        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"is_active":true}""");
+        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"schema_version":2,"is_active":true}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1429,7 +1434,7 @@ public class SensorContextEnricherTests
                 activation, "Night", ProfileScheduleSource.ProfileStore, null, null));
         var stateJson = state is null ? "" : $",\"state\":\"{state}\"";
         var rule = MakeRule(AlertConditionType.StateSpanActive,
-            $"{{\"category\":\"Profile\"{stateJson},\"is_active\":true}}");
+            $"{{\"schema_version\":2,\"category\":\"Profile\"{stateJson},\"is_active\":true}}");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1450,7 +1455,7 @@ public class SensorContextEnricherTests
                 new ProfileActivation { Id = Guid.NewGuid(), StartTimestamp = now.AddMinutes(-40), BaseProfileName = "Night" },
                 "Night", ProfileScheduleSource.ProfileStore, null, null));
         var rule = MakeRule(AlertConditionType.StateSpanActive,
-            """{"category":"Profile","state":"Exercise","is_active":true}""");
+            """{"schema_version":2,"category":"Profile","state":"Exercise","is_active":true}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1468,7 +1473,7 @@ public class SensorContextEnricherTests
             StartTimestamp = now.AddMinutes(-15),
             EndTimestamp = now.AddMinutes(45),
         });
-        var rule = MakeRule(AlertConditionType.OverrideActive, """{"is_active":true}""");
+        var rule = MakeRule(AlertConditionType.OverrideActive, """{"schema_version":2,"is_active":true}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1489,7 +1494,7 @@ public class SensorContextEnricherTests
                 ScheduledRate = 0.8,
             });
         var rule = MakeRule(AlertConditionType.TempBasal,
-            """{"metric":"rate","operator":">","value":1.0}""");
+            """{"schema_version":2,"metric":"rate","operator":">","value":1.0}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1506,7 +1511,7 @@ public class SensorContextEnricherTests
         var enricher1 = BuildEnricher();
         _apsSnapshotRepository.Setup(r => r.GetLatestSensitivityRatioAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(0.85m);
-        var rule = MakeRule(AlertConditionType.SensitivityRatio, """{"operator":"<","value":0.9}""");
+        var rule = MakeRule(AlertConditionType.SensitivityRatio, """{"schema_version":2,"operator":"<","value":0.9}""");
 
         var enriched1 = await enricher1.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1554,6 +1559,7 @@ public class SensorContextEnricherTests
         // All repositories return null/empty by default — Moq returns default(T) without setup.
         var json = """
         {
+          "schema_version": 2,
           "operator": "and",
           "conditions": [
             { "type": "loop_stale", "loop_stale": { "operator": ">", "minutes": 15 } },
@@ -1577,7 +1583,7 @@ public class SensorContextEnricherTests
     public async Task Lazy_no_fetches_when_no_rule_needs_loop_data()
     {
         var enricher = BuildEnricher();
-        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""");
+        var rule = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""");
 
         await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1603,7 +1609,7 @@ public class SensorContextEnricherTests
         _pumpSnapshotRepository.Setup(r => r.GetLatestAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PumpSnapshot { Timestamp = now.AddMinutes(-11), BatteryPercent = 50 });
         SpansStored(PumpSpan(PumpModeState.Suspended.ToString(), now.AddMinutes(-15)));
-        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"is_active":true}""");
+        var rule = MakeRule(AlertConditionType.PumpSuspended, """{"schema_version":2,"is_active":true}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1630,7 +1636,7 @@ public class SensorContextEnricherTests
                 },
             });
         var rule = MakeRule(AlertConditionType.TransmitterBattery,
-            """{"metric":"voltage_a","operator":"<","value":290}""");
+            """{"schema_version":2,"metric":"voltage_a","operator":"<","value":290}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1654,7 +1660,7 @@ public class SensorContextEnricherTests
                 ScheduledRate = null,
             });
         var rule = MakeRule(AlertConditionType.TempBasal,
-            """{"metric":"rate","operator":">","value":0.5}""");
+            """{"schema_version":2,"metric":"rate","operator":">","value":0.5}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1691,7 +1697,7 @@ public class SensorContextEnricherTests
                 ],
             });
 
-        var rule = MakeRule(AlertConditionType.GlucoseBucket, """{"buckets":["low"]}""");
+        var rule = MakeRule(AlertConditionType.GlucoseBucket, """{"schema_version":2,"buckets":["low"]}""");
         var baseContext = BaseContext() with { LatestValue = 75m };
 
         var enriched = await enricher.EnrichAsOfAsync(baseContext, new[] { rule }, tickUtc, CancellationToken.None);
@@ -1720,7 +1726,7 @@ public class SensorContextEnricherTests
                 ],
             });
 
-        var rule = MakeRule(AlertConditionType.GlucoseBucket, """{"buckets":["low"]}""");
+        var rule = MakeRule(AlertConditionType.GlucoseBucket, """{"schema_version":2,"buckets":["low"]}""");
         var baseContext = BaseContext() with { LatestValue = 75m };
 
         var enriched = await enricher.EnrichAsOfAsync(baseContext, new[] { rule }, tickUtc, CancellationToken.None);
@@ -1753,8 +1759,8 @@ public class SensorContextEnricherTests
     {
         var enricher = BuildEnricher();
         ScheduleWithMorningTarget();
-        var bucket = MakeRule(AlertConditionType.GlucoseBucket, """{"buckets":["low"]}""");
-        var belowTarget = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value_from":{"fact":"target_low"}}""");
+        var bucket = MakeRule(AlertConditionType.GlucoseBucket, """{"schema_version":2,"buckets":["low"]}""");
+        var belowTarget = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value_from":{"fact":"target_low"}}""");
 
         var enriched = await enricher.EnrichAsOfAsync(
             BaseContext() with { LatestValue = 75m }, new[] { bucket, belowTarget },
@@ -1773,7 +1779,7 @@ public class SensorContextEnricherTests
     {
         var enricher = BuildEnricher();
         ScheduleWithMorningTarget();
-        var belowTarget = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value_from":{"fact":"target_low"}}""");
+        var belowTarget = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value_from":{"fact":"target_low"}}""");
 
         var before = await enricher.EnrichAsOfAsync(
             BaseContext(), new[] { belowTarget }, new DateTime(2026, 3, 22, 5, 59, 0, DateTimeKind.Utc), CancellationToken.None);
@@ -1794,8 +1800,8 @@ public class SensorContextEnricherTests
         var enricher = BuildEnricher();
         _activeProfileResolver.Setup(s => s.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("Default");
-        var bucket = MakeRule(AlertConditionType.GlucoseBucket, """{"buckets":["low"]}""");
-        var belowTarget = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value_from":{"fact":"target_low"}}""");
+        var bucket = MakeRule(AlertConditionType.GlucoseBucket, """{"schema_version":2,"buckets":["low"]}""");
+        var belowTarget = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value_from":{"fact":"target_low"}}""");
 
         var enriched = await enricher.EnrichAsync(
             BaseContext() with { LatestValue = 65m }, new[] { bucket, belowTarget }, CancellationToken.None);
@@ -1810,7 +1816,7 @@ public class SensorContextEnricherTests
     {
         var enricher = BuildEnricher();
         ScheduleWithMorningTarget();
-        var literal = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+        var literal = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""");
 
         var enriched = await enricher.EnrichAsync(
             BaseContext() with { LatestValue = 65m }, new[] { literal }, CancellationToken.None);
@@ -1834,7 +1840,7 @@ public class SensorContextEnricherTests
             });
 
         var enricher = BuildEnricher();
-        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+        var rule = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1856,7 +1862,7 @@ public class SensorContextEnricherTests
             });
 
         var enricher = BuildEnricher();
-        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+        var rule = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1879,7 +1885,7 @@ public class SensorContextEnricherTests
                 DndScheduleEnd: new TimeOnly(23, 0)));
 
         var enricher = BuildEnricher();
-        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+        var rule = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1909,7 +1915,7 @@ public class SensorContextEnricherTests
             });
 
         var enricher = BuildEnricher();
-        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+        var rule = MakeRule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, CancellationToken.None);
 
@@ -1920,7 +1926,7 @@ public class SensorContextEnricherTests
     }
 
     private static readonly AlertRuleSnapshot ForecastRule =
-        MakeRule(AlertConditionType.Predicted, """{"operator":"<","value":70,"within_minutes":30,"min_of":["iob","cob"]}""");
+        MakeRule(AlertConditionType.Predicted, """{"schema_version":2,"operator":"<","value":70,"within_minutes":30,"min_of":["iob","cob"]}""");
 
     private static IReadOnlyList<(int Offset, decimal Mgdl)> Points(IEnumerable<PredictedGlucosePoint> points) =>
         points.Select(p => (p.OffsetMinutes, p.Mgdl)).ToList();
@@ -2149,7 +2155,7 @@ public class SensorContextEnricherTests
     }
 
     private static readonly AlertRuleSnapshot CarbsRule =
-        MakeRule(AlertConditionType.CarbsRequired, """{"operator":">","value":10}""");
+        MakeRule(AlertConditionType.CarbsRequired, """{"schema_version":2,"operator":">","value":10}""");
 
     private void NewestSnapshotIs(ApsSnapshot? snapshot) =>
         _apsSnapshotRepository
@@ -2276,7 +2282,7 @@ public class SensorContextEnricherTests
     }
 
     private static readonly AlertRuleSnapshot FallRule =
-        MakeRule(AlertConditionType.GlucoseChange, """{"operator":"<=","value":-30,"window_minutes":15}""");
+        MakeRule(AlertConditionType.GlucoseChange, """{"schema_version":2,"operator":"<=","value":-30,"window_minutes":15}""");
 
     private DateTime Now => _timeProvider.GetUtcNow().UtcDateTime;
 

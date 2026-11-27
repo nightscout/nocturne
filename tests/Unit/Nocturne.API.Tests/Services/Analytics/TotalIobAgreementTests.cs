@@ -351,7 +351,7 @@ public class TotalIobAgreementTests
             NullLogger<SensorContextEnricher>.Instance);
         var rule = new AlertRuleSnapshot(
             Id: Guid.NewGuid(), TenantId: Guid.NewGuid(), Name: "iob", ConditionType: AlertConditionType.Iob,
-            ConditionParams: """{"operator":"<","value":0}""", Severity: AlertRuleSeverity.Warning,
+            ConditionParams: """{"schema_version":2,"operator":"<","value":0}""", Severity: AlertRuleSeverity.Warning,
             ClientConfiguration: "{}", SortOrder: 0, AutoResolveEnabled: false, AutoResolveParams: null);
         var asOf = Reading.UtcDateTime;
 

@@ -49,7 +49,7 @@ public class CanonicalAlertEvaluatorTests
         _orchestrator
             .Setup(o => o.EvaluateRulesAsync(It.IsAny<IReadOnlyList<AlertRuleSnapshot>>(), It.IsAny<IReadOnlySet<Guid>>(), It.IsAny<SensorContext>(), It.IsAny<long?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(AlertPassOutcome.Decided);
-        RulesAre(Rule(AlertConditionType.Threshold, """{"direction":"below","value":70}"""));
+        RulesAre(Rule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}"""));
     }
 
     private static AlertRuleSnapshot Rule(AlertConditionType type, string json) =>
@@ -399,8 +399,8 @@ public class CanonicalAlertEvaluatorTests
         var engine = EngineTestHarness.BuildRustEngine(time, new InMemoryTrackerRepository([]));
         foreach (var (type, json) in new[]
                  {
-                     (AlertConditionType.RateOfChange, """{"direction":"falling","rate":3}"""),
-                     (AlertConditionType.Trend, """{"bucket":"falling_fast"}"""),
+                     (AlertConditionType.RateOfChange, """{"schema_version":2,"operator":"<=","value":-3}"""),
+                     (AlertConditionType.Trend, """{"schema_version":2,"bucket":"falling_fast"}"""),
                  })
         {
             var rule = new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "fall", type, json,
@@ -443,13 +443,13 @@ public class CanonicalAlertEvaluatorTests
         time.SetUtcNow(Reading);
         var engine = EngineTestHarness.BuildRustEngine(time, new InMemoryTrackerRepository([]));
         var low = new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "low", AlertConditionType.Threshold,
-            """{"direction":"below","value":70}""", AlertRuleSeverity.Critical, "{}", 0, false, null);
+            """{"schema_version":2,"operator":"<","value":70}""", AlertRuleSeverity.Critical, "{}", 0, false, null);
         (await engine.EvaluateRuleAsync(low, seen, new AlertEngineOptions(), CancellationToken.None))
             .ConditionMet.Should().BeTrue("the low rule reads the real reading of 60");
 
         time.SetUtcNow(Reading.AddMinutes(20));
         var signalLoss = new AlertRuleSnapshot(Guid.NewGuid(), Tenant, "signal", AlertConditionType.SignalLoss,
-            """{"timeout_minutes":20}""", AlertRuleSeverity.Critical, "{}", 0, false, null);
+            """{"schema_version":2,"timeout_minutes":20}""", AlertRuleSeverity.Critical, "{}", 0, false, null);
         var lost = await engine.EvaluateRuleAsync(signalLoss, seen, new AlertEngineOptions(), CancellationToken.None);
         lost.ConditionMet.Should().BeTrue("signal loss counts from the last real reading");
         lost.ClockAnomalies.Should().BeEmpty();
@@ -511,13 +511,13 @@ public class CanonicalAlertEvaluatorTests
     }
 
     private static readonly AlertRuleSnapshot LowRule =
-        Rule(AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+        Rule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""");
 
     private static readonly AlertRuleSnapshot ReservoirRule =
-        Rule(AlertConditionType.Reservoir, """{"operator":"<","value":20}""");
+        Rule(AlertConditionType.Reservoir, """{"schema_version":2,"operator":"<","value":20}""");
 
     private static readonly AlertRuleSnapshot LoopRule =
-        Rule(AlertConditionType.LoopStale, """{"operator":">","minutes":15}""");
+        Rule(AlertConditionType.LoopStale, """{"schema_version":2,"operator":">","minutes":15}""");
 
     private IReadOnlyList<AlertRuleSnapshot> EvaluatedRules()
     {
@@ -571,7 +571,7 @@ public class CanonicalAlertEvaluatorTests
     [NativeFact]
     public async Task EvaluateAsync_ALateReadingInsideTheWindowEvaluatesTheRulesThatReadTheRecentReadings()
     {
-        var fallRule = Rule(AlertConditionType.GlucoseChange, """{"operator":"<=","value":-30,"window_minutes":15}""");
+        var fallRule = Rule(AlertConditionType.GlucoseChange, """{"schema_version":2,"operator":"<=","value":-30,"window_minutes":15}""");
         LatestIs(Latest(Reading));
         RulesAre(ReservoirRule, fallRule);
         var evaluator = Evaluator(Tenant);
@@ -645,7 +645,7 @@ public class CanonicalAlertEvaluatorTests
     [NativeFact]
     public async Task EvaluateAsync_AGlucoseMoveWithoutAReadingEvaluatesTheGlucoseRulesPastTheWatermark()
     {
-        var bucket = Rule(AlertConditionType.GlucoseBucket, """{"buckets":["low"]}""");
+        var bucket = Rule(AlertConditionType.GlucoseBucket, """{"schema_version":2,"buckets":["low"]}""");
         LatestIs(Latest(Reading));
         RulesAre(LowRule, bucket, ReservoirRule);
         var evaluator = Evaluator(Tenant);
@@ -699,7 +699,7 @@ public class CanonicalAlertEvaluatorTests
     [NativeFact]
     public async Task EvaluateAsync_ASaveDoesNotSelectARuleTheEngineCannotRead()
     {
-        var unreadable = Rule(AlertConditionType.Threshold, """{"direction":"below","value":69}""") with { OnUnknown = "no such policy" };
+        var unreadable = Rule(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":69}""") with { OnUnknown = "no such policy" };
         LatestIs(Latest(Reading));
         RulesAre(LowRule, unreadable);
         await Evaluator(Tenant).EvaluateAsync(Moved(ContextFactWrites.Pump));

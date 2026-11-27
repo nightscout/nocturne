@@ -20,7 +20,7 @@ public class RuleReferenceResolverTests
     [NativeFact]
     public void Rule_with_no_alert_state_references_kept()
     {
-        var rule = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"above","value":180}""");
+        var rule = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""");
 
         RuleReferenceResolver.FilterEvaluable(new[] { rule })
             .Should().ContainSingle().Which.Should().Be(rule);
@@ -30,9 +30,9 @@ public class RuleReferenceResolverTests
     public void Top_level_alert_state_referencing_enabled_rule_kept()
     {
         var parentId = Guid.NewGuid();
-        var parent = MakeRule(parentId, AlertConditionType.Threshold, """{"direction":"above","value":180}""");
+        var parent = MakeRule(parentId, AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""");
         var child = MakeRule(Guid.NewGuid(), AlertConditionType.AlertState,
-            $$"""{"alert_id":"{{parentId}}","state":"firing"}""");
+            $$"""{"schema_version":2,"alert_id":"{{parentId}}","state":"firing"}""");
 
         var result = RuleReferenceResolver.FilterEvaluable(new[] { parent, child });
 
@@ -42,9 +42,9 @@ public class RuleReferenceResolverTests
     [NativeFact]
     public void Top_level_alert_state_referencing_unknown_rule_dropped()
     {
-        var parent = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"above","value":180}""");
+        var parent = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""");
         var child = MakeRule(Guid.NewGuid(), AlertConditionType.AlertState,
-            $$"""{"alert_id":"{{Guid.NewGuid()}}","state":"firing"}""");
+            $$"""{"schema_version":2,"alert_id":"{{Guid.NewGuid()}}","state":"firing"}""");
 
         var result = RuleReferenceResolver.FilterEvaluable(new[] { parent, child });
 
@@ -56,7 +56,7 @@ public class RuleReferenceResolverTests
     {
         var parentId = Guid.NewGuid();
         var child = MakeRule(Guid.NewGuid(), AlertConditionType.AlertState,
-            $$"""{"alert_id":"{{parentId}}","state":"firing"}""");
+            $$"""{"schema_version":2,"alert_id":"{{parentId}}","state":"firing"}""");
 
         RuleReferenceResolver.FilterEvaluable(new[] { child }, enabledIds: new HashSet<Guid> { parentId, child.Id })
             .Should().ContainSingle().Which.Should().Be(child);
@@ -68,9 +68,10 @@ public class RuleReferenceResolverTests
         var orphan = Guid.NewGuid();
         var json = $$"""
         {
+          "schema_version": 2,
           "operator": "and",
           "conditions": [
-            { "type": "threshold", "threshold": { "direction": "above", "value": 180 } },
+            { "type": "threshold", "threshold": { "operator": ">", "value": 180 } },
             { "type": "alert_state", "alert_state": { "alert_id": "{{orphan}}", "state": "firing" } }
           ]
         }
@@ -85,9 +86,10 @@ public class RuleReferenceResolverTests
     public void Nested_alert_state_inside_sustained_kept_when_resolved()
     {
         var parentId = Guid.NewGuid();
-        var parent = MakeRule(parentId, AlertConditionType.Threshold, """{"direction":"above","value":180}""");
+        var parent = MakeRule(parentId, AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""");
         var json = $$"""
         {
+          "schema_version": 2,
           "minutes": 15,
           "child": { "type": "alert_state", "alert_state": { "alert_id": "{{parentId}}", "state": "firing" } }
         }
@@ -103,7 +105,7 @@ public class RuleReferenceResolverTests
     {
         var id = Guid.NewGuid();
         var rule = MakeRule(id, AlertConditionType.AlertState,
-            $$"""{"alert_id":"{{id}}","state":"firing"}""");
+            $$"""{"schema_version":2,"alert_id":"{{id}}","state":"firing"}""");
 
         RuleReferenceResolver.FilterEvaluable(new[] { rule })
             .Should().ContainSingle().Which.Should().Be(rule);
@@ -121,10 +123,10 @@ public class RuleReferenceResolverTests
     [NativeFact]
     public void Order_preserved()
     {
-        var a = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"above","value":180}""");
-        var b = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+        var a = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""");
+        var b = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""");
         var c = MakeRule(Guid.NewGuid(), AlertConditionType.AlertState,
-            $$"""{"alert_id":"{{a.Id}}","state":"firing"}""");
+            $$"""{"schema_version":2,"alert_id":"{{a.Id}}","state":"firing"}""");
 
         var result = RuleReferenceResolver.FilterEvaluable(new[] { a, b, c });
 
@@ -132,14 +134,14 @@ public class RuleReferenceResolverTests
     }
 
     [NativeTheory]
-    [InlineData("""{"operator":"and"}""")]
-    [InlineData("""{"operator":"and","conditions":[null]}""")]
-    [InlineData("""{"operator":"and","conditions":[{"alert_state":{"state":"firing"}}]}""")]
-    [InlineData("""{"operator":"and","conditions":[{"type":"sustained","sustained":{"minutes":5}}]}""")]
+    [InlineData("""{"schema_version":2,"operator":"and"}""")]
+    [InlineData("""{"schema_version":2,"operator":"and","conditions":[null]}""")]
+    [InlineData("""{"schema_version":2,"operator":"and","conditions":[{"alert_state":{"state":"firing"}}]}""")]
+    [InlineData("""{"schema_version":2,"operator":"and","conditions":[{"type":"sustained","sustained":{"minutes":5}}]}""")]
     public void Malformed_stored_composite_is_left_for_the_engine_to_skip(string json)
     {
         var bad = MakeRule(Guid.NewGuid(), AlertConditionType.Composite, json);
-        var ok = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"above","value":180}""");
+        var ok = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""");
 
         RuleReferenceResolver.FilterEvaluable(new[] { bad, ok })
             .Should().Equal(bad, ok);
@@ -148,10 +150,10 @@ public class RuleReferenceResolverTests
     [NativeFact]
     public void An_alert_state_in_the_auto_resolve_tree_does_not_drop_the_rule()
     {
-        var rule = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"above","value":180}""") with
+        var rule = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"schema_version":2,"operator":">","value":180}""") with
         {
             AutoResolveEnabled = true,
-            AutoResolveParams = $$$"""{"type":"alert_state","alert_state":{"alert_id":"{{{Guid.NewGuid()}}}","state":"firing"}}""",
+            AutoResolveParams = $$$"""{"schema_version":2,"type":"alert_state","alert_state":{"alert_id":"{{{Guid.NewGuid()}}}","state":"firing"}}""",
         };
 
         RuleReferenceResolver.FilterEvaluable(new[] { rule }).Should().Equal(rule);
@@ -161,7 +163,7 @@ public class RuleReferenceResolverTests
     public void A_body_that_does_not_read_names_no_reference()
     {
         // Evaluation rejects the rule; this filter only drops references that do not resolve.
-        var rule = MakeRule(Guid.NewGuid(), AlertConditionType.AlertState, """{"alert_id":"garbage","state":"active"}""");
+        var rule = MakeRule(Guid.NewGuid(), AlertConditionType.AlertState, """{"schema_version":2,"alert_id":"garbage","state":"active"}""");
 
         RuleReferenceResolver.FilterEvaluable(new[] { rule }).Should().ContainSingle();
     }

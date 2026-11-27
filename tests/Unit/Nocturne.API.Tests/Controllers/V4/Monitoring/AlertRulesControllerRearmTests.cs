@@ -27,8 +27,8 @@ public class AlertRulesControllerRearmTests
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid RuleId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
-    private const string Body = """{"direction":"below","value":70}""";
-    private const string Resolve = """{"type":"threshold","threshold":{"direction":"above","value":80}}""";
+    private const string Body = """{"schema_version":2,"operator":"<","value":70}""";
+    private const string Resolve = """{"schema_version":2,"type":"threshold","threshold":{"operator":">","value":80}}""";
 
     private static readonly DateTime NextChange = new(2026, 1, 5, 12, 10, 0, DateTimeKind.Utc);
 
@@ -100,8 +100,8 @@ public class AlertRulesControllerRearmTests
 
     public static TheoryData<string, Func<UpdateAlertRuleRequest, UpdateAlertRuleRequest>> ConditionEdits => new()
     {
-        { "body", r => { r.ConditionParams = JsonSerializer.Deserialize<JsonElement>("""{"direction":"below","value":60}"""); return r; } },
-        { "auto-resolve tree", r => { r.AutoResolveParams = JsonSerializer.Deserialize<JsonElement>("""{"type":"threshold","threshold":{"direction":"above","value":90}}"""); return r; } },
+        { "body", r => { r.ConditionParams = JsonSerializer.Deserialize<JsonElement>("""{"schema_version":2,"operator":"<","value":60}"""); return r; } },
+        { "auto-resolve tree", r => { r.AutoResolveParams = JsonSerializer.Deserialize<JsonElement>("""{"schema_version":2,"type":"threshold","threshold":{"operator":">","value":90}}"""); return r; } },
         { "auto-resolve off", r => { r.AutoResolveEnabled = false; return r; } },
         { "disabled", r => { r.IsEnabled = false; return r; } },
         { "on_unknown", r => { r.OnUnknown = AlertRuleOnUnknown.Met; return r; } },
@@ -180,9 +180,9 @@ public class AlertRulesControllerRearmTests
     {
         var (controller, db) = await CreateAsync();
         var request = Unchanged();
-        request.ConditionParams = JsonSerializer.Deserialize<JsonElement>("""{ "value": 70, "direction": "below" }""");
+        request.ConditionParams = JsonSerializer.Deserialize<JsonElement>("""{ "schema_version": 2, "value": 70, "operator": "<" }""");
         request.AutoResolveParams = JsonSerializer.Deserialize<JsonElement>(
-            """{ "threshold": { "value": 80, "direction": "above" }, "type": "threshold" }""");
+            """{ "schema_version": 2, "threshold": {"value": 80, "operator": ">"}, "type": "threshold" }""");
 
         await controller.UpdateRule(RuleId, request, CancellationToken.None);
 
@@ -198,16 +198,16 @@ public class AlertRulesControllerRearmTests
         var (controller, db) = await CreateAsync();
         var stored = await db.AlertRules.SingleAsync(r => r.Id == RuleId);
         stored.ConditionType = AlertConditionType.SignalLoss;
-        stored.ConditionParams = """{"timeout_minutes":15.0}""";
+        stored.ConditionParams = """{"schema_version":2,"timeout_minutes":15.0}""";
         await db.SaveChangesAsync();
         var request = Unchanged();
         request.ConditionType = AlertConditionType.SignalLoss;
-        request.ConditionParams = JsonSerializer.Deserialize<JsonElement>("""{"timeout_minutes":15}""");
+        request.ConditionParams = JsonSerializer.Deserialize<JsonElement>("""{"schema_version":2,"timeout_minutes":15}""");
 
         await controller.UpdateRule(RuleId, request, CancellationToken.None);
 
         (await db.AlertRules.AsNoTracking().SingleAsync(r => r.Id == RuleId)).ConditionParams
-            .Should().Be("""{"timeout_minutes":15}""");
+            .Should().Be("""{"schema_version":2,"timeout_minutes":15}""");
         (await AwaitingRearm(db)).Should().BeFalse();
     }
 

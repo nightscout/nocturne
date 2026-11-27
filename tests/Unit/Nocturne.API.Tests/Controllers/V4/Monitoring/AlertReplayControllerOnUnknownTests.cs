@@ -13,7 +13,7 @@ namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
 public class AlertReplayControllerOnUnknownTests
 {
     private static ReplayRuleDefinition Rule(string? onUnknown, int? glucoseFreshnessMinutes = null) => new(
-        Guid.NewGuid(), "Low", AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+        Guid.NewGuid(), "Low", AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""",
         AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null,
         OnUnknown: onUnknown, GlucoseFreshnessMinutes: glucoseFreshnessMinutes);
 

@@ -33,9 +33,9 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
 {
     private static readonly DateTime Now = new(2026, 11, 21, 8, 0, 0, DateTimeKind.Utc);
 
-    private const string Broken = """{"threshold": 54, "direction": "below"}""";
-    private const string OtherBroken = """{"threshold": 55, "direction": "below"}""";
-    private const string Valid = """{"direction": "below", "value": 54}""";
+    private const string Broken = """{"schema_version": 2, "threshold": 54, "direction": "below"}""";
+    private const string OtherBroken = """{"schema_version": 2, "threshold": 55, "direction": "below"}""";
+    private const string Valid = """{"schema_version": 2, "operator": "<", "value": 54}""";
 
     private static readonly RustValidationIssue BodyIssue = new("condition", "threshold", "field_missing", "value");
 
@@ -524,7 +524,7 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
     public async Task A_failing_check_or_delivery_for_one_rule_does_not_stop_another()
     {
         var run = await SeedAsync();
-        const string throwsOnCheck = """{"threshold": 1}""";
+        const string throwsOnCheck = """{"schema_version": 2, "threshold": 1}""";
         run.Validator
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), throwsOnCheck, It.IsAny<bool>(),
                 It.IsAny<string?>(), It.IsAny<string?>()))

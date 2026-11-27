@@ -38,7 +38,7 @@ public class AlertSweepJobWallClockTests
     private static readonly Guid RuleId = Guid.Parse("00000000-0000-0000-0003-000000000002");
     private static readonly DateTime T0 = new(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc);
 
-    private const string SignalLoss15 = """{"timeout_minutes": 15}""";
+    private const string SignalLoss15 = """{"schema_version": 2, "timeout_minutes": 15}""";
 
     [NativeFact]
     public async Task Tenant_with_no_reading_history_does_not_fire()
@@ -60,8 +60,8 @@ public class AlertSweepJobWallClockTests
         // Opened by a low reading. The sweep re-judges that same reading, so it must not feed
         // false and start hysteresis.
         const string lowOrLoss = """
-            {"operator": "or", "conditions": [
-              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+            {"schema_version": 2, "operator": "or", "conditions": [
+              {"type": "threshold", "threshold": {"operator": "<", "value": 70}},
               {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}}
             ]}
             """;
@@ -84,8 +84,8 @@ public class AlertSweepJobWallClockTests
     public async Task A_rate_leaf_judges_the_rate_derived_from_the_previous_reading()
     {
         const string fallOrLoss = """
-            {"operator": "or", "conditions": [
-              {"type": "rate_of_change", "rate_of_change": {"direction": "falling", "rate": 3}},
+            {"schema_version": 2, "operator": "or", "conditions": [
+              {"type": "rate_of_change", "rate_of_change": {"operator": "<=", "value": -3}},
               {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}}
             ]}
             """;
@@ -103,8 +103,8 @@ public class AlertSweepJobWallClockTests
     public async Task Rule_without_a_wall_clock_leaf_is_not_evaluated()
     {
         const string nightLow = """
-            {"operator": "and", "conditions": [
-              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+            {"schema_version": 2, "operator": "and", "conditions": [
+              {"type": "threshold", "threshold": {"operator": "<", "value": 70}},
               {"type": "time_of_day", "time_of_day": {"from": "22:00", "to": "06:00", "timezone": null}}
             ]}
             """;
@@ -209,12 +209,12 @@ public class AlertSweepJobWallClockTests
     [NativeFact]
     public async Task A_wall_clock_auto_resolve_tree_puts_the_rule_on_the_sweep_once_enabled()
     {
-        var fixture = new Fixture(AlertConditionType.Threshold, """{"direction": "below", "value": 70}""")
+        var fixture = new Fixture(AlertConditionType.Threshold, """{"schema_version": 2, "operator": "<", "value": 70}""")
         {
             LastReadingAt = T0,
             LatestMgdl = 50,
         };
-        const string stale = """{"type": "staleness", "staleness": {"operator": ">", "value": 20}}""";
+        const string stale = """{"schema_version": 2, "type": "staleness", "staleness": {"operator": ">", "minutes": 20}}""";
         fixture.Rules[0] = fixture.Rules[0] with { AutoResolveEnabled = false, AutoResolveParams = stale };
 
         await fixture.SweepAt(T0.AddMinutes(1));
@@ -233,7 +233,7 @@ public class AlertSweepJobWallClockTests
     [NativeFact]
     public async Task An_edit_of_on_unknown_alone_moves_the_rule_onto_the_sweep()
     {
-        var fixture = new Fixture(AlertConditionType.Threshold, """{"direction": "below", "value": 70}""")
+        var fixture = new Fixture(AlertConditionType.Threshold, """{"schema_version": 2, "operator": "<", "value": 70}""")
         {
             LastReadingAt = T0,
             LatestMgdl = 50,
@@ -255,8 +255,8 @@ public class AlertSweepJobWallClockTests
     public async Task A_late_reading_is_fresh_on_arrival_and_stale_one_bound_later()
     {
         const string lowOrLoss = """
-            {"operator": "or", "conditions": [
-              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+            {"schema_version": 2, "operator": "or", "conditions": [
+              {"type": "threshold", "threshold": {"operator": "<", "value": 70}},
               {"type": "signal_loss", "signal_loss": {"timeout_minutes": 60}}
             ]}
             """;
@@ -283,8 +283,8 @@ public class AlertSweepJobWallClockTests
     public async Task A_stale_reading_holds_or_releases_the_excursion_it_opened(string onUnknown, string state)
     {
         const string lowOrLoss = """
-            {"operator": "or", "conditions": [
-              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+            {"schema_version": 2, "operator": "or", "conditions": [
+              {"type": "threshold", "threshold": {"operator": "<", "value": 70}},
               {"type": "signal_loss", "signal_loss": {"timeout_minutes": 60}}
             ]}
             """;
@@ -310,7 +310,7 @@ public class AlertSweepJobWallClockTests
     public async Task An_unevaluable_tree_is_not_swept()
     {
         const string lossAndBroken = """
-            {"operator": "and", "conditions": [
+            {"schema_version": 2, "operator": "and", "conditions": [
               {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}},
               {"type": "composite"}
             ]}
@@ -336,7 +336,7 @@ public class AlertSweepJobWallClockTests
             Id = Guid.Parse("00000000-0000-0000-0003-0000000000b1"),
             Name = "Unwalkable",
             ConditionType = AlertConditionType.Composite,
-            ConditionParams = """{"operator": "and", "conditions": []}""",
+            ConditionParams = """{"schema_version": 2, "operator": "and", "conditions": []}""",
             OnUnknown = "no such word",
         };
         var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15, unwalkable)
@@ -362,11 +362,11 @@ public class AlertSweepJobWallClockTests
             Id = parentId,
             Name = "Low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = """{"direction": "below", "value": 70}""",
+            ConditionParams = """{"schema_version": 2, "operator": "<", "value": 70}""",
         };
         var fixture = new Fixture(
             AlertConditionType.AlertState,
-            $$"""{"alert_id": "{{parentId}}", "state": "unacknowledged", "for_minutes": 15}""",
+            $$"""{"schema_version": 2, "alert_id": "{{parentId}}", "state": "unacknowledged", "for_minutes": 15}""",
             parent)
         {
             LastReadingAt = T0,
@@ -420,7 +420,7 @@ public class AlertSweepJobWallClockTests
     public async Task Fires_signal_loss_nested_in_a_night_window()
     {
         const string nightLoss = """
-            {"operator": "and", "conditions": [
+            {"schema_version": 2, "operator": "and", "conditions": [
               {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}},
               {"type": "time_of_day", "time_of_day": {"from": "22:00", "to": "06:00", "timezone": null}}
             ]}
@@ -547,9 +547,9 @@ public class AlertSweepJobWallClockTests
         var fixture = new Fixture(
             AlertConditionType.Composite,
             """
-            {"operator": "or", "conditions": [
+            {"schema_version": 2, "operator": "or", "conditions": [
               {"type": "signal_loss", "signal_loss": {"timeout_minutes": 60}},
-              {"type": "sustained", "sustained": {"minutes": 5, "child": {"type": "threshold", "threshold": {"direction": "below", "value": 70}}}}
+              {"type": "sustained", "sustained": {"minutes": 5, "child": {"type": "threshold", "threshold": {"operator": "<", "value": 70}}}}
             ]}
             """);
         fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 120 });
@@ -584,7 +584,7 @@ public class AlertSweepJobWallClockTests
     };
 
     private static string Or(string other) =>
-        $$$"""{"operator": "or", "conditions": [{"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}}, {{{other}}}]}""";
+        $$$"""{"schema_version": 2, "operator": "or", "conditions": [{"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}}, {{{other}}}]}""";
 
     [NativeTheory]
     [MemberData(nameof(RulesReadingOtherFacts))]
@@ -609,7 +609,7 @@ public class AlertSweepJobWallClockTests
             state!.NextChangeKnown.Should().BeFalse();
     }
 
-    private const string LoopStale30 = """{"operator": ">", "minutes": 30}""";
+    private const string LoopStale30 = """{"schema_version": 2, "operator": ">", "minutes": 30}""";
 
     /// <summary>
     /// Every write of an APS snapshot announces itself and evaluates the rules that read it, so a
@@ -622,7 +622,7 @@ public class AlertSweepJobWallClockTests
 
         await fixture.SweepAt(T0.AddMinutes(1));
         fixture.Evaluations.Should().Be(1);
-        (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId))!.NextChangeAt.Should().BeAfter(T0.AddMinutes(30));
+        (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId))!.NextChangeAt.Should().Be(T0.AddMinutes(30), "a strict bound is reported at the tick it is passed from");
         await fixture.SweepAt(T0.AddMinutes(10));
         fixture.Evaluations.Should().Be(1, "nothing but the clock moves the rule before its next change");
 
@@ -656,8 +656,8 @@ public class AlertSweepJobWallClockTests
     /// is evaluated when it lands, and the rule then fires at the moved anchor's bound, not the recorded one.
     /// </summary>
     [NativeTheory]
-    [InlineData(AlertConditionType.SiteAge, """{"operator": ">", "value": 72}""")]
-    [InlineData(AlertConditionType.SensorAge, """{"operator": ">", "value": 3}""")]
+    [InlineData(AlertConditionType.SiteAge, """{"schema_version": 2, "operator": ">", "minutes": 4320}""")]
+    [InlineData(AlertConditionType.SensorAge, """{"schema_version": 2, "operator": ">", "minutes": 4320}""")]
     public async Task A_device_age_rule_waits_for_its_next_change_and_a_re_pick_of_its_anchor_moves_it(
         AlertConditionType type, string seventyTwoHours)
     {
@@ -685,7 +685,7 @@ public class AlertSweepJobWallClockTests
     [NativeFact]
     public async Task A_site_age_rule_whose_anchor_moves_later_waits_for_the_later_bound()
     {
-        var fixture = new Fixture(AlertConditionType.SiteAge, """{"operator": ">", "value": 72}""")
+        var fixture = new Fixture(AlertConditionType.SiteAge, """{"schema_version": 2, "operator": ">", "minutes": 4320}""")
         {
             LastReadingAt = T0, LastSiteChangeAt = T0,
         };
@@ -709,7 +709,7 @@ public class AlertSweepJobWallClockTests
 
     /// <summary>A rule over a fact that moves with the clock (insulin on board) is evaluated by every sweep.</summary>
     [NativeTheory]
-    [InlineData(AlertConditionType.TimeSinceLastBolus, """{"operator": "<", "minutes": 60}""")]
+    [InlineData(AlertConditionType.TimeSinceLastBolus, """{"schema_version": 2, "operator": "<", "minutes": 60}""")]
     public async Task A_rule_over_a_fact_the_sweep_may_not_wait_for_is_evaluated_every_sweep(
         AlertConditionType type, string payload)
     {
@@ -750,8 +750,8 @@ public class AlertSweepJobWallClockTests
     public async Task Behind_a_newest_reading_with_no_value_the_sweep_reads_the_no_value_state()
     {
         const string lowOrLost = """
-            {"operator": "or", "conditions": [
-              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+            {"schema_version": 2, "operator": "or", "conditions": [
+              {"type": "threshold", "threshold": {"operator": "<", "value": 70}},
               {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}}
             ]}
             """;
@@ -781,7 +781,7 @@ public class AlertSweepJobWallClockTests
     [NativeFact]
     public async Task A_low_held_by_a_sensor_error_fires_on_the_status_write_that_says_ok()
     {
-        var fixture = new Fixture(AlertConditionType.Threshold, """{"direction": "below", "value": 70}""")
+        var fixture = new Fixture(AlertConditionType.Threshold, """{"schema_version": 2, "operator": "<", "value": 70}""")
         {
             LatestMgdl = 55,
             ReportedSensorState = new SensorStateSnapshot(SensorState.Error, null, T0.AddMinutes(11)),
@@ -804,7 +804,7 @@ public class AlertSweepJobWallClockTests
     [NativeFact]
     public async Task A_sensor_state_report_write_evaluates_the_low_and_a_state_that_is_not_ok_holds_it()
     {
-        var fixture = new Fixture(AlertConditionType.Threshold, """{"direction": "below", "value": 70}""")
+        var fixture = new Fixture(AlertConditionType.Threshold, """{"schema_version": 2, "operator": "<", "value": 70}""")
         {
             LatestMgdl = 55,
             ReportedSensorState = new SensorStateSnapshot(SensorState.Error, null, T0.AddMinutes(11)),
@@ -827,8 +827,8 @@ public class AlertSweepJobWallClockTests
     public async Task A_rule_held_by_a_reported_state_waits_until_the_report_lapses()
     {
         const string lowOrLost = """
-            {"operator": "or", "conditions": [
-              {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+            {"schema_version": 2, "operator": "or", "conditions": [
+              {"type": "threshold", "threshold": {"operator": "<", "value": 70}},
               {"type": "signal_loss", "signal_loss": {"timeout_minutes": 60}}
             ]}
             """;
@@ -877,7 +877,7 @@ public class AlertSweepJobWallClockTests
         var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15) { LastReadingAt = T0 };
         await fixture.SweepAt(T0.AddMinutes(1));
 
-        const string edited = """{"timeout_minutes": 5}""";
+        const string edited = """{"schema_version": 2, "timeout_minutes": 5}""";
         fixture.Rules[0] = fixture.Rules[0] with { ConditionParams = edited };
         (await fixture.TrackerRepo.GetRuleAsync(RuleId))!.ConditionParams = edited;
         var state = (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId))!;

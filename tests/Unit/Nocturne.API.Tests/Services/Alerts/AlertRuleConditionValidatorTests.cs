@@ -11,39 +11,39 @@ namespace Nocturne.API.Tests.Services.Alerts;
 [Trait("Category", "Unit")]
 public class AlertRuleConditionValidatorTests
 {
-    private const string SmartSnoozeOn = """{"snooze":{"smartSnooze":true,"conditions":[{"type":"threshold","threshold":{"value":70}}]}}""";
-    private const string SmartSnoozeOff = """{"snooze":{"smartSnooze":false,"conditions":[{"type":"threshold","threshold":{"value":70}}]}}""";
+    private const string SmartSnoozeOn = """{"snooze":{"smartSnooze":true,"conditions":[{"schema_version":2,"type":"threshold","threshold":{"value":70}}]}}""";
+    private const string SmartSnoozeOff = """{"snooze":{"smartSnooze":false,"conditions":[{"schema_version":2,"type":"threshold","threshold":{"value":70}}]}}""";
 
     [NativeFact]
     public void Rejects_a_body_that_cannot_be_evaluated()
     {
         var issues = new AlertRuleConditionValidator().Validate(
             AlertConditionType.Composite,
-            """{"operator":"and","conditions":[{"type":"threshold","threshold":{"value":70}}]}""",
+            """{"schema_version":2,"operator":"and","conditions":[{"type":"threshold","threshold":{"value":70}}]}""",
             false, null, null);
 
-        issues.Should().Equal(new RustValidationIssue("condition", "composite[0].threshold", "field_missing", "direction"));
+        issues.Should().Equal(new RustValidationIssue("condition", "composite[0].threshold", "field_missing", "operator"));
     }
 
     [NativeFact]
     public void Rejects_an_auto_resolve_tree_that_cannot_be_evaluated_only_while_enabled()
     {
-        const string autoResolve = """{"type":"composite","composite":{"conditions":[{"type":"trend","trend":{}}]}}""";
+        const string autoResolve = """{"schema_version":2,"type":"composite","composite":{"conditions":[{"type":"trend","trend":{}}]}}""";
 
-        new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"direction":"below","value":70}""", true, autoResolve, null)
+        new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""", true, autoResolve, null)
             .Should().Equal(
                 new RustValidationIssue("auto_resolve", "auto_resolve", "field_missing", "operator"),
                 new RustValidationIssue("auto_resolve", "auto_resolve[0].trend", "field_missing", "bucket"));
-        new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"direction":"below","value":70}""", false, autoResolve, null)
+        new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""", false, autoResolve, null)
             .Should().BeEmpty();
     }
 
     [NativeFact]
     public void Rejects_smart_snooze_conditions_only_when_smart_snooze_is_on()
     {
-        new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"direction":"below","value":70}""", false, null, SmartSnoozeOn)
-            .Should().Equal(new RustValidationIssue("snooze", "snooze[0].threshold", "field_missing", "direction"));
-        new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"direction":"below","value":70}""", false, null, SmartSnoozeOff)
+        new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""", false, null, SmartSnoozeOn)
+            .Should().Equal(new RustValidationIssue("snooze", "snooze[0].threshold", "field_missing", "operator"));
+        new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""", false, null, SmartSnoozeOff)
             .Should().BeEmpty();
     }
 
@@ -56,7 +56,7 @@ public class AlertRuleConditionValidatorTests
     public void Rejects_smart_snooze_conditions_the_sweep_cannot_read(string clientConfiguration, bool rejected)
     {
         var issues = new AlertRuleConditionValidator().Validate(
-            AlertConditionType.Threshold, """{"direction":"below","value":70}""", false, null, clientConfiguration);
+            AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""", false, null, clientConfiguration);
 
         if (rejected)
             issues.Should().Equal(new RustValidationIssue("snooze", "snooze", "invalid_field", "conditions"));
@@ -65,7 +65,7 @@ public class AlertRuleConditionValidatorTests
     }
 
     [NativeTheory]
-    [InlineData("""{"direction":"below","value":"low"}""", "invalid_field", "value")]
+    [InlineData("""{"schema_version":2,"operator":"<","value":"low"}""", "invalid_field", "value")]
     [InlineData("null", "payload_missing", null)]
     [InlineData("{", "not_an_object", null)]
     public void Rejects_a_body_that_does_not_read(string body, string reason, string? field)
@@ -79,30 +79,33 @@ public class AlertRuleConditionValidatorTests
     public void Rejects_an_unresolvable_timezone()
     {
         new AlertRuleConditionValidator().Validate(
-                AlertConditionType.TimeOfDay, """{"from":"22:00","to":"06:00","timezone":"Etc/Unknown"}""", false, null, null)
+                AlertConditionType.TimeOfDay, """{"schema_version":2,"from":"22:00","to":"06:00","timezone":"Etc/Unknown"}""", false, null, null)
             .Should().Equal(new RustValidationIssue("condition", "time_of_day", "invalid_field", "timezone"));
     }
 
     private const string PumpModeSpan = """{"type":"state_span_active","state_span_active":{"category":"PumpMode","is_active":true}}""";
 
+    private const string PumpModeSpanCondition =
+        """{"schema_version":2,"type":"state_span_active","state_span_active":{"category":"PumpMode","is_active":true}}""";
+
     public static TheoryData<AlertConditionType, string, bool, string?, string?, RustValidationIssue> PumpModeSpans => new()
     {
         {
-            AlertConditionType.StateSpanActive, """{"category":"PumpMode","is_active":true}""", false, null, null,
+            AlertConditionType.StateSpanActive, """{"schema_version":2,"category":"PumpMode","is_active":true}""", false, null, null,
             new RustValidationIssue("condition", "state_span_active", "pump_mode_category", "category")
         },
         {
-            AlertConditionType.Sustained, """{"minutes":10,"child":{"type":"not","not":{"child":""" + PumpModeSpan + "}}}", false, null, null,
+            AlertConditionType.Sustained, """{"schema_version":2,"minutes":10,"child":{"type":"not","not":{"child":""" + PumpModeSpan + "}}}", false, null, null,
             new RustValidationIssue("condition", "sustained[0].not[0].state_span_active", "pump_mode_category", "category")
         },
         {
-            AlertConditionType.Threshold, """{"direction":"below","value":70}""", true,
-            """{"type":"composite","composite":{"operator":"or","conditions":[{"type":"trend","trend":{"bucket":"flat"}},""" + PumpModeSpan + "]}}", null,
+            AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""", true,
+            """{"schema_version":2,"type":"composite","composite":{"operator":"or","conditions":[{"type":"trend","trend":{"bucket":"flat"}},""" + PumpModeSpan + "]}}", null,
             new RustValidationIssue("auto_resolve", "auto_resolve[1].state_span_active", "pump_mode_category", "category")
         },
         {
-            AlertConditionType.Threshold, """{"direction":"below","value":70}""", false, null,
-            """{"snooze":{"smartSnooze":true,"conditions":[""" + PumpModeSpan + "]}}",
+            AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""", false, null,
+            """{"snooze":{"smartSnooze":true,"conditions":[""" + PumpModeSpanCondition + "]}}",
             new RustValidationIssue("snooze", "snooze[0].state_span_active", "pump_mode_category", "category")
         },
     };

@@ -27,16 +27,16 @@ public static class DemoAlertSeeds
     public static IReadOnlyList<AlertRuleSeed> Defaults { get; } =
     [
         new("Urgent Low", AlertConditionType.Threshold,
-            """{"direction":"below","value":55}""",
+            ConditionSchema.Stamp("""{"operator":"<","value":55}"""),
             AlertRuleSeverity.Critical, "Glucose below 55 mg/dL", EpisodeBelow: 55),
         new("Low", AlertConditionType.Threshold,
-            """{"direction":"below","value":70}""",
+            ConditionSchema.Stamp("""{"operator":"<","value":70}"""),
             AlertRuleSeverity.Warning, "Glucose below 70 mg/dL", EpisodeBelow: 70),
         new("High", AlertConditionType.Threshold,
-            """{"direction":"above","value":250}""",
+            ConditionSchema.Stamp("""{"operator":">","value":250}"""),
             AlertRuleSeverity.Warning, "Glucose above 250 mg/dL", EpisodeAbove: 250),
         new("Signal Loss", AlertConditionType.SignalLoss,
-            """{"timeout_minutes":30}""",
+            ConditionSchema.Stamp("""{"timeout_minutes":30}"""),
             AlertRuleSeverity.Warning, "No CGM readings for 30 minutes"),
     ];
 

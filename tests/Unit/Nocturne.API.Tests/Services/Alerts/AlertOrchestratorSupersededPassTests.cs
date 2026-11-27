@@ -39,7 +39,7 @@ public sealed class AlertOrchestratorSupersededPassTests
     private (Guid Rule, decimal Value)? _engineFailsFor;
 
     private static AlertRuleSnapshot Rule(string name) =>
-        new(Guid.NewGuid(), Tenant, name, AlertConditionType.Threshold, """{"direction":"below","value":70}""",
+        new(Guid.NewGuid(), Tenant, name, AlertConditionType.Threshold, """{"schema_version":2,"operator":"<","value":70}""",
             AlertRuleSeverity.Critical, "{}", 0, AutoResolveEnabled: false, AutoResolveParams: null);
 
     private static SensorGlucose Reading(int minutes, double mgdl) =>

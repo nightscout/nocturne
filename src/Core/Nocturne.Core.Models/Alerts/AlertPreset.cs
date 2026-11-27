@@ -20,7 +20,8 @@ public enum AlertPresetGroup
 /// <param name="CanWait">Whether the condition can be held for a time before the alert starts. A
 /// condition with its own duration cannot.</param>
 /// <param name="ConditionType">Null for a preset that reads only a tracker.</param>
-/// <param name="ConditionParams">The condition's payload as JSON, with the preset's default level.</param>
+/// <param name="ConditionParams">The condition's payload as JSON, naming its <see cref="ConditionSchema"/>, with the
+/// preset's default level.</param>
 /// <param name="AutoResolve">Whether the alert closes at once when the opposite of its condition
 /// is true, rather than on the evaluation after the one that found the condition false.</param>
 public sealed record AlertPreset(
@@ -55,29 +56,29 @@ public static class AlertPresets
     public static IReadOnlyList<AlertPreset> All { get; } =
     [
         new("urgent_low", AlertPresetGroup.Common, AlertRuleSeverity.Critical, CanWait: true,
-            AlertConditionType.Threshold, """{"direction":"below","value":55}""", AutoResolve: true)
+            AlertConditionType.Threshold, Body("""{"operator":"<","value":55}"""), AutoResolve: true)
         {
             StarterKind = StarterAlertKind.UrgentLow,
         },
         new("low", AlertPresetGroup.Common, AlertRuleSeverity.Warning, CanWait: true,
-            AlertConditionType.Threshold, """{"direction":"below","value":70}""", AutoResolve: true)
+            AlertConditionType.Threshold, Body("""{"operator":"<","value":70}"""), AutoResolve: true)
         {
             StarterKind = StarterAlertKind.Low,
         },
         new("high", AlertPresetGroup.Common, AlertRuleSeverity.Warning, CanWait: true,
-            AlertConditionType.Threshold, """{"direction":"above","value":250}""", AutoResolve: true)
+            AlertConditionType.Threshold, Body("""{"operator":">","value":250}"""), AutoResolve: true)
         {
             StarterKind = StarterAlertKind.High,
         },
         // A rate has no condition that is its opposite. The nearest, a flat trend, is true together
         // with a rate set below the edge of flat, and would close the alert as it starts.
         new("falling_fast", AlertPresetGroup.Common, AlertRuleSeverity.Warning, CanWait: true,
-            AlertConditionType.RateOfChange, """{"direction":"falling","rate":3}""", AutoResolve: false),
+            AlertConditionType.RateOfChange, Body("""{"operator":"<=","value":-3}"""), AutoResolve: false),
         new("rising_fast", AlertPresetGroup.Common, AlertRuleSeverity.Info, CanWait: true,
-            AlertConditionType.RateOfChange, """{"direction":"rising","rate":3}""", AutoResolve: false),
+            AlertConditionType.RateOfChange, Body("""{"operator":">=","value":3}"""), AutoResolve: false),
         // No reading says the sensor is back: the condition going false is the only sign of it.
         new("no_readings", AlertPresetGroup.Common, AlertRuleSeverity.Warning, CanWait: false,
-            AlertConditionType.SignalLoss, """{"timeout_minutes":20}""", AutoResolve: false)
+            AlertConditionType.SignalLoss, Body("""{"timeout_minutes":20}"""), AutoResolve: false)
         {
             StarterKind = StarterAlertKind.NoReadings,
         },
@@ -85,11 +86,11 @@ public static class AlertPresets
         // below the level and a point above it: the flipped comparison is not the opposite, and
         // would close the alert on the evaluation that starts it.
         new("urgent_low_soon", AlertPresetGroup.More, AlertRuleSeverity.Critical, CanWait: false,
-            AlertConditionType.Predicted, """{"operator":"<=","value":55,"within_minutes":20}""", AutoResolve: false),
+            AlertConditionType.Predicted, Body("""{"operator":"<=","value":55,"within_minutes":20}"""), AutoResolve: false),
         new("reservoir_low", AlertPresetGroup.More, AlertRuleSeverity.Warning, CanWait: false,
-            AlertConditionType.Reservoir, """{"operator":"<=","value":20}""", AutoResolve: true),
+            AlertConditionType.Reservoir, Body("""{"operator":"<=","value":20}"""), AutoResolve: true),
         new("pump_battery_low", AlertPresetGroup.More, AlertRuleSeverity.Warning, CanWait: false,
-            AlertConditionType.PumpBattery, """{"operator":"<=","value":20}""", AutoResolve: true),
+            AlertConditionType.PumpBattery, Body("""{"operator":"<=","value":20}"""), AutoResolve: true),
         new("battery_change_due", AlertPresetGroup.More, AlertRuleSeverity.Info, CanWait: false,
             ConditionType: null, ConditionParams: null, AutoResolve: true)
         {
@@ -97,21 +98,23 @@ public static class AlertPresets
             TrackerOnlyAgeHours = 21 * 24,
         },
         new("site_change_due", AlertPresetGroup.More, AlertRuleSeverity.Info, CanWait: false,
-            AlertConditionType.SiteAge, """{"operator":">=","value":72}""", AutoResolve: true)
+            AlertConditionType.SiteAge, Body("""{"operator":">=","minutes":4320}"""), AutoResolve: true)
         {
             TrackerCategories = [TrackerCategory.Cannula, TrackerCategory.Pod],
         },
         new("sensor_change_due", AlertPresetGroup.More, AlertRuleSeverity.Info, CanWait: false,
-            AlertConditionType.SensorAge, """{"operator":">=","value":10}""", AutoResolve: true)
+            AlertConditionType.SensorAge, Body("""{"operator":">=","minutes":14400}"""), AutoResolve: true)
         {
             TrackerCategories = [TrackerCategory.Sensor],
         },
         // As for no readings: nothing but the loop running again says the alert is over.
         new("loop_not_running", AlertPresetGroup.More, AlertRuleSeverity.Warning, CanWait: false,
-            AlertConditionType.LoopStale, """{"operator":">","minutes":30}""", AutoResolve: false),
+            AlertConditionType.LoopStale, Body("""{"operator":">","minutes":30}"""), AutoResolve: false),
         new("phone_battery_low", AlertPresetGroup.More, AlertRuleSeverity.Info, CanWait: false,
-            AlertConditionType.UploaderBattery, """{"operator":"<=","value":20}""", AutoResolve: true),
+            AlertConditionType.UploaderBattery, Body("""{"operator":"<=","value":20}"""), AutoResolve: true),
     ];
+
+    private static string Body(string payload) => ConditionSchema.Stamp(payload);
 
     /// <summary>The preset the setup hub starts a tenant with for <paramref name="kind"/>.</summary>
     public static AlertPreset Starter(StarterAlertKind kind) => All.Single(p => p.StarterKind == kind);

@@ -31,8 +31,8 @@ public class AlertOrchestratorConditionIssueTests
     private static readonly Guid RuleId = Guid.Parse("85385385-0000-7000-8000-0000000000a1");
     private static readonly DateTime Now = new(2026, 10, 22, 8, 0, 0, DateTimeKind.Utc);
 
-    private const string WizardUrgentLow = """{"threshold": 54, "direction": "below"}""";
-    private const string WizardSensorLost = """{"minutes": 15}""";
+    private const string WizardUrgentLow = """{"schema_version": 2, "threshold": 54, "direction": "below"}""";
+    private const string WizardSensorLost = """{"schema_version": 2, "minutes": 15}""";
 
     private static SensorContext Reading(decimal mgdl, DateTime? lastReadingAt = null) => new()
     {
@@ -57,7 +57,7 @@ public class AlertOrchestratorConditionIssueTests
     {
         var act = () => Evaluate(AlertConditionType.Threshold, WizardUrgentLow, Reading(40));
         act.Should().Throw<RustAlertEngineException>().WithMessage("*field_missing*(field 'value')*");
-        Evaluate(AlertConditionType.Threshold, """{"direction": "below", "value": 54}""", Reading(40))
+        Evaluate(AlertConditionType.Threshold, """{"schema_version": 2, "operator": "<", "value": 54}""", Reading(40))
             .Should().BeTrue("the shape the repair gives it fires");
     }
 
@@ -68,7 +68,7 @@ public class AlertOrchestratorConditionIssueTests
 
         var act = () => Evaluate(AlertConditionType.SignalLoss, WizardSensorLost, gap);
         act.Should().Throw<RustAlertEngineException>().WithMessage("*field_missing*(field 'timeout_minutes')*");
-        Evaluate(AlertConditionType.SignalLoss, """{"timeout_minutes": 15}""", gap)
+        Evaluate(AlertConditionType.SignalLoss, """{"schema_version": 2, "timeout_minutes": 15}""", gap)
             .Should().BeTrue("the shape the repair gives it fires");
     }
 
@@ -101,7 +101,7 @@ public class AlertOrchestratorConditionIssueTests
                 It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()),
             Times.Exactly(3), "a reported rule still evaluates");
 
-        await harness.EvaluateAsync(Rule("""{"threshold": 55, "direction": "below"}"""));
+        await harness.EvaluateAsync(Rule("""{"schema_version": 2, "threshold": 55, "direction": "below"}"""));
         harness.Logger.Warnings.Should().HaveCount(2, "an edited condition is a new version");
     }
 
@@ -115,7 +115,7 @@ public class AlertOrchestratorConditionIssueTests
             .Returns([new RustValidationIssue("condition", "alert_state", "invalid_field", "alert_id")]);
 
         await harness.EvaluateAsync(Rule(
-            """{"alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "firing"}""",
+            """{"schema_version": 2, "alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "firing"}""",
             AlertConditionType.AlertState));
 
         harness.Logger.Warnings.Should().ContainSingle().Which.Should().Contain("invalid_field (alert_id)");
@@ -134,7 +134,7 @@ public class AlertOrchestratorConditionIssueTests
                 It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([]);
 
-        await harness.EvaluateAsync(Rule("""{"direction": "below", "value": 54}"""));
+        await harness.EvaluateAsync(Rule("""{"schema_version": 2, "operator": "<", "value": 54}"""));
 
         harness.Logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
     }
@@ -147,7 +147,7 @@ public class AlertOrchestratorConditionIssueTests
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(),
                 It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([new RustValidationIssue("condition", "composite", "field_missing", "operator")]);
-        const string operatorless = """{"conditions": [{"type": "threshold", "threshold": {"direction": "below", "value": 70}}]}""";
+        const string operatorless = """{"schema_version": 2, "conditions": [{"type": "threshold", "threshold": {"operator": "<", "value": 70}}]}""";
 
         await harness.EvaluateAsync(Rule(operatorless, AlertConditionType.Composite));
 
@@ -170,7 +170,7 @@ public class AlertOrchestratorConditionIssueTests
                 It.IsAny<string?>(), It.IsAny<string?>()))
             .Throws(new RustAlertEngineException("validator failed"));
         var first = Rule(WizardUrgentLow);
-        var second = Rule("""{"direction": "below", "value": 54}""") with
+        var second = Rule("""{"schema_version": 2, "operator": "<", "value": 54}""") with
         {
             Id = Guid.Parse("85385385-0000-7000-8000-0000000000a2"),
         };
@@ -236,7 +236,7 @@ public class AlertOrchestratorConditionIssueTests
                 It.IsAny<AlertEngineOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AlertEngineEvaluation { ConditionUnknown = true, ClockAnomalies = anomalies });
 
-        await harness.EvaluateAsync(Rule("""{"timeout_minutes":20}""", AlertConditionType.SignalLoss));
+        await harness.EvaluateAsync(Rule("""{"schema_version":2,"timeout_minutes":20}""", AlertConditionType.SignalLoss));
 
         harness.ClockNotice.Verify(n => n.ReportAsync(
             It.IsAny<SensorContext>(),
@@ -252,7 +252,7 @@ public class AlertOrchestratorConditionIssueTests
             .Setup(n => n.ReportAsync(It.IsAny<SensorContext>(), It.IsAny<IReadOnlyCollection<ClockAnomaly>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("store down"));
 
-        var pass = () => harness.EvaluateAsync(Rule("""{"timeout_minutes":20}""", AlertConditionType.SignalLoss));
+        var pass = () => harness.EvaluateAsync(Rule("""{"schema_version":2,"timeout_minutes":20}""", AlertConditionType.SignalLoss));
 
         await pass.Should().NotThrowAsync();
         harness.Engine.Verify(e => e.EvaluateRuleAsync(It.IsAny<AlertRuleSnapshot>(), It.IsAny<SensorContext>(),
@@ -268,7 +268,7 @@ public class AlertOrchestratorConditionIssueTests
                 It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([]);
         using var shutdown = new CancellationTokenSource();
-        var first = Rule("""{"direction": "below", "value": 54}""");
+        var first = Rule("""{"schema_version": 2, "operator": "<", "value": 54}""");
         var second = first with { Id = Guid.Parse("85385385-0000-7000-8000-0000000000a2") };
         harness.Engine
             .Setup(e => e.EvaluateRuleAsync(It.Is<AlertRuleSnapshot>(r => r.Id == first.Id), It.IsAny<SensorContext>(),

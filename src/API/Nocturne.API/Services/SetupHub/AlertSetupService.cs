@@ -54,10 +54,10 @@ public class AlertSetupService(
     private const decimal MaxThresholdMgdl = 400;
 
     /// <summary>
-    /// A starter rule as its preset in <see cref="AlertPresets"/> gives it. <paramref name="Direction"/>
+    /// A starter rule as its preset in <see cref="AlertPresets"/> gives it. <paramref name="Operator"/>
     /// is null for the one that is not a glucose threshold, which has no level to set.
     /// </summary>
-    private sealed record Starter(string Name, AlertPreset Preset, string? Direction, decimal DefaultMgdl);
+    private sealed record Starter(string Name, AlertPreset Preset, string? Operator, decimal DefaultMgdl);
 
     private static readonly IReadOnlyDictionary<StarterAlertKind, Starter> Starters =
         Enum.GetValues<StarterAlertKind>().ToDictionary(kind => kind, StarterOf);
@@ -78,15 +78,15 @@ public class AlertSetupService(
         };
 
         Starter Threshold(string name) => new(
-            name, preset, condition.GetProperty("direction").GetString(), condition.GetProperty("value").GetDecimal());
+            name, preset, condition.GetProperty("operator").GetString(), condition.GetProperty("value").GetDecimal());
     }
 
     /// <summary>
     /// The resolve condition of a threshold starter whose preset closes on the opposite: glucose on
     /// the other side of the same level, as the rule editor stores a resolve tree of one condition.
     /// </summary>
-    private static string OppositeOf(string direction, decimal mgdl) => AutoResolveSuggestion.For(
-        JsonSerializer.Serialize(new { type = "threshold", threshold = new { direction, value = mgdl } }))!;
+    private static string OppositeOf(string @operator, decimal mgdl) => AutoResolveSuggestion.For(
+        ConditionSchema.Stamp(JsonSerializer.Serialize(new { type = "threshold", threshold = new { @operator, value = mgdl } })))!;
 
     /// <summary>What can be chosen instead of this device.</summary>
     private static readonly IReadOnlyList<ChannelType> ChannelTypesOffered = ChannelDestinations.Offered
@@ -108,7 +108,7 @@ public class AlertSetupService(
             var rule = starters.GetValueOrDefault(kind);
             var start = startingPoints[kind];
             var mgdl = rule is null ? start.Mgdl : StoredMgdl(kind, rule);
-            var threshold = Starters[kind].Direction is not null;
+            var threshold = Starters[kind].Operator is not null;
             return new StarterAlertRule(
                 kind, rule?.Rule.Id, rule?.IsEnabled ?? start.IsEnabled,
                 threshold && mgdl is { } shown ? Display(shown, units) : null,
@@ -202,7 +202,7 @@ public class AlertSetupService(
 
         foreach (var kind in Enum.GetValues<StarterAlertKind>())
         {
-            var (name, preset, direction, defaultMgdl) = Starters[kind];
+            var (name, preset, @operator, defaultMgdl) = Starters[kind];
             var asked = request.Rules.FirstOrDefault(r => r.Kind == kind);
             var rule = starters.GetValueOrDefault(kind);
 
@@ -211,7 +211,7 @@ public class AlertSetupService(
             var conditionType = preset.ConditionType!.Value;
             string conditionParams;
             string? autoResolve;
-            if (direction is null || stored is not { } storedMgdl)
+            if (@operator is null || stored is not { } storedMgdl)
             {
                 conditionParams = rule?.Rule.ConditionParams ?? preset.ConditionParams!;
                 autoResolve = null;
@@ -222,9 +222,9 @@ public class AlertSetupService(
                     ? storedMgdl
                     : ToMgdl(kind, asked.Threshold, storedMgdl, units);
                 conditionParams = rule is null
-                    ? JsonSerializer.Serialize(new { direction, value = mgdl })
+                    ? ConditionSchema.Stamp(JsonSerializer.Serialize(new { @operator, value = mgdl }))
                     : WithValue(rule.Rule.ConditionParams, storedMgdl, mgdl);
-                autoResolve = preset.AutoResolve ? OppositeOf(direction, mgdl) : null;
+                autoResolve = preset.AutoResolve ? OppositeOf(@operator, mgdl) : null;
             }
 
             var throughDnd = kind == StarterAlertKind.UrgentLow || routing == AlertRouting.ToYouAsCaregiver;
@@ -251,11 +251,11 @@ public class AlertSetupService(
                 retired.Add(ruleId);
             // A resolve condition that is still the opposite of the stored threshold follows the new
             // one. One the owner edited or switched off in the rule editor stays as they left it.
-            var resolveFollows = direction is not null
+            var resolveFollows = @operator is not null
                 && autoResolve is not null
                 && stored is { } before
                 && rule.Rule.AutoResolveEnabled
-                && ConditionTreeEquality.Same(rule.Rule.AutoResolveParams, OppositeOf(direction, before));
+                && ConditionTreeEquality.Same(rule.Rule.AutoResolveParams, OppositeOf(@operator, before));
             await writer.UpdateAsync(ruleId, AlertRuleWrite.Of(rule) with
             {
                 ConditionParams = conditionParams,
