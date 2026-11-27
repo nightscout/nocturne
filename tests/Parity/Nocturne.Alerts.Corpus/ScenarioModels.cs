@@ -189,7 +189,12 @@ public sealed record ScenarioContext
 public sealed record ScenarioSensorState(
     [property: JsonPropertyName("state")] string State,
     [property: JsonPropertyName("since")] DateTime? Since,
-    [property: JsonPropertyName("until")] DateTime? Until = null);
+    [property: JsonPropertyName("until")] DateTime? Until = null,
+    [property: JsonPropertyName("once_lapsed")] ScenarioLapsedSensorState? OnceLapsed = null);
+
+public sealed record ScenarioLapsedSensorState(
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("since")] DateTime? Since);
 
 public sealed record ScenarioApsDetermination(
     [property: JsonPropertyName("at")] DateTime At,

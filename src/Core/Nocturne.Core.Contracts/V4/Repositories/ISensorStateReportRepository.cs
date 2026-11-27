@@ -12,20 +12,20 @@ public interface ISensorStateReportRepository : IBulkCreateRepository<SensorStat
 {
     /// <summary>
     /// The newest live report of <paramref name="device"/> under <paramref name="dataSource"/> stored by
-    /// <paramref name="asOf"/>, whose timestamp and arrival are both at or after <paramref name="since"/>
-    /// and whose timestamp is at or before <paramref name="latestTimestamp"/>, with its arrival; null
-    /// when there is none.
+    /// <paramref name="asOf"/>, whose timestamp and arrival are both at or after <paramref name="since"/>,
+    /// with its arrival; null when there is none.
     /// </summary>
     /// <remarks>
-    /// Newest is by arrival (<see cref="ArrivedSensorStateReport.ArrivedAt"/>), so a report dated ahead
-    /// does not outrank a newer one. Of reports that arrived at the same instant, a state that is not ok
-    /// wins, then no state, then ok, then the lower id, so the pick never depends on row order. Only a
-    /// state that is not ok holds a glucose rule, so a report that flagged the sensor is not outvoted by
-    /// one that arrived with it; no state ranks above ok since it claims nothing about the sensor.
+    /// A report dated ahead of <paramref name="asOf"/>, however far, is read from the write that stores
+    /// it, and counts from its arrival. Newest is by arrival
+    /// (<see cref="ArrivedSensorStateReport.ArrivedAt"/>), so a report dated ahead does not outrank a
+    /// newer one. Of reports that arrived at the same instant, a state that is not ok wins, then no
+    /// state, then ok, then the lower id, so the pick never depends on row order. Only a state that is
+    /// not ok holds a glucose rule, so a report that flagged the sensor is not outvoted by one that
+    /// arrived with it; no state ranks above ok since it claims nothing about the sensor.
     /// </remarks>
     Task<ArrivedSensorStateReport?> GetNewestAsync(
-        string device, string dataSource, DateTime since, DateTime asOf, DateTime latestTimestamp,
-        CancellationToken ct = default);
+        string device, string dataSource, DateTime since, DateTime asOf, CancellationToken ct = default);
 
     /// <summary>Delete the report of the status with the given correlation id.</summary>
     /// <returns>Number of records deleted.</returns>

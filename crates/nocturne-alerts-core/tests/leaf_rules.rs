@@ -301,9 +301,14 @@ fn sensor_not_ok(ctx: &Value) -> bool {
     sensor_state_now(ctx).is_some_and(|s| s["state"] != "ok")
 }
 
-/// §4: the sensor's state, unless its `until` is at or before now.
-fn sensor_state_now(ctx: &Value) -> Option<&Value> {
-    field(ctx, "sensor_state").filter(|s| field(s, "until").is_none_or(|u| ago_of_instant(u) < 0))
+/// §4: the sensor's state, unless its `until` is at or before now, and then the
+/// state it names as holding once it lapsed (`once_lapsed`), or none.
+fn sensor_state_now(ctx: &Value) -> Option<Value> {
+    let reported = field(ctx, "sensor_state")?;
+    if field(reported, "until").is_none_or(|u| ago_of_instant(u) < 0) {
+        return Some(reported.clone());
+    }
+    field(reported, "once_lapsed").cloned()
 }
 
 /// `decide` over a fact the reading's age and the sensor's state allow.
@@ -1665,7 +1670,10 @@ fn sensor_state_model(c: &Case) -> Verdict {
     {
         return verdict(false, "other state");
     }
-    match (field(snapshot, "since").map(ago_of_instant), for_minutes(c)) {
+    match (
+        field(&snapshot, "since").map(ago_of_instant),
+        for_minutes(c),
+    ) {
         (_, None) => verdict(true, "listed"),
         (None, Some(_)) => unknown("no start"),
         (Some(at), Some(m)) => match held(passed(at), m) {

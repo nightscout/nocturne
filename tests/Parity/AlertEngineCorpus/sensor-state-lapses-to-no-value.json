@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "name": "sensor-state-lapses-to-no-value",
+  "description": "a reported state over a newest reading with no value gives way to no_value at its until, with the no_value start the context carried, so a sensor_state rule for no_value over 15 minutes is false while the error report counts and true from the instant it lapses, with no new context; the error leaf is true, then false once it lapses",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "sensor_state",
+      "condition_params": {
+        "states": [
+          "no_value"
+        ],
+        "for_minutes": 15
+      },
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "sensor_state",
+      "condition_params": {
+        "states": [
+          "error"
+        ]
+      },
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "latest_received_at": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T11:45:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "sensor_state": {
+          "state": "error",
+          "until": "2026-01-05T12:11:00Z",
+          "once_lapsed": {
+            "state": "no_value",
+            "since": "2026-01-05T11:50:00Z"
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "latest_received_at": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T11:45:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "sensor_state": {
+          "state": "error",
+          "until": "2026-01-05T12:11:00Z",
+          "once_lapsed": {
+            "state": "no_value",
+            "since": "2026-01-05T11:50:00Z"
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-01-05T12:11:00Z",
+      "context": {
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "latest_received_at": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T11:45:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "sensor_state": {
+          "state": "error",
+          "until": "2026-01-05T12:11:00Z",
+          "once_lapsed": {
+            "state": "no_value",
+            "since": "2026-01-05T11:50:00Z"
+          }
+        }
+      }
+    }
+  ]
+}

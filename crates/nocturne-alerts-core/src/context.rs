@@ -158,6 +158,17 @@ pub struct SensorStateSnapshot {
     /// is at or before `now` is no state (engine-semantics.md §4). `None`
     /// counts for as long as the host sends it, as `no_value` does.
     pub until: Option<DateTime<Utc>>,
+    /// The state that holds once `until` has passed, which the host sends when
+    /// the context carries one it knows beyond the report: a reading with no
+    /// value is `no_value` from the start it has had (engine-semantics.md §4).
+    pub once_lapsed: Option<LapsedSensorState>,
+}
+
+/// The sensor's state once a reported one has lapsed. It does not lapse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LapsedSensorState {
+    pub state: Option<SensorState>,
+    pub since: Option<DateTime<Utc>>,
 }
 
 impl SensorContext {
@@ -173,13 +184,22 @@ impl SensorContext {
         }
     }
 
-    /// The sensor's state at `now`: none when it is absent or its report has
-    /// lapsed. The engine owns the lapse, so a host that evaluates late
-    /// cannot keep a state its own bound has ended.
+    /// The sensor's state at `now`: none when it is absent, or its report has
+    /// lapsed and the host named no state to fall back to. The engine owns the
+    /// lapse, so a host that evaluates late cannot keep a state its own bound
+    /// has ended.
     #[must_use]
     pub fn sensor_state_at(&self, now: DateTime<Utc>) -> Option<SensorStateSnapshot> {
-        self.sensor_state
-            .filter(|s| s.until.is_none_or(|until| until > now))
+        let reported = self.sensor_state?;
+        if reported.until.is_none_or(|until| until > now) {
+            return Some(reported);
+        }
+        reported.once_lapsed.map(|lapsed| SensorStateSnapshot {
+            state: lapsed.state,
+            since: lapsed.since,
+            until: None,
+            once_lapsed: None,
+        })
     }
 
     /// When the sensor's state lapses, if that is after `now`.
@@ -319,6 +339,15 @@ struct WireSensorState {
     since: Option<DateTime<Utc>>,
     #[serde(default)]
     until: Option<DateTime<Utc>>,
+    #[serde(default)]
+    once_lapsed: Option<WireLapsedSensorState>,
+}
+
+#[derive(Deserialize)]
+struct WireLapsedSensorState {
+    state: String,
+    #[serde(default)]
+    since: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize)]
@@ -617,6 +646,15 @@ impl SensorContext {
                         state: SensorState::from_name(&s.state),
                         since: opt_ts(s.since, "sensor_state.since")?,
                         until: opt_ts(s.until, "sensor_state.until")?,
+                        once_lapsed: s
+                            .once_lapsed
+                            .map(|l| {
+                                Ok::<_, String>(LapsedSensorState {
+                                    state: SensorState::from_name(&l.state),
+                                    since: opt_ts(l.since, "sensor_state.once_lapsed.since")?,
+                                })
+                            })
+                            .transpose()?,
                     })
                 })
                 .transpose()?,
@@ -720,6 +758,7 @@ mod tests {
                 state: Some(SensorState::WarmingUp),
                 since: Some(at.parse().expect("an instant")),
                 until: None,
+                once_lapsed: None,
             })
         );
         assert_eq!(
@@ -728,7 +767,46 @@ mod tests {
                 state: None,
                 since: None,
                 until: None,
+                once_lapsed: None,
             })
         );
+    }
+
+    /// A reported state counts until its `until`; from then the state the host
+    /// named to fall back to holds, from the start it sent, and with none named
+    /// the sensor has no state.
+    #[test]
+    fn a_lapsed_state_falls_back_to_the_state_the_host_named() {
+        let since: DateTime<Utc> = "2026-01-05T11:50:00Z".parse().expect("an instant");
+        let until: DateTime<Utc> = "2026-01-05T12:11:00Z".parse().expect("an instant");
+        let ctx = read(json!({
+            "sensor_state": {
+                "state": "error",
+                "until": until,
+                "once_lapsed": { "state": "no_value", "since": since }
+            }
+        }));
+        let before = until - chrono::TimeDelta::seconds(1);
+
+        assert_eq!(
+            ctx.sensor_state_at(before).map(|s| s.state),
+            Some(Some(SensorState::Error))
+        );
+        for now in [until, until + chrono::TimeDelta::minutes(30)] {
+            assert_eq!(
+                ctx.sensor_state_at(now),
+                Some(SensorStateSnapshot {
+                    state: Some(SensorState::NoValue),
+                    since: Some(since),
+                    until: None,
+                    once_lapsed: None,
+                })
+            );
+        }
+        assert_eq!(ctx.sensor_state_lapses(before), Some(until));
+        assert_eq!(ctx.sensor_state_lapses(until), None);
+
+        let unnamed = read(json!({ "sensor_state": { "state": "error", "until": until } }));
+        assert_eq!(unnamed.sensor_state_at(until), None);
     }
 }
