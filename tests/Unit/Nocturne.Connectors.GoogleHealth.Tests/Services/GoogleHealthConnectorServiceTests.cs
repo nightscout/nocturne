@@ -20,6 +20,7 @@ using Nocturne.Core.Models.Health;
 using Nocturne.Tests.Shared.Connectors;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
 
@@ -1218,20 +1219,6 @@ public class GoogleHealthConnectorServiceTests
         Assert.False(fixture.ImportFromWasConsumed);
     }
 
-    private sealed class CapturingLogger : ILogger<GoogleHealthConnectorService>
-    {
-        public List<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) =>
-            Entries.Add((logLevel, formatter(state, exception), exception));
-    }
-
     private sealed class Fixture
     {
         private readonly Guid tenantId = Guid.NewGuid();
@@ -1336,7 +1323,7 @@ public class GoogleHealthConnectorServiceTests
         }
 
         public GoogleHealthConnectorService Service { get; }
-        public CapturingLogger Log { get; } = new();
+        public ListLogger<GoogleHealthConnectorService> Log { get; } = new();
         public HookedStateStore State { get; } = new();
         public SemaphoreSlim Gate { get; } = new(1);
         public Mock<IGoogleHealthSyncCoordinator> Coordinator { get; } = new();

@@ -78,15 +78,12 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
         var provider = services.BuildServiceProvider();
         _providers.Add(provider);
 
-        return new AlertDeliveryService(
+        return DeliveryServices.Build(
             _factory.AsNocturneFactory(),
-            new TenantMembershipRepository(_factory.AsNocturneFactory(), AccountLinkRoutes.Off),
             SettableTenantAccessor.Resolved(Tenant),
-            _broadcast.Object,
-            _alarmRelay.Object,
-            provider,
-            NullLogger<AlertDeliveryService>.Instance,
-            TimeProvider.System);
+            providers: provider,
+            broadcast: _broadcast.Object,
+            alarmRelay: _alarmRelay.Object);
     }
 
     private async Task<Guid> SeedInstanceAsync(DateTime? snoozedUntil)

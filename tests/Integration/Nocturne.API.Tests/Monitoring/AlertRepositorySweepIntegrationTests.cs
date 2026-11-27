@@ -11,6 +11,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.API.Tests.Integration.Monitoring;
 
@@ -149,23 +150,6 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
                     '{severity}', '{"{}"}', true, false, 'undirected', 1, now(), now());
             """);
         return id;
-    }
-
-    private sealed class ListLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
-    {
-        public List<string> Errors { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
-            TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel >= Microsoft.Extensions.Logging.LogLevel.Error)
-                Errors.Add(formatter(state, exception));
-        }
     }
 
     private static async Task SeedRuleAsync(

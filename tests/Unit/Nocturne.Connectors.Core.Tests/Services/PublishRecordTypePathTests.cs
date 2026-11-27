@@ -9,6 +9,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 using Xunit;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
 
@@ -22,24 +23,6 @@ public class PublishRecordTypePathTests
 
     [ConnectorRegistration("Probe", "probe", "PROBE", "Probe")]
     private sealed class TestConfig : BaseConnectorConfiguration;
-
-    /// <summary>Captures the messages the shared publish path logs, which no fixture otherwise sees.</summary>
-    private sealed class RecordingLogger : ILogger<TestConnectorService>
-    {
-        public List<string> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-            => Messages.Add(formatter(state, exception));
-    }
 
     private sealed class PublisherBehaviour
     {
@@ -235,7 +218,7 @@ public class PublishRecordTypePathTests
     {
         // Arrange: the empty path records its zero without logging, so a run over quiet types does
         // not fill the log with "Synced 0" lines it has nothing to say about.
-        var logger = new RecordingLogger();
+        var logger = new ListLogger<TestConnectorService>();
         var active = new HashSet<SyncDataType> { SyncDataType.Glucose, SyncDataType.Boluses };
         var service = new TestConnectorService((_, _) => Task.CompletedTask, logger);
         var result = new SyncResult { Success = true };
@@ -255,7 +238,7 @@ public class PublishRecordTypePathTests
     {
         // Arrange: the log says "Synced", so it must not appear for a batch the publisher refused —
         // a triage reading it would take the records for stored.
-        var logger = new RecordingLogger();
+        var logger = new ListLogger<TestConnectorService>();
         var active = new HashSet<SyncDataType> { SyncDataType.Boluses };
         var service = new TestConnectorService((_, _) => Task.CompletedTask, logger);
         var result = new SyncResult { Success = true };

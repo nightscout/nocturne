@@ -22,6 +22,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
 
@@ -645,7 +646,7 @@ public class ConnectorBackgroundServiceTests
     {
         var (tenant, db) = Tenant();
         using var _ = db;
-        var logger = new MessageRecordingLogger();
+        var logger = new ListLogger();
         var budget = new ConnectorSyncBudget();
         var clock = new FakeTimeProvider(Start);
         var configServiceMock = BuildEnabledConfigMock();
@@ -717,7 +718,7 @@ public class ConnectorBackgroundServiceTests
     {
         var (tenant, db) = Tenant();
         using var _ = db;
-        var logger = new MessageRecordingLogger();
+        var logger = new ListLogger();
         var configServiceMock = BuildEnabledConfigMock();
         var sut = new TestConnectorBackgroundService(
             new SyncResult { Success = true },
@@ -829,7 +830,7 @@ public class ConnectorBackgroundServiceTests
         var guard = new TenantRunGuard();
         using var held = guard.TryAcquire(tenant, "testconnector");
         held.Should().NotBeNull();
-        var logger = new MessageRecordingLogger();
+        var logger = new ListLogger();
         var sut = new TestConnectorBackgroundService(new SyncResult { Success = true }, logger, runGuard: guard);
 
         var outcome = await RunAsync(sut, BuildServiceProvider(db, BuildEnabledConfigMock(), Enabled()), tenant);
@@ -985,7 +986,7 @@ public class ConnectorBackgroundServiceTests
         var ledger = new Mock<IJobLedger>();
         ledger.Setup(l => l.RequestAsync(It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("database down"));
-        var logger = new MessageRecordingLogger();
+        var logger = new ListLogger();
         var sut = new TestConnectorBackgroundService(new SyncResult(), logger, ledger: ledger.Object);
 
         sut.Invoking(s => s.RequestImmediateSync(Guid.NewGuid())).Should().NotThrow();
@@ -999,7 +1000,7 @@ public class ConnectorBackgroundServiceTests
     [Fact]
     public async Task ListenerNeedsStart_DeadClient_EvictsDisposesAndLogs()
     {
-        var logger = new MessageRecordingLogger();
+        var logger = new ListLogger();
         var sut = new ListenerHelperService(logger);
         var tenantId = Guid.NewGuid();
         var client = new FakeListenerClient { IsAlive = false };
@@ -1020,7 +1021,7 @@ public class ConnectorBackgroundServiceTests
     [Fact]
     public async Task ListenerNeedsStart_LiveClient_LeavesItRegistered()
     {
-        var logger = new MessageRecordingLogger();
+        var logger = new ListLogger();
         var sut = new ListenerHelperService(logger);
         var tenantId = Guid.NewGuid();
         var client = new FakeListenerClient { IsAlive = true };
@@ -1078,32 +1079,6 @@ public class ConnectorBackgroundServiceTests
 
         public Task<bool> ListenerNeedsStartAsync(Guid tenantId)
             => ListenerNeedsStartAsync(Clients, tenantId, "test-tenant", c => c.IsAlive, c => c.DisposeAsync());
-    }
-
-    /// <summary>Records formatted log messages so tests can assert on what was reported.</summary>
-    private sealed class MessageRecordingLogger : ILogger
-    {
-        private readonly List<string> _messages = [];
-
-        public IReadOnlyList<string> Messages
-        {
-            get { lock (_messages) return _messages.ToList(); }
-        }
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            lock (_messages)
-                _messages.Add(formatter(state, exception));
-        }
     }
 
     private sealed class TestConfigLoader(TestConnectorConfig config, Action? onLoad = null, Exception? failure = null)

@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
-using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;

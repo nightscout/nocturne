@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Identity;
-using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;

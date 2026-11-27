@@ -68,15 +68,11 @@ public class AlertDeliveryServiceStoreFailureTests
                 NullLogger<DeviceActionProvider>.Instance, TimeProvider.System))
             .BuildServiceProvider();
 
-        return new AlertDeliveryService(
+        return DeliveryServices.Build(
             _factory.AsNocturneFactory(),
-            members.Object,
             SettableTenantAccessor.Resolved(Tenant),
-            Mock.Of<ISignalRBroadcastService>(),
-            Mock.Of<IEngineAlarmRelay>(),
-            services,
-            NullLogger<AlertDeliveryService>.Instance,
-            TimeProvider.System);
+            providers: services,
+            members: members.Object);
     }
 
     private static AlertPayload Payload(Guid instanceId) => new()

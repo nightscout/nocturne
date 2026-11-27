@@ -13,6 +13,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.SetupHub;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Jobs;

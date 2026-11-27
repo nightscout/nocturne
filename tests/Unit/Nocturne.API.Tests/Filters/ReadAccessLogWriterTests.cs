@@ -7,7 +7,7 @@ using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 using Nocturne.API.Filters;
 using Nocturne.API.Services.Audit;
-using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;

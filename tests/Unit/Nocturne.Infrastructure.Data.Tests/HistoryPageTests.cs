@@ -5,6 +5,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.Infrastructure.Data.Tests;
 
@@ -19,7 +20,7 @@ public class HistoryPageTests : IDisposable
     private static readonly DateTime Base = new(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
 
     private readonly NocturneDbContext _context;
-    private readonly RecordingLogger _logger = new();
+    private readonly ListLogger _logger = new();
 
     public HistoryPageTests()
     {
@@ -42,7 +43,7 @@ public class HistoryPageTests : IDisposable
         var first = await PageAsync(CursorMills(Base.AddMilliseconds(-1)), limit: 3);
 
         first.Select(e => e.Id).Should().BeEquivalentTo(ids);
-        _logger.Messages.Should().ContainSingle(m => m.Level == LogLevel.Warning && m.Text.Contains("millisecond"));
+        _logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning && e.Message.Contains("millisecond"));
 
         var cursor = first.Max(e => e.Timestamp.ToMills());
         var second = await PageAsync(cursor, limit: 3);
@@ -139,21 +140,4 @@ public class HistoryPageTests : IDisposable
     }
 
     private static long CursorMills(DateTime value) => value.ToMills();
-
-    private sealed class RecordingLogger : ILogger
-    {
-        public List<(LogLevel Level, string Text)> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter) =>
-            Messages.Add((logLevel, formatter(state, exception)));
-    }
 }

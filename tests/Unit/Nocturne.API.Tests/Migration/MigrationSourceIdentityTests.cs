@@ -24,6 +24,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.API.Tests.Migration;
 

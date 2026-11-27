@@ -28,6 +28,7 @@ using Nocturne.Infrastructure.Shared.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.API.Tests.Services.Platform.InstanceKey;
 
@@ -44,7 +45,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
     private readonly List<InAppNotification> _active = [];
     private readonly List<(string UserId, string Type, string SourceId, NotificationArchiveReason Reason)> _archived = [];
     private readonly Dictionary<Guid, string[]> _owners = [];
-    private readonly ListLogger _log = new();
+    private readonly ListLogger<InstanceKeyChangeService> _log = new();
     private ISecretEncryptionService _key;
     private string? _failFor;
     private readonly ServiceProvider _provider;
@@ -606,22 +607,6 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
                 return inner.CreateDbContext();
             Failed = true;
             throw failure;
-        }
-    }
-
-    private sealed class ListLogger : ILogger<InstanceKeyChangeService>
-    {
-        public List<(LogLevel Level, string Message)> Entries { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            lock (Entries)
-                Entries.Add((logLevel, formatter(state, exception)));
         }
     }
 }

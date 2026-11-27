@@ -314,15 +314,11 @@ public class AlertDeliveryTimeoutTests
             .AddSingleton(ChatBot(new NeverAnswers(), chatBotTimeout))
             .BuildServiceProvider();
 
-        var service = new AlertDeliveryService(
+        var service = DeliveryServices.Build(
             db.AsNocturneFactory(),
-            Mock.Of<ITenantMembershipRepository>(),
             SettableTenantAccessor.Resolved(Tenant),
-            Mock.Of<ISignalRBroadcastService>(),
-            Mock.Of<IEngineAlarmRelay>(),
-            services,
-            NullLogger<AlertDeliveryService>.Instance,
-            TimeProvider.System);
+            providers: services,
+            members: Mock.Of<ITenantMembershipRepository>());
 
         return new Seam(service, instance.Id, db);
     }

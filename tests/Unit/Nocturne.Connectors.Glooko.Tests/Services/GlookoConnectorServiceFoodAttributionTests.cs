@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Tests.Shared.Connectors;
+using Nocturne.Tests.Shared.Logging;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -150,7 +151,7 @@ public class GlookoConnectorServiceFoodAttributionTests
 
         public Mock<IMealMatchLinker> Linker { get; } = new();
 
-        public MessageLogger<GlookoConnectorService> Log { get; } = new();
+        public ListLogger<GlookoConnectorService> Log { get; } = new();
 
         public void AcceptMatchReports(AcceptMatchOutcome outcome) =>
             Linker

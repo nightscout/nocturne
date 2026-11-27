@@ -9,6 +9,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Nightscout;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
+using Nocturne.Tests.Shared.Logging;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -55,9 +56,9 @@ public class NightscoutClientRequestLoggingTests
         lines.Should().Contain(line => line.Contains(Secret));
     }
 
-    private static async Task<List<string>> SendThroughAsync(string client)
+    private static async Task<IReadOnlyList<string>> SendThroughAsync(string client)
     {
-        var capture = new CapturingLoggerProvider();
+        var capture = new ListLoggerProvider();
         var services = new ServiceCollection();
         services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Trace).AddProvider(capture));
         services.AddMigrationServices();
@@ -83,44 +84,12 @@ public class NightscoutClientRequestLoggingTests
         using var response = await http.GetAsync($"https://ns.example.com/{Secret}/api/v1/status.json?token={Token}");
         response.EnsureSuccessStatusCode();
 
-        return capture.Lines;
+        return capture.Logger.Text;
     }
 
     private sealed class Answering : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
             Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK));
-    }
-
-    /// <summary>Records every message and every scope, since the factory's request scope names the URI too.</summary>
-    private sealed class CapturingLoggerProvider : ILoggerProvider
-    {
-        public List<string> Lines { get; } = [];
-
-        public ILogger CreateLogger(string categoryName) => new Capturing(Lines);
-
-        public void Dispose()
-        {
-        }
-
-        private sealed class Capturing(List<string> lines) : ILogger
-        {
-            public IDisposable? BeginScope<TState>(TState state) where TState : notnull
-            {
-                lock (lines)
-                    lines.Add(state.ToString() ?? string.Empty);
-                return null;
-            }
-
-            public bool IsEnabled(LogLevel logLevel) => true;
-
-            public void Log<TState>(
-                LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-                Func<TState, Exception?, string> formatter)
-            {
-                lock (lines)
-                    lines.Add(formatter(state, exception));
-            }
-        }
     }
 }

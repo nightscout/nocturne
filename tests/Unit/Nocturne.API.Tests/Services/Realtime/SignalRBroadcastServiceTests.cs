@@ -8,7 +8,7 @@ using Nocturne.API.Hubs;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
-using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;

@@ -17,6 +17,7 @@ using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Audit;
@@ -126,10 +127,7 @@ public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
         /// <summary>Runs as each latest reading is read.</summary>
         public Action? OnLatestRead { get; set; }
 
-        public List<string> Warnings { get; } = [];
-
-        /// <summary>The messages logged at error or above; each is in <see cref="Warnings"/> too.</summary>
-        public List<string> Errors { get; } = [];
+        public ListLogger<FlagFactReads> Log { get; } = new();
 
         /// <summary>When set, each glucose read waits on it before it answers.</summary>
         public Func<Task>? DuringGlucoseRead { get; set; }
@@ -197,7 +195,7 @@ public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
 
             var root = services.BuildServiceProvider();
             Request = root.CreateScope().ServiceProvider;
-            Reads = new FlagFactReads(root.GetRequiredService<IServiceScopeFactory>(), Time, new ListLogger<FlagFactReads>(Warnings, Errors),
+            Reads = new FlagFactReads(root.GetRequiredService<IServiceScopeFactory>(), Time, Log,
                 limit > 0 ? limit : Environment.ProcessorCount);
             Validator = new ReportSpecValidator(ReportSpecValidatorTests.Registry, Time);
             Evaluator = For(Viewer);
@@ -756,7 +754,7 @@ public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
         var (judged, _) = await Harness.JudgeOnceAsync(harness.Evaluator, [person], conditions, false, CancellationToken.None);
 
         judged.Single().State.Should().Be(FlagPersonState.Failed);
-        harness.Errors.Should().ContainSingle();
+        harness.Log.Errors.Should().ContainSingle();
     }
 
     [Fact]
@@ -1011,7 +1009,7 @@ public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
         judged[0].Judgements.Single().Outcome.Should().Be(FlagOutcome.Matched);
         again[1].State.Should().Be(FlagPersonState.Failed, "the failure is kept, so the person is not read again on every call");
         harness.GlucoseReads.Should().Be(2);
-        harness.Errors.Should().ContainSingle("the failure is logged once for the keep it makes");
+        harness.Log.Errors.Should().ContainSingle("the failure is logged once for the keep it makes");
         (await harness.AuditRowsAsync()).Should().ContainSingle().Which.TenantId.Should().Be(served.Tenant.Id);
     }
 
@@ -1104,24 +1102,5 @@ public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
         backgroundLatest.Should().Be(0);
         coldAndBackgroundTrips.Should().Be(people * 3, "the cold pass's latest reading, and per person in the background: the readings and the time zone");
         warmTrips.Should().Be(people, "a kept period fact reads nothing; the live fact is judged on the overview's latest reading");
-    }
-
-    private sealed class ListLogger<T>(List<string> warnings, List<string> errors) : ILogger<T>
-    {
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel < LogLevel.Warning)
-                return;
-            lock (warnings)
-            {
-                warnings.Add(formatter(state, exception));
-                if (logLevel >= LogLevel.Error)
-                    errors.Add(formatter(state, exception));
-            }
-        }
     }
 }

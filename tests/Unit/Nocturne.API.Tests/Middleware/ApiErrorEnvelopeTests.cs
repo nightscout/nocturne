@@ -10,7 +10,7 @@ using Moq;
 using Nocturne.API.Middleware;
 using Nocturne.API.Services.Health;
 using Nocturne.API.Tests.Infrastructure;
-using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Tests.Shared.Logging;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Devices;

@@ -121,7 +121,7 @@ public partial class FlagFactEvaluatorTests
             var (reasons, pending) = await RulesPassAsync(harness, [rule], [person]);
             await harness.Reads.WhenIdleAsync();
             reasons.Single().Should().BeEmpty();
-            seen.Add((minute, pending, reads(), harness.Errors.Count));
+            seen.Add((minute, pending, reads(), harness.Log.Errors.Count));
         }
 
         var again = Enumerable.Range(1, minutes).First(m => TimeSpan.FromMinutes(m) >= life);
