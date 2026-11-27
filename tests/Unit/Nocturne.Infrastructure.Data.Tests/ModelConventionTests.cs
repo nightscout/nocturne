@@ -48,18 +48,34 @@ public class ModelConventionTests
         NocturneDbContext.V4ProfileNamedEntities.Should().BeEquivalentTo(Marked<IProfileScopedEntity>(mapped));
     }
 
+    /// <summary>
+    /// The family is read off the model's timestamped tables, not off the registry it is derived from,
+    /// so a timestamped table the registry lacks is reported here rather than left without its index.
+    /// </summary>
     [Fact]
-    public void TheTimestampIndexedRecords_AreEveryV4RecordButTheTwoSpanTables() =>
-        NocturneDbContext.V4TimeSeriesRecordEntities.Should().BeEquivalentTo(
-            NocturneDbContext.V4LegacyIdRecordEntities.Except([typeof(TempBasalEntity), typeof(ProfileActivationEntity)]),
-            "a new V4 record table gets its legacy id index by its marker, and has to be listed here to get its timestamp index");
+    public void TheTimestampIndexedRecords_AreEveryTimestampedRecordButTheTwoSpanTables()
+    {
+        var timestamped = Marked<IObservationTimestamped>(Model().GetEntityTypes().Select(e => e.ClrType));
+
+        NocturneDbContext.TimestampIndexedEntities.Should().BeEquivalentTo(
+            timestamped.Except([typeof(TempBasalEntity), typeof(ProfileActivationEntity)]),
+            "a timestamped record table gets its timestamp index by its marker, and only a span table is left without it");
+
+        NocturneDbContext.TimestampIndexedEntities.Should().Contain(
+            [typeof(HeartRateEntity), typeof(StepCountEntity), typeof(TherapySettingsEntity), typeof(SensorGlucoseEntity)],
+            "the health series are timestamped records outside the V4 marker, and the profile tables are not event series");
+
+        NocturneDbContext.TimestampIndexedEntities.Should().NotContain(
+            [typeof(TempBasalEntity), typeof(ProfileActivationEntity), typeof(StateSpanEntity), typeof(BodyWeightEntity)],
+            "a span table is indexed on its start, and a table with no observation timestamp has no such column");
+    }
 
     [Fact]
-    public void EveryV4RecordTable_HasANewestFirstTimestampIndex() =>
+    public void EveryTimestampIndexedRecord_HasANewestFirstTimestampIndex() =>
         AssertFamily(
-            NocturneDbContext.V4TimeSeriesRecordEntities,
+            NocturneDbContext.TimestampIndexedEntities,
             "_timestamp",
-            i => Columns(i).SequenceEqual([nameof(IV4TimeSeriesEntity.Timestamp)])
+            i => Columns(i).SequenceEqual([nameof(IObservationTimestamped.Timestamp)])
                 && !i.IsUnique
                 && i.IsDescending is { Count: 0 }
                 && i.GetFilter() is null);

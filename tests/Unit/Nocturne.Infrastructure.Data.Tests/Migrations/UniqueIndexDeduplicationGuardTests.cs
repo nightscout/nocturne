@@ -176,22 +176,21 @@ public class UniqueIndexDeduplicationGuardTests
     /// </summary>
     private static IEnumerable<(int Position, string Table)> UniqueIndexCreations(string up)
     {
-        foreach (var regex in new[] { FluentUniqueIndex, FluentUniqueConstraint })
-            foreach (Match match in regex.Matches(up))
-                yield return (match.Index, MigrationSourceFiles.FluentTable(match.Groups[1].Value));
+        foreach (Match match in FluentUniqueIndex.Matches(up))
+            yield return (match.Index, MigrationSourceFiles.FluentTable(match.Groups[1].Value));
 
-        foreach (var regex in new[] { SqlUniqueIndex, SqlUniqueConstraint, BuilderUniqueIndex })
+        foreach (var regex in new[] { SqlUniqueIndex, BuilderUniqueIndex })
             foreach (Match match in regex.Matches(up))
                 yield return (match.Index, MigrationSourceFiles.ResolveTable(match.Groups[1].Value));
+
+        foreach (var constraint in MigrationSourceFiles.KeyConstraintsIn(up))
+            yield return (constraint.Position, constraint.Table);
     }
 
     private const RegexOptions Sql = RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled;
 
     private static readonly Regex FluentUniqueIndex = new(
         @"\.CreateIndex\s*\(([^;]*?\bunique\s*:\s*true[^;]*?)\)\s*;", RegexOptions.Compiled);
-
-    private static readonly Regex FluentUniqueConstraint = new(
-        @"\.(?:AddUniqueConstraint|AddPrimaryKey)\s*\(([^;]*?)\)\s*;", RegexOptions.Compiled);
 
     private static readonly Regex SqlUniqueIndex = new(
         @"CREATE\s+UNIQUE\s+INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+\S+\s+ON\s+(?:ONLY\s+)?(\S+)",
@@ -206,9 +205,6 @@ public class UniqueIndexDeduplicationGuardTests
 
     private static readonly Regex BuiltUniqueIndexName = new(
         @"ConcurrentIndexBuilder\.BuildUnique\s*\(\s*migrationBuilder\s*,\s*\$?""([^""]+)""", Sql);
-
-    private static readonly Regex SqlUniqueConstraint = new(
-        @"ALTER\s+TABLE\s+(?:ONLY\s+)?(\S+)[^;]*?\bADD\s+CONSTRAINT\b[^;]*?\bUNIQUE\b", Sql);
 
     private static readonly Regex RankedDuplicates = new(
         @"row_number\s*\(\s*\)\s*over\s*\(\s*partition\s+by\b", Sql);

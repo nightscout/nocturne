@@ -604,29 +604,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     internal static readonly Type[] V4LegacyIdRecordEntities = Implementing<IV4Entity>();
 
     /// <summary>
-    /// V4 record tables keyed on <see cref="IObservationTimestamped.Timestamp"/>: the
-    /// <see cref="V4LegacyIdRecordEntities"/> but the span-shaped <see cref="TempBasalEntity"/> and
-    /// <see cref="ProfileActivationEntity"/>, whose span-start indexes are named for the start.
+    /// The record tables that get the newest-first <c>ix_&lt;table&gt;_timestamp</c> index: every
+    /// <see cref="V4RecordTables.All"/> table with an <see cref="IObservationTimestamped.Timestamp"/>
+    /// but <see cref="TempBasalEntity"/> and <see cref="ProfileActivationEntity"/>, whose span-start
+    /// indexes are named for the start. <see cref="StateSpanEntity"/> and <see cref="BodyWeightEntity"/>
+    /// carry no such timestamp and stay out by it.
     /// </summary>
-    internal static readonly Type[] V4TimeSeriesRecordEntities =
-    [
-        typeof(SensorGlucoseEntity),
-        typeof(MeterGlucoseEntity),
-        typeof(CalibrationEntity),
-        typeof(BolusEntity),
-        typeof(BasalInjectionEntity),
-        typeof(CarbIntakeEntity),
-        typeof(BGCheckEntity),
-        typeof(NoteEntity),
-        typeof(DeviceEventEntity),
-        typeof(BolusCalculationEntity),
-        typeof(TherapySettingsEntity),
-        typeof(BasalScheduleEntity),
-        typeof(CarbRatioScheduleEntity),
-        typeof(SensitivityScheduleEntity),
-        typeof(TargetRangeScheduleEntity),
-        .. V4SnapshotEntities,
-    ];
+    internal static readonly Type[] TimestampIndexedEntities =
+    [.. V4RecordTables.All.Select(t => t.Entity)
+        .Where(t => typeof(IObservationTimestamped).IsAssignableFrom(t))
+        .Except([typeof(TempBasalEntity), typeof(ProfileActivationEntity)])];
 
     /// <summary>
     /// The record tables that get the <c>(tenant_id, data_source, timestamp)</c> index: every source-owned

@@ -281,17 +281,17 @@ Know what it actually checks before trusting it:
   red. Widen the migration to the idiom, not the guard to the migration.
 - **Shapes it cannot see**, which review has to catch: `CREATE TABLE IF NOT
   EXISTS` naming a table that already exists, which spoofs the new-table
-  exemption; an unnamed `CREATE UNIQUE INDEX ON …`; a primary key added by raw SQL
-  `ADD CONSTRAINT … PRIMARY KEY`, since only the `AddPrimaryKey` builder call is
-  matched — the rule above is deliberately broader than the guard; and a cleanup
-  that cannot run, e.g. wrapped in `IF false`.
-- **Most of its detection paths redden nothing if they break.** Only the
+  exemption; an unnamed `CREATE UNIQUE INDEX ON …`; and a cleanup that cannot run,
+  e.g. wrapped in `IF false`.
+- **Two of its detection paths redden nothing if they break.** Only the
   `ConcurrentIndexBuilder.BuildUnique` path fires on a live migration the guard
   judges. The fluent `unique: true` `CreateIndex` fires only on a table created in
   the same migration (`AddJobLedger`), which is exempt, and raw-SQL `CREATE UNIQUE
-  INDEX`, `AddUniqueConstraint`/`AddPrimaryKey` and `ALTER TABLE … ADD CONSTRAINT …
-  UNIQUE` have no live example in an `Up` since the baseline. Breaking any of those
-  regexes leaves the suite green. Treat them as unexercised.
+  INDEX` has no live example in an `Up` since the baseline. Breaking either regex
+  leaves the suite green. Treat them as unexercised. The key-constraint shapes are
+  pinned by the self-tests of `ConcurrentIndexBuildGuardTests`, and the raw
+  `ADD CONSTRAINT … PRIMARY KEY USING INDEX` also by
+  `TheGuardSeesTheKeyConstraintsOfARealMigration`, which reads it off a real migration.
 - **A concurrent unique index goes through `ConcurrentIndexBuilder.BuildUnique`**
   (`ConcurrentIndexBuildGuardTests` forbids writing `CREATE UNIQUE INDEX CONCURRENTLY` in a
   migration). The guard reads its table off the `ON <table>` in the definition, and
@@ -301,6 +301,16 @@ Know what it actually checks before trusting it:
   whole build. `ConcurrentIndexBuildGuardTests` fails a plain `CreateIndex` or a named raw
   `CREATE INDEX` on one; a migration that shipped before the guard is named in its allowlist. It
   does not see an unnamed `CREATE INDEX ON …`, or SQL that `Up` takes from outside its own body.
+- **A unique or primary key constraint on a table the migration did not create goes through
+  `ConcurrentIndexBuilder.BuildUnique`, then `ADD CONSTRAINT … USING INDEX`.** The direct forms
+  (`AddUniqueConstraint`, `AddPrimaryKey`, raw `ADD CONSTRAINT … UNIQUE (…)` or `PRIMARY KEY (…)`)
+  build their own index under an `ACCESS EXCLUSIVE` lock that blocks reads too.
+  `ConcurrentIndexBuildGuardTests` fails them, with the created-table exemption and no allowlist,
+  since no migration since the baseline needs one. Both guards read the constraint shapes from
+  `MigrationSourceFiles.KeyConstraintsIn`, which also reads each clause of a multi-clause `ALTER TABLE`
+  and a column added with `UNIQUE` or `PRIMARY KEY`. It does not see an `ADD CONSTRAINT … EXCLUDE`,
+  which builds an index and has no `USING INDEX` form, a clause that follows a `;` inside its
+  statement, or a key after a comma inside a literal or a quoted name (`DEFAULT 'a,b' UNIQUE`). It reads a key word in a column default (`DEFAULT 'UNIQUE'`) as a key.
 
 An index whose table it cannot read off the call — an interpolated `{table}` hole,
 or a loop variable — is reported rather than skipped, so the multi-table loop the

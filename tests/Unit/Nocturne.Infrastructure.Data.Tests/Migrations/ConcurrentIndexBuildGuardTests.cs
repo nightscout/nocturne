@@ -16,6 +16,13 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 /// edits a partial index's filter generates exactly that. A raw <c>CREATE INDEX</c> without
 /// <c>CONCURRENTLY</c> does the same, so both shapes fail the rule.
 /// </para>
+/// <para>
+/// A unique or primary key constraint added to such a table builds an index too, under an
+/// <c>ACCESS EXCLUSIVE</c> lock that blocks reads as well. The fluent <c>AddUniqueConstraint</c> and
+/// <c>AddPrimaryKey</c> and a raw <c>ADD CONSTRAINT … UNIQUE (…)</c> or <c>PRIMARY KEY (…)</c> fail the
+/// rule; building the index with <see cref="ConcurrentIndexBuilder.BuildUnique"/> and attaching it
+/// with <c>ADD CONSTRAINT … USING INDEX</c> passes.
+/// </para>
 /// </summary>
 [Trait("Category", "Unit")]
 public class ConcurrentIndexBuildGuardTests
@@ -53,6 +60,159 @@ public class ConcurrentIndexBuildGuardTests
         // the set, and an empty set is not the allowlist.
         ShippedPlainIndexes.Should().BeSubsetOf(PlainIndexesInAllMigrations(),
             "an allowlist entry that no longer matches is stale and hides a regression");
+    }
+
+    [Fact]
+    public void NoMigrationAddsAKeyConstraintOnAnExistingTableThatBuildsItsOwnIndex()
+    {
+        var offenders = MigrationSourceFiles.All()
+            .SelectMany(f => OwnIndexConstraintsOnExistingTables(MigrationSourceFiles.UpBody(f))
+                .Select(x => $"{MigrationSourceFiles.Name(f)} -> {x}"))
+            .ToList();
+
+        offenders.Should().BeEmpty(
+            "a unique or primary key constraint added to a table the migration did not create builds its "
+            + "index under an ACCESS EXCLUSIVE lock for the whole build, reads blocked too; build the "
+            + "index with ConcurrentIndexBuilder.BuildUnique, then ADD CONSTRAINT ... USING INDEX. "
+            + $"A table reported as '{MigrationSourceFiles.UnresolvedTable}' is one the guard could not "
+            + "read off the call; unroll the loop so the call names the table literally");
+    }
+
+    [Fact]
+    public void TheGuardSeesTheKeyConstraintsOfARealMigration()
+    {
+        // Nothing offends, so a pattern that stopped matching clears the guard above. This migration
+        // attaches a primary key to each table by USING INDEX, which is the shape the guard passes.
+        var attached = MigrationSourceFiles.KeyConstraintsIn(
+                MigrationSourceFiles.UpBody(MigrationSourceFiles.All().Single(f =>
+                    MigrationSourceFiles.Name(f).EndsWith("_ScopeClientIdKeysToTenant", StringComparison.Ordinal))))
+            .ToList();
+
+        attached.Should().ContainSingle().Which.UsesExistingIndex.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TheGuardSeesAFluentKeyConstraintOnAnExistingTableAndNoOtherShape()
+    {
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.AddUniqueConstraint(name: "uq_notes_x", table: "notes", column: "x");""")
+            .Should().Equal("notes");
+
+        OwnIndexConstraintsOnExistingTables("""migrationBuilder.AddPrimaryKey("pk_notes", "notes", "id");""")
+            .Should().Equal(new[] { "notes" }, "a positional call names its table second");
+
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.AddPrimaryKey(name: $"PK_{table}", table: table, column: "id");""")
+            .Should().Equal(new[] { MigrationSourceFiles.UnresolvedTable }, "an unreadable table is reported, not skipped");
+
+        const string created = """
+            migrationBuilder.CreateTable(
+                name: "teams",
+                columns: table => new { id = table.Column<Guid>(nullable: false) });
+
+            migrationBuilder.AddUniqueConstraint(name: "uq_teams_slug", table: "teams", column: "slug");
+            """;
+        OwnIndexConstraintsOnExistingTables(created).Should().BeEmpty("a table the migration creates holds no rows to block");
+    }
+
+    [Fact]
+    public void TheGuardSeesARawKeyConstraintOnAnExistingTableAndNoOtherShape()
+    {
+        OwnIndexConstraintsOnExistingTables("""migrationBuilder.Sql("ALTER TABLE notes ADD CONSTRAINT uq_x UNIQUE (a, b);");""")
+            .Should().Equal("notes");
+
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.Sql("alter table only public.notes add constraint pk_x primary key (id);");""")
+            .Should().Equal(new[] { "notes" }, "a primary key, a schema qualifier and lower case are read the same way");
+
+        OwnIndexConstraintsOnExistingTables("""migrationBuilder.Sql("ALTER TABLE notes ADD PRIMARY KEY (id);");""")
+            .Should().Equal(new[] { "notes" }, "an unnamed constraint builds an index as well");
+
+        OwnIndexConstraintsOnExistingTables("""migrationBuilder.Sql($"ALTER TABLE {table} ADD CONSTRAINT uq_x UNIQUE (a);");""")
+            .Should().Equal(new[] { MigrationSourceFiles.UnresolvedTable }, "an unreadable table is reported, not skipped");
+
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.Sql("ALTER TABLE notes ADD CONSTRAINT uq_x UNIQUE USING INDEX ix_notes_x;");""")
+            .Should().BeEmpty("an attach of an index built concurrently builds nothing");
+
+        OwnIndexConstraintsOnExistingTables(
+                """
+                migrationBuilder.Sql($"ALTER TABLE {table} DROP CONSTRAINT \"PK_{table}\", ADD CONSTRAINT \"PK_{table}\" PRIMARY KEY USING INDEX pk_{table}_tenant_id_id;");
+                """)
+            .Should().BeEmpty("swapping a primary key for a prebuilt index builds nothing");
+
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.Sql("ALTER TABLE notes ADD CONSTRAINT fk_x FOREIGN KEY (a) REFERENCES teams (id);");""")
+            .Should().BeEmpty("a foreign key builds no index");
+
+        OwnIndexConstraintsOnExistingTables("""migrationBuilder.Sql("ALTER TABLE notes ADD COLUMN x uuid;");""")
+            .Should().BeEmpty();
+
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.Sql("ALTER TABLE notes ADD CONSTRAINT " + name + " UNIQUE (a);");""")
+            .Should().Equal(new[] { "notes" }, "a name built by concatenation does not hide the constraint");
+
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.Sql("ALTER TABLE notes " + "ADD CONSTRAINT uq_x " + "UNIQUE (a);");""")
+            .Should().Equal(new[] { "notes" }, "a statement split across literals does not hide the constraint");
+
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.Sql("ALTER TABLE " + table + " ADD CONSTRAINT uq_x UNIQUE (a);");""")
+            .Should().Equal(new[] { MigrationSourceFiles.UnresolvedTable }, "a table built by concatenation is reported, not skipped");
+
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.Sql("ALTER TABLE notes " + @"ADD CONSTRAINT uq_x UNIQUE (a);");""")
+            .Should().Equal(new[] { "notes" }, "a verbatim second literal does not hide the constraint");
+
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.Sql("ALTER TABLE notes ADD CONSTRAINT \"my uq\" UNIQUE (a);");""")
+            .Should().Equal(new[] { "notes" }, "a quoted name with a space does not hide the constraint");
+
+        OwnIndexConstraintsOnExistingTables(
+                """
+                migrationBuilder.Sql("ALTER TABLE notes ADD CONSTRAINT pk PRIMARY KEY USING INDEX i, ADD CONSTRAINT uq UNIQUE (b);");
+                """)
+            .Should().Equal(new[] { "notes" }, "an attach does not hide a later clause that builds its own index");
+
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.Sql("ALTER TABLE notes ADD COLUMN IF NOT EXISTS x numeric(10, 2) UNIQUE;");""")
+            .Should().Equal(new[] { "notes" }, "a column added with a unique key builds its index");
+
+        OwnIndexConstraintsOnExistingTables("""migrationBuilder.Sql("ALTER TABLE notes ADD x uuid PRIMARY KEY;");""")
+            .Should().Equal(new[] { "notes" }, "COLUMN is optional");
+
+        OwnIndexConstraintsOnExistingTables("""migrationBuilder.Sql("ALTER TABLE notes ADD COLUMN unique_x uuid;");""")
+            .Should().BeEmpty("a column name that contains the keyword is not a key");
+
+        OwnIndexConstraintsOnExistingTables(
+                """migrationBuilder.Sql("ALTER TABLE IF EXISTS ONLY notes ADD CONSTRAINT uq_x UNIQUE (a);");""")
+            .Should().Equal(new[] { "notes" }, "IF EXISTS and ONLY are not the table");
+
+        const string createdIfExists = """
+            migrationBuilder.Sql("CREATE TABLE teams (id uuid, slug text);");
+            migrationBuilder.Sql("ALTER TABLE IF EXISTS teams ADD CONSTRAINT uq_teams_slug UNIQUE (slug);");
+            """;
+        OwnIndexConstraintsOnExistingTables(createdIfExists).Should().BeEmpty("a created table is exempt under IF EXISTS as well");
+
+        const string created = """
+            migrationBuilder.Sql("CREATE TABLE teams (id uuid, slug text);");
+            migrationBuilder.Sql("ALTER TABLE teams ADD CONSTRAINT uq_teams_slug UNIQUE (slug);");
+            """;
+        OwnIndexConstraintsOnExistingTables(created).Should().BeEmpty("a table the migration creates holds no rows to block");
+    }
+
+    /// <summary>
+    /// The table of each unique or primary key constraint in <paramref name="up"/> that builds its own
+    /// index, on a table the same <c>Up</c> does not create.
+    /// </summary>
+    private static IReadOnlyList<string> OwnIndexConstraintsOnExistingTables(string up)
+    {
+        var created = MigrationSourceFiles.TablesCreatedIn(MigrationSourceFiles.WithCommentsBlanked(up));
+
+        return MigrationSourceFiles.KeyConstraintsIn(up)
+            .Where(c => !c.UsesExistingIndex && !created.Contains(c.Table))
+            .Select(c => c.Table)
+            .ToList();
     }
 
     [Fact]
