@@ -2250,7 +2250,6 @@ msgstr "Připnuté"
 msgid "Recent"
 msgstr "Nedávné"
 
-#: src/lib/components/connectors/ConnectorDangerZone.svelte
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 #: src/lib/constants/entry-category-labels.svelte.ts
 msgid "BG checks"
