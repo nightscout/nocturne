@@ -139,7 +139,7 @@ describe("conditionIssuesMessage", () => {
 			"A reading count condition can compare a number of readings or a percent of readings, not both."
 		);
 		expect(conditionIssuesMessage(rejected(400, [issue("field_missing", "count")]))).toBe(
-			"A reading count condition needs a number of readings or a percent of readings to compare."
+			"A reading count condition needs a number of readings or a percent of readings, with a comparison and a value."
 		);
 		expect(conditionIssuesMessage(rejected(400, [issue("invalid_field", "count")]))).toBe(
 			"A number of readings needs a comparison and a whole number, 0 or more."

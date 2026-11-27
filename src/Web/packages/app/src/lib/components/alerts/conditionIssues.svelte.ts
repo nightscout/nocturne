@@ -45,7 +45,7 @@ const ISSUE_MESSAGES: Record<string, string> = {
 	"list_empty:min_of": "A “lowest of” forecast needs at least one curve chosen.",
 	"list_empty:max_of": "A “highest of” forecast needs at least one curve chosen.",
 	"selector_conflict:percent": "A reading count condition can compare a number of readings or a percent of readings, not both.",
-	"field_missing:count": "A reading count condition needs a number of readings or a percent of readings to compare.",
+	"field_missing:count": "A reading count condition needs a number of readings or a percent of readings, with a comparison and a value.",
 	"invalid_field:count": "A number of readings needs a comparison and a whole number, 0 or more.",
 	"invalid_field:percent": "A percent of readings needs a comparison and a number from 0 to 100.",
 	"unknown_value:count": "A number of readings needs a comparison and a whole number, 0 or more.",

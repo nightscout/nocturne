@@ -1486,15 +1486,19 @@ fn comparison(
     };
     inner.report_unknown(|k| k == "operator" || k == "value");
     // A problem inside is reported on `name`, so it says which comparison it is in.
+    // One problem per object: its first, on `name`, so it says which comparison it is in.
     let operand = |key: &str| inner.get(key).ok_or(Reason::FieldMissing(name));
-    let operator = r.ok(operand("operator").and_then(|v| <CmpOp as Operand>::parse(v, name)));
-    let value = r
-        .ok(operand("value").and_then(|v| <Decimal as Operand>::parse(v, name)))
-        .filter(|&value| accepts(value) || r.report(Reason::InvalidField(name)));
-    Some(Some(Comparison {
-        operator: operator?,
-        value: value?,
-    }))
+    let read = operand("operator")
+        .and_then(|v| <CmpOp as Operand>::parse(v, name))
+        .and_then(|operator| {
+            let value = operand("value").and_then(|v| <Decimal as Operand>::parse(v, name))?;
+            if accepts(value) {
+                Ok(Comparison { operator, value })
+            } else {
+                Err(Reason::InvalidField(name))
+            }
+        });
+    r.ok(read).map(Some)
 }
 
 /// `reading`: required, any value.

@@ -1133,6 +1133,10 @@ fn a_count_reads_its_comparisons_as_written() {
         at_leaf("glucose_count", &[Reason::FieldMissing("count")])
     );
     assert_eq!(
+        count(json!({ "count": {} })),
+        at_leaf("glucose_count", &[Reason::FieldMissing("count")])
+    );
+    assert_eq!(
         count(json!({ "count": 3 })),
         at_leaf("glucose_count", &[Reason::InvalidField("count")])
     );
