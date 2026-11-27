@@ -8,7 +8,7 @@
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
   import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
-  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { formatList, formatMediumDateTime } from "#lib/utils/formatting.js";
   import Check from "@lucide/svelte/icons/check";
   import Save from "@lucide/svelte/icons/save";
   import Undo2 from "@lucide/svelte/icons/undo-2";
@@ -56,10 +56,10 @@
       <li>The saved title is "{theirs.title || "(no title)"}". Your title is "{mine.title || "(no title)"}".</li>
     {/if}
     {#if onlyTheirs.length > 0}
-      <li>Only the saved report has these blocks: {onlyTheirs.join(", ")}.</li>
+      <li>Only the saved report has these blocks: {formatList(onlyTheirs, "unit")}.</li>
     {/if}
     {#if onlyMine.length > 0}
-      <li>Only your changes have these blocks: {onlyMine.join(", ")}.</li>
+      <li>Only your changes have these blocks: {formatList(onlyMine, "unit")}.</li>
     {/if}
     {#if otherSettings}
       <li>The blocks have the same names, but their settings are different.</li>

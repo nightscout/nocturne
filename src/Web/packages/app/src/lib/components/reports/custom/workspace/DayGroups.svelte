@@ -5,6 +5,7 @@
   count of days.
 -->
 <script lang="ts">
+  import { formatList } from "#lib/utils/formatting.js";
   import { dayGroupPresetLabel } from "./vocabulary-words.svelte.js";
   import type { ReportResult } from "@nocturne/charts/core";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -18,7 +19,6 @@
   import {
     GROUP_LETTERS,
     dayFilterText,
-    upperFirst,
     weekdaysText,
     type Workspace,
   } from "./workspace.svelte.js";
@@ -163,7 +163,7 @@
                     size="xs"
                     aria-label="Weekdays of group {GROUP_LETTERS[g]}: {weekdaysText(days, ws.vocab.weekdays)}"
                   >
-                    {upperFirst(weekdaysText(days, ws.vocab.weekdays))}
+                    {weekdaysText(days, ws.vocab.weekdays, "heading")}
                   </Button>
                 {/snippet}
               </Popover.Trigger>
@@ -213,7 +213,7 @@
     </ToggleGroup.Root>
     {#each kinds.filter((k, i) => k.reason && kinds.findIndex((x) => x.reason === k.reason) === i) as k (k.id)}
       <p class="text-xs text-muted-foreground">
-        {kinds.filter((x) => x.reason === k.reason).map((x) => x.label).join(", ")}: {k.reason}
+        {formatList(kinds.filter((x) => x.reason === k.reason).map((x) => x.label), "unit")}: {k.reason}
       </p>
     {/each}
     {#if filter.kind === "carbs"}

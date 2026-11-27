@@ -18,6 +18,7 @@
     windowMinutes,
     type DayPart,
   } from "./clock.js";
+  import { pastMidnightText } from "./workspace.svelte.js";
 
   interface Props {
     id: string;
@@ -99,6 +100,6 @@
   </div>
 
   <p class="text-sm tabular-nums" aria-live="polite" data-testid="time-of-day-window">
-    {#if overnight}{minuteLabel(from)} to {minuteLabel(end)}, past midnight{:else}{windowLabel(from, to)}{/if}
+    {#if overnight}{pastMidnightText(minuteLabel(from), minuteLabel(end))}{:else}{windowLabel(from, to)}{/if}
   </p>
 </div>

@@ -5,6 +5,7 @@
   A row only shows when it applies to a signal on the chart.
 -->
 <script lang="ts">
+  import { formatList } from "#lib/utils/formatting.js";
   import { before, removeThenFocus } from "./refocus.js";
   import { signalLabel, leaveOutLabel } from "./vocabulary-words.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -277,7 +278,7 @@
     </div>
     {#if ws.leaveOutMisses.length > 0}
       <p class="pl-22 text-xs text-muted-foreground">
-        {ws.leaveOutMisses.map((id) => signalLabel(id)).join(", ")}: all time is
+        {formatList(ws.leaveOutMisses.map((id) => signalLabel(id)), "unit")}: all time is
         shown. These signals cannot leave time out.
       </p>
     {/if}

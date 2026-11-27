@@ -9,6 +9,7 @@
   (catalogue-source.ts).
 -->
 <script lang="ts">
+  import { formatList } from "#lib/utils/formatting.js";
   import { tick } from "svelte";
   import { getCustomReportSignalAvailability } from "#lib/api/generated/customReports.generated.remote.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -32,12 +33,14 @@
   import {
     daysText,
     lensLabel,
+    lensPhrase,
     rangeLabel,
     searchWords,
     sectionLabel,
     signalDescription,
     signalGroupLabel,
     signalLabel,
+    signalPhrase,
   } from "./vocabulary-words.svelte.js";
   import type { CatalogueEntry } from "./workspace.svelte.js";
 
@@ -230,7 +233,7 @@
             <span id="{key}-about" class="block text-xs text-muted-foreground">
               <span class="block">{signalDescription(id)}</span>
               <span class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-                <span>Views: {lenses.map((l) => lensLabel(l)).join(", ")}</span>
+                <span>Views: {formatList(lenses.map((l) => lensLabel(l)), "unit")}</span>
                 {#if e.upTo !== null}<span>Up to {daysText(e.upTo)}</span>{/if}
                 {#if presence.get(id) === "none"}<span>No data in this range</span>{/if}
                 {#if e.accessReason}<span>{e.accessReason}</span>{/if}
@@ -251,7 +254,7 @@
           size="icon-touch"
           class="shrink-0"
           aria-pressed={isStarred}
-          aria-label={`Star ${signalLabel(id)}`}
+          aria-label={`Star ${signalPhrase(id)}`}
           onclick={() => picks.toggleStar(id)}
           data-star={id}
         >
@@ -267,7 +270,7 @@
           <div class="flex flex-wrap gap-2">
             {#each e.otherLenses as lens (lens)}
               <Button variant="outline" size="touch-sm" onclick={() => switchTo(id, lens)} data-switch={lens}>
-                Switch to {lensLabel(lens)}
+                Switch to {lensPhrase(lens)}
               </Button>
             {/each}
             {#if e.otherLenses.length > 0}

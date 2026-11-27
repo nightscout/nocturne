@@ -7,7 +7,7 @@
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import MealSizeEditor from "./MealSizeEditor.svelte";
-  import { sinceMealText, upperFirst, type Bounds } from "./workspace.svelte.js";
+  import { sinceMealHeading, type Bounds } from "./workspace.svelte.js";
 
   interface Props {
     id: string;
@@ -49,7 +49,7 @@
   >
     {#each CHOICES as c (key(c))}
       <ToggleGroup.Item value={key(c)}>
-        {upperFirst(sinceMealText(c) ?? "")}
+        {sinceMealHeading(c) ?? ""}
       </ToggleGroup.Item>
     {/each}
   </ToggleGroup.Root>

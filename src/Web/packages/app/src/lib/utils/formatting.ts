@@ -160,15 +160,35 @@ export function formatLocale(): string {
   return regionFormat.current || preferredLanguage.current;
 }
 
+type ListType = "conjunction" | "disjunction" | "unit";
+
+function listFormat(type: ListType): Intl.ListFormat {
+  return new Intl.ListFormat(preferredLanguage.current, { style: "long", type });
+}
+
 /**
- * A list as a phrase in the interface language: "a, b, and c" or "a, b, or c". The words belong
- * to the language of the surrounding text, so the regional format does not apply.
+ * A list as a phrase in the interface language: "a, b, and c" or "a, b, or c". The "unit" type is
+ * a list of things that are not alternatives: "a, b, c" in English, where other languages may
+ * add a word before the last item ("a, b und c"). The words belong to the language of the
+ * surrounding text, so the regional format does not apply.
  */
-export function formatList(
-  items: readonly string[],
-  type: "conjunction" | "disjunction" = "conjunction",
-): string {
-  return new Intl.ListFormat(preferredLanguage.current, { style: "long", type }).format(items);
+export function formatList(items: readonly string[], type: ListType = "conjunction"): string {
+  return listFormat(type).format(items);
+}
+
+/** The text `formatList` puts before each item after the first, for the interface to place between items it shows apart. */
+export function listSeparators(items: readonly string[], type: ListType = "unit"): string[] {
+  const separators: string[] = [];
+  let between = "";
+  let itemsSeen = 0;
+  for (const part of listFormat(type).formatToParts(items)) {
+    if (part.type === "element") {
+      if (itemsSeen > 0) separators.push(between);
+      between = "";
+      itemsSeen += 1;
+    } else if (itemsSeen > 0) between += part.value;
+  }
+  return separators;
 }
 
 /** Whether times render in 12-hour form under the viewer's time-format preference. */

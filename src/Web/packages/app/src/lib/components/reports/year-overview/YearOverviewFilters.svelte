@@ -6,7 +6,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
-  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
+  import { dataTypeLabel } from "#lib/utils/data-type-labels.svelte.js";
 
   interface Props {
     disabled?: boolean;
@@ -64,14 +64,14 @@
             {selectedDataSources.length === 0
               ? "All data sources"
               : selectedDataSources.length === 1
-                ? getDataTypeLabel(selectedDataSources[0])
+                ? dataTypeLabel(selectedDataSources[0])
                 : `${selectedDataSources.length} sources`}
           </span>
         </Select.Trigger>
         <Select.Content>
           {#each availableDataSources as source (source)}
             <Select.Item value={source}>
-              {getDataTypeLabel(source)}
+              {dataTypeLabel(source)}
             </Select.Item>
           {/each}
         </Select.Content>
@@ -117,7 +117,7 @@
                   checked={!hiddenDataTypes.has(dataType)}
                   onCheckedChange={() => toggleDataType(dataType)}
                 />
-                {getDataTypeLabel(dataType)}
+                {dataTypeLabel(dataType)}
               </label>
             {/each}
           </div>

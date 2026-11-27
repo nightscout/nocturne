@@ -20,7 +20,7 @@
   import { toDayString } from "#lib/utils/date-range.js";
   import { firstDayOfWeek } from "#lib/components/calendar/calendar-date.js";
   import type { GlucoseUnits } from "#lib/utils/formatting.js";
-  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
+  import { dataTypeLabel } from "#lib/utils/data-type-labels.svelte.js";
   import { yearCalendarBounds } from "./year-bounds";
   import { layoutYear, monthOutlinePath } from "./week-layout";
   import VisibleChart from "./VisibleChart.svelte";
@@ -425,7 +425,7 @@
                           {#each visibleCounts as [key, count] (key)}
                             <div class="flex justify-between gap-4">
                               <span class="text-muted-foreground">
-                                {getDataTypeLabel(key)}
+                                {dataTypeLabel(key)}
                               </span>
                               <span class="font-medium tabular-nums">
                                 {count}

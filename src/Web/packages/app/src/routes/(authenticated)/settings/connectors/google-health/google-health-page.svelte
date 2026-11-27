@@ -29,6 +29,7 @@
   } from "#lib/api/generated/googleHealths.generated.remote.js";
   import {
     connectionOutcome,
+    dataTypeLabel,
     errorMessage,
     knownErrorMessage,
     lookbackSentence,
@@ -38,6 +39,7 @@
   import GoogleHealthCategoryTable from "./GoogleHealthCategoryTable.svelte";
   import GoogleHealthSyncProgress from "./GoogleHealthSyncProgress.svelte";
   import { fresh } from "#lib/api/fresh-query.js";
+  import { formatList } from "#lib/utils/formatting.js";
 
   let status = $state<GoogleHealthStatus | null>(null);
   let importFrom = $state(""),
@@ -255,7 +257,7 @@
       <p>{errorMessage(status.errorCode)}</p>
       <p class="mt-2 text-sm text-muted-foreground">
         Technical code: <code>{status.errorCode}</code>
-        {status.errorDataTypes?.length ? ` · ${status.errorDataTypes.join(", ")}` : ""}
+        {status.errorDataTypes?.length ? ` · ${formatList(status.errorDataTypes.map((key) => dataTypeLabel(key)), "unit")}` : ""}
       </p>
     </div>
   {/if}

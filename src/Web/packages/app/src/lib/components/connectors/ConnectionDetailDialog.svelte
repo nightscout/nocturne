@@ -38,7 +38,7 @@
   import { toast } from "svelte-sonner";
   import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
+  import { dataTypeLabel } from "#lib/utils/data-type-labels.svelte.js";
   import { formatMediumDate, formatNumber } from "#lib/utils/formatting.js";
   import { accessEndDate } from "#lib/components/members/access-end.js";
   import ConnectionLogo from "./ConnectionLogo.svelte";
@@ -174,7 +174,7 @@
       <span aria-hidden="true">&nbsp;&middot;&nbsp;</span>
     {/if}
     <span class="whitespace-nowrap">
-      {getDataTypeLabel(type)}
+      {dataTypeLabel(type)}
       <span class="tabular-nums text-foreground">{formatNumber(count)}</span>
     </span>
   {/each}

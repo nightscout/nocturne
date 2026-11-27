@@ -7,7 +7,7 @@
 <script lang="ts">
   import { before, removeThenFocus } from "./refocus.js";
   import { removeWithUndo } from "./undo.svelte.js";
-  import { signalLabel, familyLabel, markLabel } from "./vocabulary-words.svelte.js";
+  import { signalLabel, signalPhrase, familyLabel, markLabel } from "./vocabulary-words.svelte.js";
   import type { ReportResult } from "@nocturne/charts/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
@@ -28,7 +28,6 @@
   import type { SignalId } from "./catalogue-vocabulary.js";
   import {
     comboLabel,
-    lowerFirst,
     minutesText,
     type Workspace,
   } from "./workspace.svelte.js";
@@ -463,8 +462,8 @@
                       op,
                       label:
                         op === "difference"
-                          ? `Subtract ${lowerFirst(signalLabel(other))}`
-                          : `Divide by ${lowerFirst(signalLabel(other))}`,
+                          ? `Subtract ${signalPhrase(other)}`
+                          : `Divide by ${signalPhrase(other)}`,
                       reason: ws.combineReason(id, other, op),
                     }))}
                     <li class="space-y-1">
@@ -498,7 +497,7 @@
         size="sm"
         onclick={() =>
           removeChip(`[data-signal-chip="${id}"]`, () =>
-            removeWithUndo(ws, `Nocturne removed ${signalLabel(id)} from the chart.`, () => ws.toggleSignal(id), () => ws.placeSignal(id))
+            removeWithUndo(ws, `Nocturne removed ${signalPhrase(id)} from the chart.`, () => ws.toggleSignal(id), () => ws.placeSignal(id))
           )}
       >
         Remove from chart

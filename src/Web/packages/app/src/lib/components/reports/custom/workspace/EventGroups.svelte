@@ -36,8 +36,7 @@
     boundsText,
     fromDisplay,
     toDisplay,
-    sinceMealText,
-    upperFirst,
+    sinceMealHeading,
     weekdaysText,
     type ConditionKind,
     type Moment,
@@ -63,29 +62,66 @@
   const NARROWINGS: {
     kind: Narrowing;
     label: string;
+    phrase: string;
     meal: boolean;
     condition?: ConditionKind;
   }[] = [
-    { kind: "timeOfDay", label: "Time of day", meal: false },
-    { kind: "weekdays", label: "Weekdays", meal: false },
-    { kind: "foods", label: "Food", meal: true },
-    { kind: "foodCategory", label: "Food category", meal: true },
-    { kind: "grams", label: "Meal size", meal: true },
+    {
+      kind: "timeOfDay",
+      label: "Time of day",
+      // @wc-include
+      phrase: "time of day",
+      meal: false,
+    },
+    {
+      kind: "weekdays",
+      label: "Weekdays",
+      // @wc-include
+      phrase: "days of the week",
+      meal: false,
+    },
+    {
+      kind: "foods",
+      label: "Food",
+      // @wc-include
+      phrase: "food",
+      meal: true,
+    },
+    {
+      kind: "foodCategory",
+      label: "Food category",
+      // @wc-include
+      phrase: "food category",
+      meal: true,
+    },
+    {
+      kind: "grams",
+      label: "Meal size",
+      // @wc-include
+      phrase: "meal size",
+      meal: true,
+    },
     {
       kind: "minutesSinceMeal",
       label: "Time since the last carbs",
+      // @wc-include
+      phrase: "time since the last carbs",
       meal: false,
       condition: "minutesSinceMeal",
     },
     {
       kind: "startGlucose",
       label: "Glucose at the event",
+      // @wc-include
+      phrase: "glucose at the event",
       meal: false,
       condition: "startGlucose",
     },
     {
       kind: "insulinOnBoard",
       label: "Insulin on board at the event",
+      // @wc-include
+      phrase: "insulin on board at the event",
       meal: false,
       condition: "insulinOnBoard",
     },
@@ -223,8 +259,7 @@
           ? windowLabel(moment.timeOfDay.fromMinute, moment.timeOfDay.toMinute)
           : "";
       case "weekdays": {
-        const text = weekdaysText(moment.weekdays ?? [], ws.vocab.weekdays);
-        return text.charAt(0).toUpperCase() + text.slice(1);
+        return weekdaysText(moment.weekdays ?? [], ws.vocab.weekdays, "heading");
       }
       case "foods":
         return moment.foods && moment.foods.length > 0
@@ -243,9 +278,9 @@
         return "Any size";
       }
       case "minutesSinceMeal":
-        return upperFirst(
-          sinceMealText(moment.minutesSinceMeal) ??
-            "Time since the last carbs: not set"
+        return (
+          sinceMealHeading(moment.minutesSinceMeal) ??
+          "Time since the last carbs: not set"
         );
       case "startGlucose": {
         const text = boundsText(
@@ -265,6 +300,10 @@
 
   function label(kind: Narrowing): string {
     return NARROWINGS.find((n) => n.kind === kind)!.label;
+  }
+
+  function phrase(kind: Narrowing): string {
+    return NARROWINGS.find((n) => n.kind === kind)!.phrase;
   }
 </script>
 
@@ -470,9 +509,7 @@
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  aria-label="Remove {label(
-                    kind
-                  ).toLowerCase()} from group {LETTERS[i]}"
+                  aria-label="Remove {phrase(kind)} from group {LETTERS[i]}"
                   onclick={() => removeNarrowing(i, moment, kind)}
                 >
                   <X aria-hidden="true" />

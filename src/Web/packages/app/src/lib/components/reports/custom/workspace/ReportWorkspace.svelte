@@ -6,6 +6,7 @@
   report is at a limit.
 -->
 <script lang="ts">
+  import { formatList } from "#lib/utils/formatting.js";
   import { onDestroy, type Snippet } from "svelte";
   import { runCustomReport } from "#lib/api/generated/customReports.generated.remote.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -65,8 +66,10 @@
   function refused(): string | null {
     const block = report.blocks.find((b) => (runners[b.key]?.refusalOf(report.previewSpec(b)) ?? []).length > 0);
     if (!block) return null;
-    const name = report.blockTitle(block).trim() || KIND_NAMES[shownKind(block)].toLowerCase();
-    return `Change "${name}" first. The report engine cannot run its settings.`;
+    const name = report.blockTitle(block).trim();
+    return name
+      ? `Change "${name}" first. The report engine cannot run its settings.`
+      : KIND_CHANGE_FIRST[shownKind(block)];
   }
 
   /** Removes a block, with a toast that can put it back where it was. */
@@ -79,7 +82,7 @@
     delete runners[key];
     report.remove(key);
     offerUndo(
-      name ? `Nocturne removed "${name}".` : `Nocturne removed the ${KIND_NAMES[shownKind(block)].toLowerCase()}.`,
+      name ? `Nocturne removed "${name}".` : KIND_REMOVED[shownKind(block)],
       () => report.restoreBlock(block, at)
     );
   }
@@ -95,6 +98,18 @@
     figures: "Figures",
     table: "Table",
     comparison: "Comparison",
+  };
+  const KIND_REMOVED: Record<BlockKind, string> = {
+    chart: "Nocturne removed the chart.",
+    figures: "Nocturne removed the figures.",
+    table: "Nocturne removed the table.",
+    comparison: "Nocturne removed the comparison.",
+  };
+  const KIND_CHANGE_FIRST: Record<BlockKind, string> = {
+    chart: "Change the chart first. The report engine cannot run its settings.",
+    figures: "Change the figures first. The report engine cannot run its settings.",
+    table: "Change the table first. The report engine cannot run its settings.",
+    comparison: "Change the comparison first. The report engine cannot run its settings.",
   };
   const ADDS: { kind: BlockKind; label: string }[] = [
     { kind: "chart", label: "Add a chart" },
@@ -297,7 +312,7 @@
     </div>
     {#each addReasons as r (r.reason)}
       <p class="text-xs text-muted-foreground">
-        {r.labels.join(", ")}: {r.reason}
+        {formatList(r.labels, "unit")}: {r.reason}
       </p>
     {/each}
   </div>

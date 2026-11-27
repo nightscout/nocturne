@@ -25,7 +25,8 @@
   import History from "@lucide/svelte/icons/history";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
+  import { dataTypeLabel } from "#lib/utils/data-type-labels.svelte.js";
+  import { formatList } from "#lib/utils/formatting.js";
 
   let { connectorId }: { connectorId: string } = $props();
 
@@ -72,10 +73,12 @@
   }
 
   const syncedSummary = $derived(
-    dataTypes
-      .filter((type) => countFor(type) > 0)
-      .map((type) => `${getDataTypeLabel(type)}: ${countFor(type)}`)
-      .join(", ")
+    formatList(
+      dataTypes
+        .filter((type) => countFor(type) > 0)
+        .map((type) => `${dataTypeLabel(type)}: ${countFor(type)}`),
+      "unit"
+    )
   );
 
   // The request is answered synchronously, so the only honest progress signal is how long the
@@ -175,7 +178,7 @@
                 data-testid="repull-type-{type}"
               />
               <Label for="repull-type-{type}" variant="option">
-                {getDataTypeLabel(type)}
+                {dataTypeLabel(type)}
               </Label>
             </div>
           {/each}
