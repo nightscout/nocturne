@@ -46,7 +46,7 @@ public sealed class PostgresGoogleHealthGrantHolders(
                 ? GoogleHealthGrantSharing.Shared
                 : GoogleHealthGrantSharing.NotShared;
         }
-        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException or TimeoutException)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             logger.LogWarning(ex,
                 "Google Health could not read who else holds the account of tenant {TenantId}", tenantId);
@@ -84,10 +84,18 @@ public sealed class PostgresGoogleHealthGrantHolders(
             if (GoogleHealthSessionStore.HeldAccount(secrets) is not { } account) return;
             await holders.TryAddAsync(tenantId, account, ct);
         }
-        catch (Exception ex) when (StoreFailure.Is(ex) || ex is JsonException or InvalidOperationException)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             logger.LogWarning(ex,
                 "Google Health could not read the stored session of tenant {TenantId}; its token is not counted as held",
+                tenantId);
+        }
+        catch (JsonException ex)
+        {
+            // The secrets are a JSON column, so a row that does not parse is one tenant's bad data,
+            // and must not stop the adoption of the tenants after it.
+            logger.LogWarning(ex,
+                "The stored session of tenant {TenantId} is not valid JSON; its token is not counted as held",
                 tenantId);
         }
     }

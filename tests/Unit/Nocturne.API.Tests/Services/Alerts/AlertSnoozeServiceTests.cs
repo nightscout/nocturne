@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
@@ -8,6 +9,7 @@ using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Realtime;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Tests.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
@@ -18,6 +20,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -73,7 +76,7 @@ public class AlertSnoozeServiceTests
             .Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SensorGlucose { Timestamp = Now.AddMinutes(-minutesAgo), Mgdl = mgdl, TrendRate = trendRate });
 
-    private AlertSnoozeService CreateService() => new(
+    private AlertSnoozeService CreateService(ILogger<AlertSnoozeService>? logger = null) => new(
         _factory.AsNocturneFactory(),
         SettableTenantAccessor.Resolved(Tenant),
         _repository.Object,
@@ -85,7 +88,7 @@ public class AlertSnoozeServiceTests
         _alarmRelay.Object,
         Mock.Of<IExcursionResolutionHandler>(),
         _time,
-        NullLogger<AlertSnoozeService>.Instance);
+        logger ?? NullLogger<AlertSnoozeService>.Instance);
 
     private sealed record Seeded(Guid RuleId, Guid ExcursionId, Guid InstanceId);
 
@@ -535,13 +538,34 @@ public class AlertSnoozeServiceTests
     }
 
     [Fact]
-    public async Task Resume_still_delivers_when_the_DND_lookup_fails()
+    public async Task Resume_still_delivers_when_the_DND_lookup_cannot_read_the_store()
+    {
+        var seeded = await SeedAsync(lapsed: true);
+        var failure = new NpgsqlException("connection refused");
+        _enricher
+            .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        var logger = new ListLogger<AlertSnoozeService>();
+
+        (await CreateService(logger).ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
+
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.Exception == failure);
+    }
+
+    [Theory]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(NullReferenceException))]
+    [InlineData(typeof(TimeoutException))]
+    public async Task Resume_lets_a_defect_in_the_DND_lookup_reach_the_caller(Type defect)
     {
         var seeded = await SeedAsync(lapsed: true);
         _enricher
             .Setup(e => e.EnrichAsync(It.IsAny<SensorContext>(), It.IsAny<IEnumerable<AlertRuleSnapshot>>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("synthetic"));
+            .ThrowsAsync((Exception)Activator.CreateInstance(defect)!);
 
-        (await CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None)).Should().BeTrue();
+        var resume = () => CreateService().ResumeAsync(seeded.InstanceId, CancellationToken.None);
+
+        await resume.Should().ThrowAsync<Exception>().Where(e => e.GetType() == defect);
+        _delivery.VerifyNoOtherCalls();
     }
 }

@@ -52,7 +52,7 @@ internal static class ReportReadAudit
             if (!config.ReadAuditEnabled)
                 return false;
         }
-        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException or TimeoutException)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(ReportReadAudit))
                 .LogWarning(ex, "Could not read the read-audit setting; the report read {What} is not audited", what);

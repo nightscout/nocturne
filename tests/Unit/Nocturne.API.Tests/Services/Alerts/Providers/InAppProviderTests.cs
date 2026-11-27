@@ -1,11 +1,14 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Alerts.Providers;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.ClientDevices;
+using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts.Providers;
@@ -192,5 +195,38 @@ public class InAppProviderTests
             It.IsAny<ResolutionConditions?>(),
             It.IsAny<Dictionary<string, object>?>(),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private void CreationThrows(Exception failure) =>
+        _notification.Setup(n => n.CreateNotificationAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<NotificationCategory?>(),
+                It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<List<NotificationActionDto>?>(),
+                It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+
+    [Theory]
+    [InlineData(typeof(NpgsqlException))]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(NullReferenceException))]
+    public async Task SendAsync_AFailureReachesTheCallerAndIsLoggedByNoOneHere(Type failureType)
+    {
+        var failure = (Exception)Activator.CreateInstance(failureType, "failed")!;
+        CreationThrows(failure);
+        var logger = new ListLogger<InAppProvider>();
+
+        var send = () => new InAppProvider(_notification.Object, logger).SendAsync(Recipient, MakePayload(), CancellationToken.None);
+
+        (await send.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(failure);
+        logger.Entries.Should().BeEmpty("the delivery service logs the failure once");
     }
 }

@@ -84,7 +84,7 @@ internal sealed class EngineAlarmRelay(
             var alarm = Map(payload, useMmol, timeProvider.GetUtcNow())!;
             await broadcastService.BroadcastEngineAlarmAsync(alarm.EventName, alarm.Notify);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             logger.LogError(ex, "Failed to raise the alarm for excursion {ExcursionId}", payload.ExcursionId);
         }
@@ -114,7 +114,7 @@ internal sealed class EngineAlarmRelay(
                 Timestamp = timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
             });
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             logger.LogError(ex, "Failed to decide the all-clear after excursions {ExcursionIds} changed",
                 string.Join(",", changedExcursionIds));

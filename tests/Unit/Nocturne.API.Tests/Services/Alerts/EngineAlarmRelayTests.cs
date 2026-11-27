@@ -1,9 +1,16 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Identity;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -280,5 +287,84 @@ public class EngineAlarmRelayTests
         await _tenant.SeedAsync(AlertRuleSeverity.Info, "Note");
 
         (await _tenant.Relay().HighestAlarmingAsync(CancellationToken.None)).Should().BeNull();
+    }
+
+    private sealed class FailingContexts(Exception failure) : IDbContextFactory<NocturneDbContext>
+    {
+        public NocturneDbContext CreateDbContext() => throw failure;
+    }
+
+    private EngineAlarmRelay RelayOverFailingStore(Exception failure, ListLogger<EngineAlarmRelay> logger) => new(
+        new FailingContexts(failure).AsNocturneFactory(),
+        _tenant.Accessor,
+        Mock.Of<ITenantGlucoseUnits>(),
+        _tenant.Canonical.Object,
+        _tenant.Broadcast.Object,
+        _tenant.Time,
+        logger);
+
+    public static TheoryData<Exception> Defects => new()
+    {
+        new InvalidOperationException("no tenant"),
+        new NullReferenceException(),
+        new TimeoutException(),
+    };
+
+    [Fact]
+    public async Task A_failed_read_of_the_units_is_logged_and_raises_no_alarm()
+    {
+        _tenant.Appearance
+            .Setup(a => a.GetTenantAppearanceAsync(AlarmTestTenant.Tenant, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NpgsqlException("connection refused"));
+        var logger = new ListLogger<EngineAlarmRelay>();
+        var relay = new EngineAlarmRelay(
+            _tenant.Contexts.AsNocturneFactory(), _tenant.Accessor,
+            new TenantGlucoseUnits(_tenant.Accessor, _tenant.Appearance.Object, _tenant.SetupDefaults.Object),
+            _tenant.Canonical.Object, _tenant.Broadcast.Object, _tenant.Time, logger);
+
+        await relay.RaiseAsync(Payload(AlertRuleSeverity.Critical), CancellationToken.None);
+
+        _tenant.Sent.Should().BeEmpty();
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.Exception is NpgsqlException);
+    }
+
+    [Theory]
+    [MemberData(nameof(Defects))]
+    public async Task A_defect_raising_the_alarm_reaches_the_caller(Exception defect)
+    {
+        _tenant.Appearance
+            .Setup(a => a.GetTenantAppearanceAsync(AlarmTestTenant.Tenant, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+
+        var raise = () => _tenant.Relay().RaiseAsync(Payload(AlertRuleSeverity.Critical), CancellationToken.None);
+
+        (await raise.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
+    }
+
+    [Fact]
+    public async Task A_failed_read_of_the_alarms_is_logged_and_sends_no_all_clear()
+    {
+        var logger = new ListLogger<EngineAlarmRelay>();
+
+        await RelayOverFailingStore(new NpgsqlException("connection refused"), logger)
+            .ClearIfQuietAsync([Guid.NewGuid()], CancellationToken.None);
+
+        _tenant.Clears.Should().BeEmpty();
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.Exception is NpgsqlException);
+    }
+
+    [Theory]
+    [MemberData(nameof(Defects))]
+    public async Task A_defect_deciding_the_all_clear_reaches_the_caller(Exception defect)
+    {
+        var closing = await _tenant.SeedAsync(AlertRuleSeverity.Warning, "High");
+        await _tenant.ResolveAsync(closing.ExcursionId);
+        _tenant.Broadcast
+            .Setup(b => b.BroadcastEngineAlarmAsync(EngineAlarmEvents.ClearAlarm, It.IsAny<NotificationBase>()))
+            .ThrowsAsync(defect);
+
+        var clear = () => _tenant.Relay().ClearIfQuietAsync([closing.ExcursionId], CancellationToken.None);
+
+        (await clear.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
     }
 }

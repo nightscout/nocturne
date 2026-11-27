@@ -8,6 +8,7 @@ using Nocturne.API.Hubs;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
@@ -789,15 +790,16 @@ public class SignalRBroadcastServiceTests
 
     /// <summary>
     /// Callers do not wrap a broadcast, so every method of the interface must swallow a failure,
-    /// whether the send fails, the hub cannot hand out its clients, or the scope has no tenant. It
-    /// reflects over the
-    /// interface so a method added without a catch fails here.
+    /// whether the send fails, the hub cannot hand out its clients, or the scope has no tenant, and
+    /// log a failed send at error. It reflects over the interface so a method added without the
+    /// isolation fails here.
     /// </summary>
     [Theory]
     [MemberData(nameof(EveryBroadcastMethod))]
     public async Task EveryBroadcastMethod_SwallowsAHubFailure(string methodName, BroadcastFailure failure)
     {
-        var (service, sends) = ServiceOverFailingHubs(failure);
+        var logger = new ListLogger<SignalRBroadcastService>();
+        var (service, sends) = ServiceOverFailingHubs(failure, logger);
         var method = typeof(ISignalRBroadcastService).GetMethod(methodName)!;
         var arguments = method.GetParameters().Select(p => ArgumentFor(p.ParameterType)).ToArray();
 
@@ -806,9 +808,13 @@ public class SignalRBroadcastServiceTests
         await act.Should().NotThrowAsync();
         if (failure == BroadcastFailure.SendFails)
             sends[0].Should().BeGreaterThan(0, "the method must reach a hub, or this proves nothing");
+        if (failure != BroadcastFailure.NoTenant)
+            logger.Entries.Any(e => e.Level == LogLevel.Error && e.Exception?.Message == "hub down")
+                .Should().BeTrue("a failed broadcast is logged at error");
     }
 
-    private static (SignalRBroadcastService Service, int[] Sends) ServiceOverFailingHubs(BroadcastFailure failure)
+    private static (SignalRBroadcastService Service, int[] Sends) ServiceOverFailingHubs(
+        BroadcastFailure failure, ILogger<SignalRBroadcastService> logger)
     {
         var sends = new int[1];
         var proxy = new Mock<ISingleClientProxy>();
@@ -841,7 +847,7 @@ public class SignalRBroadcastServiceTests
             Hub<OverviewHub>(),
             failure == BroadcastFailure.NoTenant ? new SettableTenantAccessor() : SettableTenantAccessor.Resolved(),
             Options.Create(new JsonHubProtocolOptions()),
-            NullLogger<SignalRBroadcastService>.Instance);
+            logger);
         return (service, sends);
     }
 

@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Services;
+using Npgsql;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -119,6 +120,59 @@ public sealed class GoogleHealthGrantHoldersTests : IDisposable
         Assert.Equal(1, reads);
     }
 
+    private PostgresGoogleHealthGrantHolders HoldersOver(Mock<IGoogleHealthGrantHolderRepository> repository) => new(
+        provider.GetRequiredService<IServiceScopeFactory>(),
+        repository.Object,
+        new TenantRepository(provider.GetRequiredService<INocturneDbContextFactory>()),
+        NullLogger<PostgresGoogleHealthGrantHolders>.Instance);
+
+    private static Mock<IGoogleHealthGrantHolderRepository> RepositoryWhoseReadThrows(Exception failure)
+    {
+        var repository = new Mock<IGoogleHealthGrantHolderRepository>();
+        repository.Setup(r => r.GetRecordedTenantsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<Guid> { First, Second });
+        repository.Setup(r => r.IsHeldByAnotherTenantAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        return repository;
+    }
+
+    [Fact]
+    public async Task A_failed_read_of_the_holders_leaves_the_sharing_undetermined()
+    {
+        var holders = HoldersOver(RepositoryWhoseReadThrows(new NpgsqlException("connection refused")));
+
+        Assert.Equal(GoogleHealthGrantSharing.Undetermined, await holders.SharingAsync(First, "account", default));
+    }
+
+    [Theory]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(NullReferenceException))]
+    [InlineData(typeof(TimeoutException))]
+    public async Task A_defect_reading_the_holders_reaches_the_caller(Type defect)
+    {
+        var holders = HoldersOver(RepositoryWhoseReadThrows((Exception)Activator.CreateInstance(defect)!));
+
+        await Assert.ThrowsAsync(defect, () => holders.SharingAsync(First, "account", default));
+    }
+
+    [Fact]
+    public async Task A_tenant_whose_session_cannot_be_read_from_the_store_is_skipped()
+    {
+        secrets[First] = () => throw new NpgsqlException("connection refused");
+        secrets[Second] = Session("readable");
+
+        Assert.Equal(GoogleHealthGrantSharing.Shared, await Holders().SharingAsync(First, "readable", default));
+    }
+
+    [Fact]
+    public async Task A_defect_reading_a_tenants_session_reaches_the_caller()
+    {
+        secrets[First] = () => throw new InvalidOperationException("no encryption key");
+        secrets[Second] = Session("readable");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Holders().SharingAsync(First, "readable", default));
+    }
+
     [Fact]
     public async Task A_tenant_with_no_session_is_not_adopted()
     {
@@ -130,6 +184,6 @@ public sealed class GoogleHealthGrantHoldersTests : IDisposable
     [Fact]
     public async Task Holding_for_a_tenant_that_does_not_exist_fails_rather_than_dropping_the_hold()
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Holders().HoldAsync(Guid.NewGuid(), "account", default));
+        await Assert.ThrowsAsync<GoogleHealthGrantHolderNotRecordedException>(() => Holders().HoldAsync(Guid.NewGuid(), "account", default));
     }
 }

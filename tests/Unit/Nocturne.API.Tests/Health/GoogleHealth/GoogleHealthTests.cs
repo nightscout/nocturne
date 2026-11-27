@@ -36,6 +36,7 @@ using Nocturne.Infrastructure.Data.Repositories.Health;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Connectors;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 using Xunit;
 using Nocturne.Core.Models.Authorization;
 
@@ -1521,6 +1522,60 @@ public class GoogleHealthTests : IDisposable
         Assert.False(store.Secrets.ContainsKey("refreshToken"));
     }
 
+    private async Task<(GoogleHealthService Service, InMemoryGoogleHealthGrantHolders Holders)> ServiceRefusingASecondAccountAsync(
+        List<string>? revoked = null)
+    {
+        var accounts = 0;
+        var holders = new InMemoryGoogleHealthGrantHolders();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+            "/v1/userinfo" => Json($$"""{"sub":"account-{{++accounts}}"}"""),
+            "/revoke" => Revoked(request, revoked ?? []),
+            _ => Json("{}")
+        });
+        var service = Service(new TestConnectorStore(), handler, Guid.NewGuid(), holders: holders);
+        await ConnectAsync(service);
+        await service.DisconnectAsync(Guid.NewGuid(), default);
+        return (service, holders);
+    }
+
+    [Fact]
+    public async Task A_failed_release_of_the_hold_on_an_unstored_grant_does_not_hide_why_the_sign_in_was_refused()
+    {
+        var (service, holders) = await ServiceRefusingASecondAccountAsync();
+        holders.ReleaseFailure = new NpgsqlException("connection refused");
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => ConnectAsync(service));
+
+        Assert.Equal("account_mismatch", error.Message);
+    }
+
+    [Fact]
+    public async Task A_hold_that_cannot_be_recorded_does_not_keep_an_unstored_grant_live_or_hide_the_refusal()
+    {
+        var revoked = new List<string>();
+        var (service, holders) = await ServiceRefusingASecondAccountAsync(revoked);
+        revoked.Clear();
+        holders.ReleaseFailure = new GoogleHealthGrantHolderNotRecordedException(Guid.NewGuid());
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => ConnectAsync(service));
+
+        Assert.Equal("account_mismatch", error.Message);
+        Assert.Single(revoked);
+    }
+
+    [Theory]
+    [InlineData(typeof(NullReferenceException))]
+    [InlineData(typeof(TimeoutException))]
+    public async Task A_defect_releasing_the_hold_on_an_unstored_grant_reaches_the_caller(Type defect)
+    {
+        var (service, holders) = await ServiceRefusingASecondAccountAsync();
+        holders.ReleaseFailure = (Exception)Activator.CreateInstance(defect)!;
+
+        await Assert.ThrowsAsync(defect, () => ConnectAsync(service));
+    }
+
     [Fact]
     public async Task A_grant_the_cancelled_callback_never_stored_is_revoked()
     {
@@ -1666,7 +1721,7 @@ public class GoogleHealthTests : IDisposable
         var failedTenant = Guid.NewGuid();
         var failedStore = new TestConnectorStore { FailTokenSaves = true };
         var failed = Service(failedStore, Google(revoked, _ => "shared-account"), failedTenant, holders: holders);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => ConnectAsync(failed));
+        await Assert.ThrowsAsync<NpgsqlException>(() => ConnectAsync(failed));
         Assert.DoesNotContain(failedTenant, holders.Holders.Keys);
         revoked.Clear();
         var other = Service(new TestConnectorStore(), Google(revoked, _ => "shared-account"), Guid.NewGuid(), holders: holders);
@@ -2005,7 +2060,7 @@ public class GoogleHealthTests : IDisposable
                     It.IsAny<CancellationToken>()))
                 .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) =>
                 {
-                    if (FailConfigurationSaves) throw new InvalidOperationException("configuration store unavailable");
+                    if (FailConfigurationSaves) throw new NpgsqlException("configuration store unavailable");
                     Store(ConnectorEnabledKey.CarryOver(
                         document.RootElement.GetRawText(), configuration?.RootElement.GetRawText() ?? "{}"));
                     OnSave?.Invoke();
@@ -2027,7 +2082,7 @@ public class GoogleHealthTests : IDisposable
             {
                 ct.ThrowIfCancellationRequested();
                 if (FailTokenSaves && values.ContainsKey("refreshToken"))
-                    throw new InvalidOperationException("secret store unavailable");
+                    throw new NpgsqlException("secret store unavailable");
                 secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
                 if (invalidatesCaches) OnSave?.Invoke();
             }
@@ -2049,7 +2104,7 @@ public class GoogleHealthTests : IDisposable
                 .Callback<string, DateTime?, DateTime?, string?, DateTime?, bool?, CancellationToken>(
                     (_, attempt, success, error, errorAt, healthy, _) =>
                     {
-                        if (FailActivationWrite && healthy == true) throw new InvalidOperationException("health store unavailable");
+                        if (FailActivationWrite && healthy == true) throw new NpgsqlException("health store unavailable");
                         if (response is null) return;
                         if (attempt is not null) response.LastSyncAttempt = attempt;
                         if (success is not null) response.LastSuccessfulSync = success;

@@ -170,20 +170,43 @@ internal sealed class AlertDeliveryService(
 
         var states = await StatesAsync(channels, ct);
 
-        // Hand each persisted row to its provider. Provider failures are caught and recorded
-        // on the delivery row; one bad webhook does not abort the rest of the batch.
         foreach (var (delivery, channel) in deliveries)
+            await DispatchIsolatedAsync(delivery, channel, states, payload, DispatchKind.Send, ct);
+    }
+
+    private enum DispatchKind { Send, TestFire, DryRun }
+
+    /// <summary>
+    /// Hands one delivery to its provider so that no failure of the provider call stops the deliveries
+    /// after it. Every such failure is isolated, a defect included, because the rows are already
+    /// persisted and a provider reports a bad URL or secret as an <see cref="InvalidOperationException"/>,
+    /// which no failure predicate separates from a defect. It is logged at error and, unless the
+    /// delivery is a <see cref="DispatchKind.DryRun"/> with no row, recorded on its row; a store failure
+    /// in that recording is not isolated.
+    /// </summary>
+    private async Task DispatchIsolatedAsync(
+        AlertDeliveryEntity delivery,
+        AlertRuleChannelSnapshot channel,
+        AlertChannelStates states,
+        AlertPayload payload,
+        DispatchKind kind,
+        CancellationToken ct)
+    {
+        try
         {
-            try
+            await DispatchToProviderAsync(delivery, channel, states, payload, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            if (kind == DispatchKind.DryRun)
             {
-                await DispatchToProviderAsync(delivery, channel, states, payload, ct);
+                logger.LogError(ex, "Failed to dispatch dry-run delivery via {ChannelType}", delivery.ChannelType);
+                return;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
-            {
-                logger.LogError(ex, "Failed to dispatch delivery {DeliveryId} via {ChannelType}",
-                    delivery.Id, delivery.ChannelType);
-                await MarkFailedAsync(delivery.Id, ex.Message, ct);
-            }
+
+            logger.LogError(ex, "Failed to dispatch {Kind} delivery {DeliveryId} via {ChannelType}",
+                kind, delivery.Id, delivery.ChannelType);
+            await MarkFailedAsync(delivery.Id, ex.Message, ct);
         }
     }
 
@@ -321,17 +344,7 @@ internal sealed class AlertDeliveryService(
         var notSent = NotSent(channels, states);
         for (var i = 0; i < deliveryRows.Count; i++)
         {
-            var delivery = deliveryRows[i];
-            try
-            {
-                await DispatchToProviderAsync(delivery, channels[i], states, payload, ct);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
-            {
-                logger.LogError(ex, "Test-fire delivery {DeliveryId} via {ChannelType} failed",
-                    delivery.Id, delivery.ChannelType);
-                await MarkFailedAsync(delivery.Id, ex.Message, ct);
-            }
+            await DispatchIsolatedAsync(deliveryRows[i], channels[i], states, payload, DispatchKind.TestFire, ct);
         }
 
         return new AlertTestFire(instance.Id, notSent);
@@ -356,20 +369,13 @@ internal sealed class AlertDeliveryService(
                 continue;
 
             var channel = channels[i];
-            try
+            var fauxDelivery = new AlertDeliveryEntity
             {
-                var fauxDelivery = new AlertDeliveryEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    ChannelType = channel.ChannelType,
-                    Destination = channel.Destination,
-                };
-                await DispatchToProviderAsync(fauxDelivery, channel, states, payload, ct);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
-            {
-                logger.LogWarning(ex, "Test-fire dry-run dispatch via {ChannelType} failed", channel.ChannelType);
-            }
+                Id = Guid.CreateVersion7(),
+                ChannelType = channel.ChannelType,
+                Destination = channel.Destination,
+            };
+            await DispatchIsolatedAsync(fauxDelivery, channel, states, payload, DispatchKind.DryRun, ct);
         }
 
         return notSent;

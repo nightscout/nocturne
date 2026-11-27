@@ -16,8 +16,13 @@ internal sealed class InMemoryGoogleHealthGrantHolders : IGoogleHealthGrantHolde
         return Task.CompletedTask;
     }
 
+    /// <summary>Set to throw this from <see cref="ReleaseAsync"/>.</summary>
+    public Exception? ReleaseFailure { get; set; }
+
     public Task ReleaseAsync(Guid tenantId, CancellationToken ct)
     {
+        if (ReleaseFailure is { } failure)
+            return Task.FromException(failure);
         holders.TryRemove(tenantId, out _);
         return Task.CompletedTask;
     }
