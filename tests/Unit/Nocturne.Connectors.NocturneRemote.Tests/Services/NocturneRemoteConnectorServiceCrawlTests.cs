@@ -546,6 +546,29 @@ public class NocturneRemoteConnectorServiceCrawlTests
         handler.CrawlOf(NocturneRemoteConstants.CarbIntake).Should().NotContain("from=");
     }
 
+    /// <summary>
+    /// An open request, the tenant's "Sync now", is the scheduled catch-up: each family crawls from its
+    /// own resume point rather than the remote's whole history.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_AnOpenRequest_ResumesEachFamilyFromItsOwnPoint()
+    {
+        var stored = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(
+            handler,
+            latestGlucose: stored,
+            latestByType: new Dictionary<SyncDataType, DateTime> { [SyncDataType.Boluses] = stored });
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses] },
+            fixture.Config,
+            CancellationToken.None);
+
+        handler.CrawlOf(NocturneRemoteConstants.SensorGlucose).Should().Contain($"from={stored.AddMinutes(-5):o}");
+        handler.CrawlOf(NocturneRemoteConstants.Boluses).Should().Contain($"from={stored.AddMinutes(-5):o}");
+    }
+
     /// <summary>A window naming no lower bound reads everything the remote holds, past every resume point.</summary>
     [Theory]
     [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]

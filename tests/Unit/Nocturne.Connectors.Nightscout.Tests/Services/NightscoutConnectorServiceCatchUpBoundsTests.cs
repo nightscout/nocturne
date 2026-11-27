@@ -123,6 +123,27 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
     }
 
     /// <summary>
+    /// An open request, the tenant's "Sync now", is the scheduled catch-up: glucose resumes from its
+    /// newest stored reading rather than crawling the whole source.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_AnOpenRequestForGlucose_ResumesFromTheNewestStoredReading()
+    {
+        var latest = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: null, latestGlucose: latest);
+
+        await service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, NewConfig(), CancellationToken.None);
+
+        var lowerBound = handler.RequestsTo("entries").Select(r => r.Split("find[date][$gte]=")).Where(p => p.Length > 1)
+            .Select(p => long.Parse(p[1].Split('&')[0])).Should().ContainSingle().Subject;
+        lowerBound.Should().BeInRange(
+            (latest - TimeSpan.FromDays(1)).ToMills(), latest.ToMills(),
+            "the crawl starts at the newest stored reading, not at the start of the source");
+    }
+
+    /// <summary>
     /// An explicit range is answered as asked, resume points and all: it is the shape a manual
     /// re-import of one window sends, and a bound widened back to the watermark re-crawls
     /// everything between — the whole source, for a family that has stored nothing.

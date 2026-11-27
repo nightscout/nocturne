@@ -78,7 +78,7 @@ public class GoogleHealthConnectorServiceTests
     [Fact]
     public async Task First_live_import_uses_one_clock_snapshot_at_utc_midnight()
     {
-        var now = new DateTimeOffset(2026, 9, 30, 23, 59, 59, TimeSpan.Zero);
+        var now = new DateTimeOffset(2026, 9, 30, 23, 59, 58, TimeSpan.Zero);
         var clock = new MidnightTimeProvider(now);
         var fixture = new Fixture(request => request.RequestUri!.AbsolutePath == "/token"
             ? Json($$"""{"access_token":"access","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""")
@@ -89,10 +89,11 @@ public class GoogleHealthConnectorServiceTests
         var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
 
         Assert.True(result.Success);
-        Assert.Equal(1, clock.Reads);
+        Assert.Equal(2, clock.Reads);
+        var importRead = now.AddSeconds(1);
         fixture.Writer.Verify(writer => writer.BeginReconciliationAsync(
             It.IsAny<IReadOnlyCollection<string>>(),
-            new DateTimeOffset(now.UtcDateTime.Date, TimeSpan.Zero), now,
+            new DateTimeOffset(now.UtcDateTime.Date, TimeSpan.Zero), importRead,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -457,6 +458,39 @@ public class GoogleHealthConnectorServiceTests
             It.Is<DateTimeOffset>(to => to >= now && to <= now.AddSeconds(2)), It.IsAny<CancellationToken>()), Times.Once);
         Assert.False(fixture.ImportFromWasConsumed);
         Assert.False(fixture.State.Resume.ContainsKey(GoogleHealthState.BackfillCursor));
+    }
+
+    /// <summary>
+    /// The worker drives the managed backfill with an open request, which the base runs as the
+    /// scheduled sync: today is refreshed, then one calendar month is backfilled, and the next
+    /// request steps one month further back.
+    /// </summary>
+    [Fact]
+    public async Task An_open_request_takes_the_scheduled_backfill_step()
+    {
+        var requestedFrom = new List<DateTimeOffset>();
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") => CaptureRange(request, requestedFrom.Add),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        }, new FixedTimeProvider(Now));
+        var config = fixture.Configuration();
+        config.ImportFrom = "2000-01-01T00:00:00.0000000+00:00";
+        config.HistoryDays = 7;
+
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, CancellationToken.None);
+
+        Assert.True(result.Success);
+        var today = Now.UtcDateTime.Date;
+        Assert.Equal(today, requestedFrom[0].UtcDateTime.Date);
+        var firstMonth = new DateTime(today.AddDays(-1).Year, today.AddDays(-1).Month, 1);
+        Assert.Equal(firstMonth, requestedFrom[1].UtcDateTime.Date);
+
+        var repeated = await fixture.Service.SyncDataAsync(new SyncRequest(), config, CancellationToken.None);
+
+        Assert.True(repeated.Success);
+        Assert.Equal(firstMonth.AddMonths(-1), requestedFrom[3].UtcDateTime.Date);
     }
 
     [Fact]

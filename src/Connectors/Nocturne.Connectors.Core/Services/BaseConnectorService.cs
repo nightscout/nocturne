@@ -118,6 +118,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             async () =>
             {
                 _pendingReset = request.IsReset ? request : null;
+                using var budget = ArmBackfillBudget(request.IsCatchUp);
                 if (!await EnsureAuthenticatedAsync(config, cancellationToken))
                     return AuthenticationFailedResult();
 
@@ -125,7 +126,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
                     await SignedInAsync(config, cancellationToken);
 
                 var from = request.To is null ? request.From : request.From ?? HistoryStart;
-                return await RunAsync(from, request.To, request.DataTypes, scheduled: false, config, cancellationToken);
+                return await RunAsync(
+                    from, request.To, request.DataTypes, scheduled: request.IsCatchUp, config, cancellationToken);
             });
     }
 
@@ -923,7 +925,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
             "Starting background data sync for {ConnectorSource}",
             ConnectorSource
         );
-        _backfillDeadline = Clock.GetUtcNow() + BackfillBudget;
+        using var budget = ArmBackfillBudget();
         try
         {
             if (!await EnsureAuthenticatedAsync(config, cancellationToken))
@@ -974,19 +976,17 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
                 Errors = { ex.Message }
             };
         }
-        finally
-        {
-            _backfillDeadline = null;
-        }
     }
 
     /// <summary>
     ///     The scheduled run: <paramref name="run"/> syncs with the resume points it is given. The
     ///     default runs every family from its own point. A connector with its own window policy
     ///     overrides this, and only this, to choose the window (<see cref="ResumePoints.StartingAt"/>)
-    ///     and to record what the run covered once it returns.
+    ///     and to record what the run covered once it returns. <paramref name="request"/> names the
+    ///     data types the run covers: a narrowed one covers only some of them.
     /// </summary>
     protected virtual Task<SyncResult> RunScheduledAsync(
+        SyncRequest request,
         ResumePoints resume,
         Func<ResumePoints, Task<SyncResult>> run,
         TConfig config,
@@ -1044,6 +1044,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
         return scheduled
             ? await RunScheduledAsync(
+                Request(resume),
                 resume,
                 points => PerformSyncInternalAsync(Request(points), config, cancellationToken),
                 config,

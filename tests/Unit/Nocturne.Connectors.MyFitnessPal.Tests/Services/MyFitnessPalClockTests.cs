@@ -54,6 +54,27 @@ public class MyFitnessPalClockTests
             .BeEquivalentTo("lookback-day", "later-today");
     }
 
+    /// <summary>An open request is the scheduled catch-up, so it reads what the next poll reads.</summary>
+    [Fact]
+    public async Task Sync_OfAnOpenRequest_ImportsWhatTheScheduledPollImports()
+    {
+        IReadOnlyList<(string, string)> diary =
+        [
+            ("before-window", "2026-07-12"),
+            ("lookback-day", "2026-07-14"),
+            ("later-today", "2026-07-20"),
+        ];
+        var open = new Fixture(new FakeTimeProvider(Now), diary);
+        var scheduled = new Fixture(new FakeTimeProvider(Now), diary);
+
+        await open.Service.SyncDataAsync(new SyncRequest(), open.Config, CancellationToken.None);
+        await scheduled.Service.SyncDataAsync(scheduled.Config, CancellationToken.None);
+
+        scheduled.Imported.Select(e => e.ExternalEntryId).Should().BeEquivalentTo("lookback-day", "later-today");
+        open.Imported.Select(e => e.ExternalEntryId).Should()
+            .BeEquivalentTo(scheduled.Imported.Select(e => e.ExternalEntryId));
+    }
+
     [Theory]
     [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
     public async Task Sync_OfAWindowWithNoLowerBound_ImportsTheWholeDiaryUpToItsEnd(string shape)

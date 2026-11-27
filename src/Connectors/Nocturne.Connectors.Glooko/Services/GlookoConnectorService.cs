@@ -456,13 +456,16 @@ public class GlookoConnectorService
     ///     succeeded, so a failed one is read again next cycle. The walk is recorded only once it has
     ///     succeeded, so a run that stopped at a failed chunk is walked again — after
     ///     <see cref="GlookoConstants.FullWalkRetryInterval"/>, not on every cycle, so a persistently
-    ///     failing window cannot reinstate the per-cycle cost the schedule exists to remove.
+    ///     failing window cannot reinstate the per-cycle cost the schedule exists to remove. The
+    ///     schedule's stamps choose the window of every type, so a run narrowed to some types records
+    ///     none of them: the types it left out are still owed their walk and lookback.
     ///     <para>
     ///     SSV2 resumes every resource from its own cursor and ignores the bound on a scheduled run,
     ///     so it takes the base's points.
     ///     </para>
     /// </remarks>
     protected override async Task<SyncResult> RunScheduledAsync(
+        SyncRequest request,
         ResumePoints resume,
         Func<ResumePoints, Task<SyncResult>> run,
         GlookoConnectorConfiguration config,
@@ -484,12 +487,15 @@ public class GlookoConnectorService
             "[{ConnectorSource}] Scheduled sync reaches back to {From:yyyy-MM-dd} ({Mode})",
             ConnectorSource, from, tier);
 
-        if (tier == WindowTier.FullWalk)
+        var coversEveryType = ResolveActiveTypes(request, config)
+            .SetEquals(ResolveActiveTypes(new SyncRequest(), config));
+
+        if (tier == WindowTier.FullWalk && coversEveryType)
             await RecordStampAsync(GlookoConstants.FullWalkAttemptStamp, now, cancellationToken);
 
         var result = await run(resume.StartingAt(from));
 
-        if (result.Success)
+        if (result.Success && coversEveryType)
         {
             if (tier == WindowTier.FullWalk)
                 await RecordStampAsync(GlookoConstants.FullWalkStamp, now, cancellationToken);

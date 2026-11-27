@@ -231,6 +231,48 @@ public class GoogleHealthWorkerTests
         finally { await worker.StopAsync(default); }
     }
 
+    /// <summary>
+    /// The worker drives the managed backfill with a request naming no bound, which the connector's
+    /// base runs as the scheduled sync. A bound would make the run an explicit range, outside the
+    /// backfill.
+    /// </summary>
+    [Fact]
+    public async Task The_managed_backfill_step_is_requested_with_no_bound()
+    {
+        var tenant = Guid.NewGuid();
+        var coordinator = InMemoryGoogleHealthCoordinator.Create();
+        var sent = new TaskCompletionSource<SyncRequest>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tenants = new Mock<ITenantService>();
+        tenants.Setup(service => service.GetByIdAsync(tenant, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantDetailDto(tenant, "tenant", "Tenant", true, DateTime.UtcNow, []));
+        var sync = new Mock<IConnectorSyncService>();
+        sync.Setup(service => service.TriggerSyncAsync("googlehealth", It.IsAny<SyncRequest>(), It.IsAny<CancellationToken>()))
+            .Returns<string, SyncRequest, CancellationToken>((_, request, _) =>
+            {
+                sent.TrySetResult(request);
+                return Task.FromResult(new SyncResult { Success = true });
+            });
+        var services = new ServiceCollection();
+        services.AddSingleton(tenants.Object);
+        services.AddSingleton(sync.Object);
+        services.AddSingleton(Mock.Of<IConnectorConfigurationService>());
+        services.AddSingleton(ConfiguredPlatform);
+        services.AddScoped<ITenantAccessor, SettableTenantAccessor>();
+        using var provider = services.BuildServiceProvider();
+        using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
+            coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
+        Assert.True(await coordinator.QueueAsync(tenant, 1, default));
+        using var hang = new CancellationTokenSource(Eventually.DefaultPatience);
+        await worker.StartAsync(default);
+        try
+        {
+            var request = await sent.Task.WaitAsync(hang.Token);
+
+            Assert.True(request.IsCatchUp);
+        }
+        finally { await worker.StopAsync(default); }
+    }
+
     [Fact]
     public async Task A_failed_import_is_retried_at_the_next_rescan()
     {

@@ -374,6 +374,26 @@ public class TidepoolConnectorServiceTests
             .And.OnlyContain(q => q.Contains("startDate=2026-03-01T11:45:00.0000000Z"));
     }
 
+    /// <summary>
+    /// An open request is the scheduled catch-up: every type is read from where glucose resumes, not
+    /// from Tidepool's whole history.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_AnOpenRequest_AsksFromTheGlucoseResumePoint()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero));
+        var glucose = new Mock<IGlucosePublisher>();
+        glucose.Setup(g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DateTime(2026, 3, 1, 11, 50, 0, DateTimeKind.Utc));
+        var handler = new TidepoolFakeHandler();
+        var fixture = new ServiceFixture(handler, withPublisher: true, clock: clock, glucose: glucose.Object);
+
+        await fixture.Service.SyncDataAsync(new SyncRequest(), fixture.Config, CancellationToken.None);
+
+        handler.DataQueries.Should().HaveCount(3)
+            .And.OnlyContain(q => q.Contains("startDate=2026-03-01T11:45:00.0000000Z"));
+    }
+
     /// <summary>Tidepool serves its whole history to a query with no start date.</summary>
     [Theory]
     [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]

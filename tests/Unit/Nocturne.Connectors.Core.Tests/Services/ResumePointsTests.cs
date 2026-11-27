@@ -66,11 +66,12 @@ public class ResumePointsTests
         }
 
         protected override Task<SyncResult> RunScheduledAsync(
+            SyncRequest request,
             ResumePoints resume,
             Func<ResumePoints, Task<SyncResult>> run,
             TestConfig config,
             CancellationToken cancellationToken) =>
-            policy is null ? base.RunScheduledAsync(resume, run, config, cancellationToken) : policy(resume, run);
+            policy is null ? base.RunScheduledAsync(request, resume, run, config, cancellationToken) : policy(resume, run);
     }
 
     private static Mock<IConnectorPublisher> Publisher(DateTime? glucose = null, DateTime? treatments = null)

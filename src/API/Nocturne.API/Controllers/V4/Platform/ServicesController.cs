@@ -493,7 +493,7 @@ public class ServicesController : ControllerBase
     /// Trigger a manual sync for a specific connector.
     /// </summary>
     /// <param name="id">Connector ID (e.g., "dexcom", "tidepool")</param>
-    /// <param name="request">Sync request parameters (date range and data types). A null <c>from</c> with a <c>to</c> syncs from the beginning; see <see cref="Nocturne.Connectors.Core.Models.SyncRequest.From"/>.</param>
+    /// <param name="request">Sync request parameters (date range and data types). A null <c>from</c> with a <c>to</c> syncs from the beginning; see <see cref="Nocturne.Connectors.Core.Models.SyncRequest.From"/>. A request with neither runs the scheduled catch-up; see <see cref="Nocturne.Connectors.Core.Models.SyncRequest.IsCatchUp"/>.</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Sync result with success status and details</returns>
     [HttpPost("connectors/{id}/sync")]
