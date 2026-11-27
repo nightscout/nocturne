@@ -142,10 +142,13 @@ describe("conditionIssuesMessage", () => {
 			"A reading count condition needs a number of readings or a percent of readings to compare."
 		);
 		expect(conditionIssuesMessage(rejected(400, [issue("invalid_field", "count")]))).toBe(
-			"A number of readings must be a whole number, 0 or more."
+			"A number of readings needs a comparison and a whole number, 0 or more."
 		);
 		expect(conditionIssuesMessage(rejected(400, [issue("invalid_field", "percent")]))).toBe(
-			"A percent of readings must be from 0 to 100."
+			"A percent of readings needs a comparison and a number from 0 to 100."
+		);
+		expect(conditionIssuesMessage(rejected(400, [issue("unknown_value", "reading")]))).toBe(
+			"A reading count condition needs a comparison and a glucose level for each reading."
 		);
 	});
 
