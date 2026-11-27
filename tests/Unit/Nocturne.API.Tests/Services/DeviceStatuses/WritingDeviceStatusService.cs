@@ -3,7 +3,6 @@ using Moq;
 using Nocturne.API.Services.DeviceStatuses;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.DeviceStatuses;
-using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Models;
 
@@ -19,7 +18,7 @@ internal static class WritingDeviceStatusService
         new DeviceStatusService(
             Mock.Of<IDeviceStatusStore>(),
             decomposer,
-            Mock.Of<IWriteSideEffects>(),
+            Mock.Of<IRecordChangePublisher>(),
             Mock.Of<IDataEventSink<DeviceStatus>>(),
             NullLogger<DeviceStatusService>.Instance);
 }

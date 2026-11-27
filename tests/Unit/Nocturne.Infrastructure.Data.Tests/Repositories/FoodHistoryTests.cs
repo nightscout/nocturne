@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Core.Contracts.V4;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -83,7 +84,7 @@ public class FoodHistoryTests : IDisposable
         var apple = await SeedAsync("apple", Written);
         var cursor = (await _foods.GetFoodModifiedSinceAsync(0, 1000)).CursorMills!.Value;
 
-        (await _foods.DeleteFoodAsync(apple.ToString())).Should().BeTrue();
+        (await _foods.DeleteFoodAsync(apple.ToString(), WriteOrigin.Live)).Should().BeTrue();
 
         var next = await _foods.GetFoodModifiedSinceAsync(cursor, 1000);
         var tombstone = next.Records.Should().ContainSingle().Subject;
@@ -98,7 +99,7 @@ public class FoodHistoryTests : IDisposable
 
         (await _foods.GetFoodByIdAsync(apple.ToString())).Should().BeNull();
         (await _foods.GetFoodAsync()).Should().BeEmpty();
-        (await _foods.DeleteFoodAsync(apple.ToString())).Should().BeFalse();
+        (await _foods.DeleteFoodAsync(apple.ToString(), WriteOrigin.Live)).Should().BeFalse();
     }
 
     [Fact]
@@ -137,9 +138,9 @@ public class FoodHistoryTests : IDisposable
     public async Task RecreatingADeletedFood_RestoresItsRow()
     {
         var apple = await SeedAsync("apple", Written);
-        await _foods.DeleteFoodAsync(apple.ToString());
+        await _foods.DeleteFoodAsync(apple.ToString(), WriteOrigin.Live);
 
-        var restored = await _foods.CreateFoodAsync([new Food { Id = apple.ToString(), Name = "apple", Carbs = 12 }]);
+        var restored = await _foods.CreateFoodAsync([new Food { Id = apple.ToString(), Name = "apple", Carbs = 12 }], WriteOrigin.Live);
 
         restored.Should().ContainSingle().Which.Carbs.Should().Be(12);
         var food = (await _foods.GetFoodByIdAsync(apple.ToString()))!;

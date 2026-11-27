@@ -81,7 +81,7 @@ internal sealed class CapturingRecordChangeSubscriber(BroadcastCapture capture) 
                 capture.Add(new BroadcastEntry("updated", change.RecordType, change.Updated.Count, []));
             if (change.Deleted.Count > 0)
                 capture.Add(new BroadcastEntry(
-                    "deleted", change.RecordType, change.Deleted.Count, [.. change.Deleted.Select(record => record.Id)]));
+                    "deleted", change.RecordType, change.Deleted.Count, [.. change.Deleted.Cast<IV4Record>().Select(record => record.Id)]));
         }
 
         return Task.CompletedTask;

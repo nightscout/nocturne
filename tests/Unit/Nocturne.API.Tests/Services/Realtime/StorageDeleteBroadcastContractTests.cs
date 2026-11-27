@@ -11,7 +11,7 @@ using Moq;
 using Nocturne.API.Hubs;
 using Nocturne.Infrastructure.Data.Repositories.Health;
 using V3DeviceStatusController = Nocturne.API.Controllers.V3.DeviceStatusController;
-using Nocturne.API.Services.Effects;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.API.Services.Health;
 using Nocturne.API.Services.Realtime;
 using Nocturne.API.Services.Treatments;
@@ -27,6 +27,7 @@ using Nocturne.API.Services.Caching;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
+using static Nocturne.API.Tests.TestDoubles.StorageBroadcastCapture;
 
 namespace Nocturne.API.Tests.Services.Realtime;
 
@@ -43,118 +44,22 @@ public class StorageDeleteBroadcastContractTests
     private const string RecordGuid = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
     private static readonly Guid TenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
+    private static Task PublishLiveAsync(StorageBroadcastCapture capture, RecordsChanged batch) =>
+        new LegacyStorageRecordChangeSubscriber(capture.Broadcast).OnChangedAsync(batch, CancellationToken.None);
+
     /// <summary>
-    /// Runs the producers against a real <see cref="SignalRBroadcastService"/> and reads the events
-    /// back as <see cref="JsonHubProtocol"/> writes them. Asserting on anything else — a fresh
-    /// <see cref="JsonSerializer"/> call over the captured object, say — validates a serialization
-    /// no client ever sees.
+    /// A delete of a document no producer sends today, built as every producer builds one, to pin how
+    /// <see cref="StorageDeleteEvent"/> reads the identifier off the document.
     /// </summary>
-    private sealed class BroadcastCapture
-    {
-        private readonly JsonHubProtocolOptions _protocol = new();
-        private readonly Dictionary<string, (string Group, object Data)> _sent = [];
+    private static Task SendDeleteAsync(StorageBroadcastCapture capture, object document) =>
+        capture.Broadcast.BroadcastStorageDeleteAsync(
+            "entries", new StorageDeleteEvent("entries", (document as IProcessableDocument)?.Id, document));
 
-        public ISignalRBroadcastService Broadcast { get; }
-
-        /// <param name="configurePayloadSerializer">
-        /// Reconfigures the serializer the hubs send payloads with, as an app calling
-        /// <c>AddJsonProtocol</c> would.
-        /// </param>
-        public BroadcastCapture(Action<JsonSerializerOptions>? configurePayloadSerializer = null)
-        {
-            configurePayloadSerializer?.Invoke(_protocol.PayloadSerializerOptions);
-
-            Broadcast = new SignalRBroadcastService(
-                StubHub<DataHub>(),
-                StubHub<AlarmHub>(),
-                StubHub<ConfigHub>(),
-                StubHub<AlertHub>(),
-                StubHub<HomeAssistantHub>(),
-                StubHub<OverviewHub>(),
-                SettableTenantAccessor.Resolved(),
-                Options.Create(_protocol),
-                NullLogger<SignalRBroadcastService>.Instance
-            );
-        }
-
-        public JsonElement Delete => Wire("delete");
-
-        public JsonElement Create => Wire("create");
-
-        public JsonElement Update => Wire("update");
-
-        private IHubContext<THub> StubHub<THub>()
-            where THub : Hub
-        {
-            var clients = new Mock<IHubClients>();
-            clients
-                .Setup(c => c.Group(It.IsAny<string>()))
-                .Returns((string group) =>
-                {
-                    var proxy = new Mock<IClientProxy>();
-                    proxy
-                        .Setup(p =>
-                            p.SendCoreAsync(
-                                It.IsAny<string>(),
-                                It.IsAny<object?[]>(),
-                                It.IsAny<CancellationToken>()
-                            )
-                        )
-                        .Callback<string, object?[], CancellationToken>(
-                            (method, args, _) => _sent[method] = (group, args[0]!)
-                        )
-                        .Returns(Task.CompletedTask);
-                    return proxy.Object;
-                });
-
-            var hub = new Mock<IHubContext<THub>>();
-            hub.Setup(h => h.Clients).Returns(clients.Object);
-            return hub.Object;
-        }
-
-        /// <summary>
-        /// The event's bytes on the wire. The first argument of the hub invocation selects the
-        /// SignalR tenant group; the bridge picks the socket.io room off the payload's
-        /// <c>colName</c>. If the two disagree the event is delivered to a room no client of that
-        /// collection has joined.
-        /// </summary>
-        private JsonElement Wire(string method)
-        {
-            _sent.ContainsKey(method).Should().BeTrue($"the producer must broadcast a {method} event");
-            var (group, data) = _sent[method];
-
-            var frame = new JsonHubProtocol(Options.Create(_protocol))
-                .GetMessageBytes(new InvocationMessage(method, [data]))
-                .ToArray();
-            var payload = JsonSerializer
-                .Deserialize<JsonElement>(frame.AsSpan(0, frame.Length - 1)) // trailing 0x1e separator
-                .GetProperty("arguments")[0];
-
-            group
-                .Should()
-                .Be(
-                    TenantAwareHub.FormatTenantGroup(
-                        SettableTenantAccessor.DefaultTenantId.ToString(),
-                        payload.GetProperty("colName").GetString()!
-                    ),
-                    "the SignalR group and the payload's colName select the same audience and must agree"
-                );
-            return payload;
-        }
-    }
-
-    private static WriteSideEffectsService CreateSideEffects(BroadcastCapture capture) =>
-        new(
-            Mock.Of<ITenantCache>(),
-            capture.Broadcast,
-            NullLogger<WriteSideEffectsService>.Instance
-        );
-
-    private static SignalRTreatmentEventSink CreateTreatmentSink(BroadcastCapture capture) =>
+    private static SignalRTreatmentEventSink CreateTreatmentSink(StorageBroadcastCapture capture) =>
         new(capture.Broadcast);
 
     private static ActivityService CreateActivityService(
-        BroadcastCapture capture,
+        StorageBroadcastCapture capture,
         Mock<IStateSpanService> stateSpans,
         Mock<ISleepService> sleep
     ) =>
@@ -170,30 +75,18 @@ public class StorageDeleteBroadcastContractTests
             NullLogger<ActivityService>.Instance
         );
 
-    private static string? Identifier(JsonElement payload) =>
-        payload.GetProperty("identifier").GetString();
-
     /// <summary>
-    /// <see cref="Entry"/> carries an <c>identifier</c> of its own; <see cref="DeviceStatus"/> carries
-    /// none, so its delete falls back to <c>_id</c>. Both coerce, so both send the ObjectId form.
+    /// A <see cref="DeviceStatus"/> carries no <c>identifier</c>, so its delete falls back to its
+    /// <c>_id</c>, which is coerced to the ObjectId form.
     /// </summary>
-    public static TheoryData<string, object> LegacyRecords =>
-        new()
-        {
-            { "entries", new Entry { Id = RecordGuid, Sgv = 120 } },
-            { "devicestatus", new DeviceStatus { Id = RecordGuid } },
-        };
-
-    [Theory]
-    [MemberData(nameof(LegacyRecords))]
-    public async Task WriteSideEffects_SingleDelete_CarriesColNameAndIdentifier(
-        string collection,
-        object record
-    )
+    [Fact]
+    public async Task DeviceStatusDelete_CarriesColNameAndIdentifier()
     {
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
 
-        await CreateSideEffects(capture).OnDeletedAsync(collection, record);
+        await PublishLiveAsync(capture, RecordsChanged.Of<DeviceStatus>(WriteOrigin.Live, deleted: [new DeviceStatus { Id = RecordGuid }]));
+
+        capture.Delete.GetProperty("colName").GetString().Should().Be("devicestatus");
 
         Identifier(capture.Delete).Should().Be(MongoObjectId.Coerce(RecordGuid));
         capture
@@ -205,23 +98,9 @@ public class StorageDeleteBroadcastContractTests
     }
 
     [Fact]
-    public async Task WriteSideEffects_BulkDelete_CarriesColNameAndCountButNoIdentifier()
-    {
-        var capture = new BroadcastCapture();
-
-        await CreateSideEffects(capture).OnBulkDeletedAsync("entries", 17);
-
-        capture.Delete.GetProperty("deletedCount").GetInt64().Should().Be(17);
-        capture
-            .Delete.TryGetProperty("identifier", out _)
-            .Should()
-            .BeFalse("a range delete materialises no ids; clients reconcile it on catch-up");
-    }
-
-    [Fact]
     public async Task TreatmentSink_Delete_CarriesColNameIdentifierAndDoc()
     {
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
 
         await CreateTreatmentSink(capture)
             .OnDeletedAsync(new Treatment { Id = RecordGuid, EventType = "Meal Bolus" }, CancellationToken.None);
@@ -235,34 +114,11 @@ public class StorageDeleteBroadcastContractTests
             .Be("Meal Bolus", "the web client reads the removed record out of doc");
     }
 
-    /// <summary>
-    /// The invariant the whole fix rests on: a client only ever holds the identifier its create
-    /// event delivered, so a delete carrying any other spelling of the same id misses the lookup
-    /// exactly as an empty one does.
-    /// </summary>
-    [Fact]
-    public async Task DeleteIdentifier_EqualsTheCreateIdentifier_ForEntries()
-    {
-        var entry = new Entry { Id = RecordGuid, Sgv = 120 };
-        var capture = new BroadcastCapture();
-        var sideEffects = CreateSideEffects(capture);
-
-        await sideEffects.OnCreatedAsync("entries", new[] { entry });
-        await sideEffects.OnDeletedAsync("entries", entry);
-
-        var doc = capture.Create.GetProperty("doc");
-        doc.GetProperty("_id")
-            .GetString()
-            .Should()
-            .Be(doc.GetProperty("identifier").GetString(), "one record cannot ship two ids");
-        Identifier(capture.Delete).Should().Be(doc.GetProperty("identifier").GetString());
-    }
-
     [Fact]
     public async Task DeleteIdentifier_EqualsTheCreateIdentifier_ForTreatments()
     {
         var treatment = new Treatment { Id = RecordGuid, EventType = "Meal Bolus" };
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
         var sink = CreateTreatmentSink(capture);
 
         await sink.OnCreatedAsync(treatment, CancellationToken.None);
@@ -282,54 +138,19 @@ public class StorageDeleteBroadcastContractTests
     {
         var treatment = new Treatment { Id = RecordGuid, EventType = "Meal Bolus" };
 
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
         await CreateTreatmentSink(capture).OnDeletedAsync(treatment, CancellationToken.None);
 
         Identifier(capture.Delete).Should().Be(RestIdentifier(treatment));
     }
 
     [Fact]
-    public async Task DeleteIdentifier_MatchesTheV3RestProjection_ForEntries()
-    {
-        var entry = new Entry { Id = RecordGuid, Sgv = 120 };
-
-        var capture = new BroadcastCapture();
-        await CreateSideEffects(capture).OnDeletedAsync("entries", entry);
-
-        Identifier(capture.Delete).Should().Be(RestIdentifier(new EntryV3Response(entry)));
-    }
-
-    /// <summary>
-    /// A client that ingests a record over the socket and later reconciles it over REST dedupes on
-    /// the id; AAPS stores whichever <c>identifier</c> delivered the record and looks deletes up by
-    /// it. Every id-bearing key the create event carries must therefore be the id REST serves for the
-    /// same record — a record id kept in a non-uuid <c>LegacyId</c> included, which coerces by hash.
-    /// </summary>
-    [Theory]
-    [InlineData(RecordGuid)]
-    [InlineData("dexcom_1722945600000")]
-    public async Task CreateIds_MatchTheRestProjections_ForEntries(string recordId)
-    {
-        var entry = new Entry { Id = recordId, Sgv = 120 };
-        var capture = new BroadcastCapture();
-
-        await CreateSideEffects(capture).OnCreatedAsync("entries", new[] { entry });
-
-        var v1 = Rest(new EntryV1Response(entry)).GetProperty("_id").GetString();
-        var v3 = RestIdentifier(new EntryV3Response(entry));
-        v1.Should().Be(v3);
-        IdKeys(capture.Create.GetProperty("doc"))
-            .Should()
-            .BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = v3, ["identifier"] = v3 });
-    }
-
-    [Fact]
     public async Task CreateIds_MatchTheRestProjections_ForDeviceStatus()
     {
         var status = new DeviceStatus { Id = RecordGuid, Device = "openaps://phone" };
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
 
-        await CreateSideEffects(capture).OnCreatedAsync("devicestatus", new[] { status });
+        await PublishLiveAsync(capture, RecordsChanged.Of<DeviceStatus>(WriteOrigin.Live, created: [status]));
 
         var v1 = Rest(status).GetProperty("_id").GetString();
         var v3 = RestIdentifier(V3DeviceStatusController.ToDocument(status));
@@ -359,9 +180,9 @@ public class StorageDeleteBroadcastContractTests
     [Fact]
     public async Task DeviceStatusCreate_LeavesOutTheOpenApsKeysTheUploadLeftOut()
     {
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
 
-        await CreateSideEffects(capture).OnCreatedAsync("devicestatus", new[] { AapsUploadWithEmptyOpenAps() });
+        await PublishLiveAsync(capture, RecordsChanged.Of<DeviceStatus>(WriteOrigin.Live, created: [AapsUploadWithEmptyOpenAps()]));
 
         var doc = capture.Create.GetProperty("doc");
         doc.GetProperty("openaps").EnumerateObject().Should().BeEmpty();
@@ -372,9 +193,9 @@ public class StorageDeleteBroadcastContractTests
     [Fact]
     public async Task DeviceStatusUpdate_LeavesOutTheOpenApsKeysTheUploadLeftOut()
     {
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
 
-        await CreateSideEffects(capture).OnUpdatedAsync("devicestatus", AapsUploadWithEmptyOpenAps());
+        await PublishLiveAsync(capture, RecordsChanged.Of<DeviceStatus>(WriteOrigin.Live, updated: [AapsUploadWithEmptyOpenAps()]));
 
         capture.Update.GetProperty("doc").GetProperty("openaps").EnumerateObject().Should().BeEmpty();
         NullProperties(capture.Update.GetProperty("doc")).Should().Equal(DeviceStatusAlwaysWritten);
@@ -383,7 +204,7 @@ public class StorageDeleteBroadcastContractTests
     [Fact]
     public async Task TreatmentSinkCreate_LeavesOutUnsetKeys()
     {
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
 
         await CreateTreatmentSink(capture)
             .OnCreatedAsync(new Treatment { Id = RecordGuid, EventType = "Meal Bolus", Carbs = 30 }, CancellationToken.None);
@@ -418,19 +239,6 @@ public class StorageDeleteBroadcastContractTests
         return found;
     }
 
-    /// <summary>The keys a client could take for the record's own id, under the hub's naming.</summary>
-    private static Dictionary<string, string?> IdKeys(JsonElement doc) =>
-        doc.EnumerateObject()
-            .Where(p => p.Name is "_id" or "id" or "Id" or "identifier" or "Identifier")
-            .ToDictionary(p => p.Name, p => p.Value.GetString());
-
-    /// <summary>A REST projection as the API writes it, under ASP.NET Core's web defaults.</summary>
-    private static JsonElement Rest(object projection) =>
-        JsonSerializer.SerializeToElement(projection, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-
-    private static string? RestIdentifier(object projection) =>
-        Rest(projection).GetProperty("identifier").GetString();
-
     /// <summary>
     /// A record whose two id spellings disagree, to pin which one the delete follows. No shipping
     /// model does this today — <see cref="Treatment"/> and <see cref="Entry"/> coerce both — so the
@@ -452,9 +260,9 @@ public class StorageDeleteBroadcastContractTests
     [Fact]
     public async Task DeleteIdentifier_PrefersTheV3IdentifierOverTheLegacyId()
     {
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
 
-        await CreateSideEffects(capture).OnDeletedAsync("entries", new DisagreeingIds());
+        await SendDeleteAsync(capture, new DisagreeingIds());
 
         Identifier(capture.Delete).Should().Be("from-identifier");
     }
@@ -472,9 +280,9 @@ public class StorageDeleteBroadcastContractTests
     [Fact]
     public async Task DeleteIdentifier_ReadsTheDocumentAsTheHubSpellsIt()
     {
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
 
-        await CreateSideEffects(capture).OnDeletedAsync("entries", new UnattributedIdentifier());
+        await SendDeleteAsync(capture, new UnattributedIdentifier());
 
         capture.Delete.GetProperty("doc").GetProperty("identifier").GetString().Should().Be(RecordGuid);
         Identifier(capture.Delete).Should().Be(RecordGuid);
@@ -483,9 +291,9 @@ public class StorageDeleteBroadcastContractTests
     [Fact]
     public async Task DeleteIdentifier_FollowsAReconfiguredPayloadSerializer()
     {
-        var capture = new BroadcastCapture(o => o.PropertyNamingPolicy = null);
+        var capture = new StorageBroadcastCapture(o => o.PropertyNamingPolicy = null);
 
-        await CreateSideEffects(capture).OnDeletedAsync("entries", new UnattributedIdentifier());
+        await SendDeleteAsync(capture, new UnattributedIdentifier());
 
         var doc = capture.Delete.GetProperty("doc");
         doc.TryGetProperty("identifier", out _)
@@ -502,30 +310,15 @@ public class StorageDeleteBroadcastContractTests
     }
 
     /// <summary>
-    /// The bulk keys are the same wire contract as the single-record ones, so a reconfigured
-    /// payload serializer must not be able to rename them either.
-    /// </summary>
-    [Fact]
-    public async Task BulkDeleteKeys_SurviveAReconfiguredPayloadSerializer()
-    {
-        var capture = new BroadcastCapture(o => o.PropertyNamingPolicy = null);
-
-        await CreateSideEffects(capture).OnBulkDeletedAsync("entries", 17);
-
-        capture.Delete.GetProperty("colName").GetString().Should().Be("entries");
-        capture.Delete.GetProperty("deletedCount").GetInt64().Should().Be(17);
-    }
-
-    /// <summary>
     /// The identifier a client reads and the document id it would match against are the same string
     /// on the wire, under a serializer that is not the default.
     /// </summary>
     [Fact]
     public async Task WireIdentifier_MatchesTheDocumentIdOnTheWire()
     {
-        var capture = new BroadcastCapture(o => o.PropertyNamingPolicy = null);
+        var capture = new StorageBroadcastCapture(o => o.PropertyNamingPolicy = null);
 
-        await CreateSideEffects(capture).OnDeletedAsync("entries", new LegacyIdOnly());
+        await SendDeleteAsync(capture, new LegacyIdOnly());
 
         var doc = capture.Delete.GetProperty("doc");
         doc.ValueKind.Should().Be(JsonValueKind.Object);
@@ -549,9 +342,9 @@ public class StorageDeleteBroadcastContractTests
     [Fact]
     public async Task DeleteIdentifier_FallsBackToTheLegacyId()
     {
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
 
-        await CreateSideEffects(capture).OnDeletedAsync("entries", new LegacyIdOnly());
+        await SendDeleteAsync(capture, new LegacyIdOnly());
 
         Identifier(capture.Delete).Should().Be(RecordGuid);
     }
@@ -566,9 +359,9 @@ public class StorageDeleteBroadcastContractTests
     [Fact]
     public async Task DeleteIdentifier_CarriesANumericIdAsTheStringClientsMatchOn()
     {
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
 
-        await CreateSideEffects(capture).OnDeletedAsync("entries", new NumericId());
+        await SendDeleteAsync(capture, new NumericId());
 
         capture.Delete.GetProperty("doc").GetProperty("_id").GetInt64().Should().Be(12345);
         Identifier(capture.Delete).Should().Be("12345");
@@ -590,10 +383,9 @@ public class StorageDeleteBroadcastContractTests
     [Fact]
     public async Task DeleteIdentifier_FallsBackToTheRecordId_WhenTheDocumentSpellsNeitherKey()
     {
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
 
-        await CreateSideEffects(capture)
-            .OnDeletedAsync("entries", new OrdinaryIdDocument { Id = RecordGuid });
+        await SendDeleteAsync(capture, new OrdinaryIdDocument { Id = RecordGuid });
 
         var doc = capture.Delete.GetProperty("doc");
         doc.TryGetProperty("_id", out _).Should().BeFalse();
@@ -621,7 +413,7 @@ public class StorageDeleteBroadcastContractTests
         });
         await context.SaveChangesAsync();
 
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
         var deleted = await new HeartRateService(
             new HeartRateRepository(context.AsFactory(), TimeProvider.System),
             Mock.Of<IDocumentProcessingService>(),
@@ -644,7 +436,7 @@ public class StorageDeleteBroadcastContractTests
             .Setup(s => s.DeleteActivityAsync(RecordGuid, It.IsAny<CancellationToken>()))
             .ReturnsAsync((IReadOnlyList<string>)[RecordGuid]);
 
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
         await CreateActivityService(capture, stateSpans, new Mock<ISleepService>())
             .DeleteActivityAsync(RecordGuid, CancellationToken.None);
 
@@ -663,7 +455,7 @@ public class StorageDeleteBroadcastContractTests
             .Setup(s => s.DeleteSessionAsync(Guid.Parse(RecordGuid), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        var capture = new BroadcastCapture();
+        var capture = new StorageBroadcastCapture();
         await CreateActivityService(capture, new Mock<IStateSpanService>(), sleep)
             .DeleteActivityAsync(RecordGuid, CancellationToken.None);
 

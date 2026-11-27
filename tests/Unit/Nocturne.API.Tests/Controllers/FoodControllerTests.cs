@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.Core.Contracts.V4;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -246,7 +247,7 @@ public class FoodControllerTests
         };
 
         _mockFoodRepository
-            .Setup(x => x.CreateFoodAsync(It.IsAny<List<Food>>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.CreateFoodAsync(It.IsAny<List<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Food> { createdFood });
 
         // Convert Food to JsonElement
@@ -291,7 +292,7 @@ public class FoodControllerTests
         };
 
         _mockFoodRepository
-            .Setup(x => x.CreateFoodAsync(It.IsAny<List<Food>>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.CreateFoodAsync(It.IsAny<List<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(createdFoods);
 
         // Convert Food array to JsonElement
@@ -380,7 +381,7 @@ public class FoodControllerTests
         // Arrange
         _mockFoodRepository
             .Setup(x =>
-                x.DeleteFoodAsync("507f1f77bcf86cd799439011", It.IsAny<CancellationToken>())
+                x.DeleteFoodAsync("507f1f77bcf86cd799439011", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(true);
 
@@ -399,7 +400,7 @@ public class FoodControllerTests
     {
         // Arrange
         _mockFoodRepository
-            .Setup(x => x.DeleteFoodAsync("nonexistent", It.IsAny<CancellationToken>()))
+            .Setup(x => x.DeleteFoodAsync("nonexistent", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
         // Act

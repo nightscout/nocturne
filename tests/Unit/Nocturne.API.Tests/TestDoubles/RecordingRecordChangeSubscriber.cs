@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.TestDoubles;
 

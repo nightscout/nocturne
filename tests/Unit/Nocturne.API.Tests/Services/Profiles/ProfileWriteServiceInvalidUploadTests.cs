@@ -2,13 +2,13 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Profiles;
-using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Profiles;
@@ -24,7 +24,8 @@ public class ProfileWriteServiceInvalidUploadTests
     private const string Id = "5f8d0c1e8a7b4c3d9e5f0001";
 
     private readonly Mock<IProfileDecomposer> _decomposer = new();
-    private readonly Mock<IWriteSideEffects> _sideEffects = new();
+    private readonly Mock<IProfileProjectionService> _projection = new();
+    private readonly RecordingDocumentChanges<Profile> _changes = new();
     private readonly Mock<IDataEventSink<Profile>> _events = new();
     private InvalidatingDecomposition<Profile> _decomposition = new();
 
@@ -33,13 +34,16 @@ public class ProfileWriteServiceInvalidUploadTests
         _decomposer
             .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Profile>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _decomposition);
+        _projection
+            .Setup(p => p.GetProfileByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string id, CancellationToken _) => Document(id, isValid: null));
     }
 
     private ProfileWriteService Service() => new(
         _decomposer.Object,
-        Mock.Of<IProfileProjectionService>(),
+        _projection.Object,
         Mock.Of<ITherapySettingsRepository>(),
-        _sideEffects.Object,
+        _changes,
         _events.Object,
         NullLogger<ProfileWriteService>.Instance);
 
@@ -71,6 +75,7 @@ public class ProfileWriteServiceInvalidUploadTests
         _events.Verify(e => e.OnDeletedAsync(It.IsAny<Profile?>(), It.IsAny<CancellationToken>()), Times.Never);
         written.Should().ContainSingle().Which.Should().BeSameAs(upload);
         written.Invalidated.Should().BeEmpty();
+        _changes.Batches.Should().BeEmpty();
     }
 
     [Fact]
@@ -84,6 +89,8 @@ public class ProfileWriteServiceInvalidUploadTests
         written.Invalidated.Should().ContainSingle().Which.Should().BeSameAs(upload);
         _events.Verify(e => e.OnDeletedAsync(null, It.IsAny<CancellationToken>()), Times.Once);
         _events.Verify(e => e.OnCreatedAsync(It.IsAny<IReadOnlyList<Profile>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _changes.Deleted.Should().ContainSingle().Which.Id.Should().Be(Id, "the delete names the document as it was stored");
+        _changes.Created.Should().BeEmpty();
     }
 
     [Fact]
@@ -95,5 +102,6 @@ public class ProfileWriteServiceInvalidUploadTests
 
         _events.Verify(e => e.OnCreatedAsync(
             It.Is<IReadOnlyList<Profile>>(p => p.Single() == valid), It.IsAny<CancellationToken>()), Times.Once);
+        _changes.Created.Should().ContainSingle().Which.Id.Should().Be(valid.Id, "a created document is published as a read serves it");
     }
 }

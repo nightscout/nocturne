@@ -1,6 +1,5 @@
 using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.DeviceStatuses;
-using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -17,12 +16,10 @@ namespace Nocturne.API.Services.DeviceStatuses;
 internal sealed class DeviceStatusService(
     IDeviceStatusStore store,
     IDeviceStatusDecomposer decomposer,
-    IWriteSideEffects sideEffects,
+    IRecordChangePublisher changes,
     IDataEventSink<DeviceStatus> events,
     ILogger<DeviceStatusService> logger) : IDeviceStatusService
 {
-    private const string CollectionName = "devicestatus";
-
     private const int BulkDeleteLimit = 10_000;
 
     public Task<IReadOnlyList<DeviceStatus>> GetDeviceStatusesAsync(
@@ -91,7 +88,7 @@ internal sealed class DeviceStatusService(
 
         var updated = await store.GetByIdAsync(status.Id!, cancellationToken) ?? status;
 
-        await sideEffects.OnUpdatedAsync(CollectionName, updated, cancellationToken: cancellationToken);
+        await PublishAsync(updated: [updated]);
         await events.OnUpdatedAsync(updated, cancellationToken);
 
         return updated;
@@ -107,7 +104,7 @@ internal sealed class DeviceStatusService(
             || await decomposer.DeleteStoredAsync(storedId, WriteOrigin.Live, cancellationToken) == 0)
             return false;
 
-        await sideEffects.OnDeletedAsync(CollectionName, deleted, cancellationToken: cancellationToken);
+        await PublishAsync(deleted: [deleted]);
         await events.OnDeletedAsync(deleted, cancellationToken);
 
         return true;
@@ -120,15 +117,16 @@ internal sealed class DeviceStatusService(
             logger.LogWarning(
                 "Bulk delete matched the maximum of {Limit} records — results may be truncated", BulkDeleteLimit);
 
-        long deletedCount = 0;
+        var deleted = new List<DeviceStatus>();
         foreach (var status in matching.Where(s => s.IsValid != false))
         {
             if (!string.IsNullOrEmpty(status.Id)
                 && await decomposer.DeleteStoredAsync(status.Id, WriteOrigin.Live, cancellationToken) > 0)
-                deletedCount++;
+                deleted.Add(status);
         }
 
-        await sideEffects.OnBulkDeletedAsync(CollectionName, deletedCount, cancellationToken: cancellationToken);
+        long deletedCount = deleted.Count;
+        await PublishAsync(deleted: deleted);
         await events.OnBulkDeletedAsync(deletedCount, cancellationToken);
 
         return deletedCount;
@@ -156,7 +154,7 @@ internal sealed class DeviceStatusService(
 
         if (announced.Count > 0)
         {
-            await sideEffects.OnCreatedAsync(CollectionName, announced, cancellationToken: CancellationToken.None);
+            await PublishAsync(created: announced);
             await events.OnCreatedAsync(announced, CancellationToken.None);
         }
 
@@ -183,14 +181,32 @@ internal sealed class DeviceStatusService(
     private async Task AnnounceInvalidatedAsync(
         IReadOnlySet<DeviceStatus> invalidated, Dictionary<DeviceStatus, DeviceStatus> named)
     {
+        var deleted = new List<DeviceStatus>();
         foreach (var status in invalidated)
         {
-            if (!named.TryGetValue(status, out var deleted))
+            if (!named.TryGetValue(status, out var stored))
                 continue;
-            deleted.IsValid = false;
-            await sideEffects.OnDeletedAsync(CollectionName, deleted, cancellationToken: CancellationToken.None);
-            await events.OnDeletedAsync(deleted, CancellationToken.None);
+            stored.IsValid = false;
+            deleted.Add(stored);
         }
+
+        await PublishAsync(deleted: deleted);
+        foreach (var stored in deleted)
+            await events.OnDeletedAsync(stored, CancellationToken.None);
+    }
+
+    /// <summary>Publishes the statuses a committed write created, updated or deleted, as reads serve them.</summary>
+    /// <remarks>Uncancellable: the write has committed, so its subscribers must still hear of it.</remarks>
+    private Task PublishAsync(
+        IReadOnlyList<DeviceStatus>? created = null,
+        IReadOnlyList<DeviceStatus>? updated = null,
+        IReadOnlyList<DeviceStatus>? deleted = null)
+    {
+        if ((created?.Count ?? 0) + (updated?.Count ?? 0) + (deleted?.Count ?? 0) == 0)
+            return Task.CompletedTask;
+
+        return changes.PublishAsync(
+            RecordsChanged.Of(WriteOrigin.Live, created, updated, deleted), CancellationToken.None);
     }
 
     /// <returns>

@@ -5,9 +5,9 @@ namespace Nocturne.API.Services.Realtime;
 
 /// <summary>
 /// The storage <c>delete</c> event for a single removed record, as
-/// <see cref="ISignalRBroadcastService.BroadcastStorageDeleteAsync"/> sends it. Five of the six
-/// delete producers use it; <see cref="SignalRRecordChangeSubscriber"/> sends its own shape, the
-/// record's <c>id</c> under its V4 category, which no NS v3 client subscribes to.
+/// <see cref="ISignalRBroadcastService.BroadcastStorageDeleteAsync"/> sends it. Every legacy collection's
+/// delete uses it; <see cref="SignalRRecordChangeSubscriber"/> sends its own shape, the record's
+/// <c>id</c> under its V4 category, which no NS v3 client subscribes to.
 /// </summary>
 /// <remarks>
 /// NS v3 socket clients route on the top-level <c>colName</c> and look the removed record up by the
@@ -75,8 +75,8 @@ internal sealed record StorageDeleteEvent(
 /// </summary>
 /// <remarks>
 /// No identifier is sent. The v3 socket contract has no bulk form — v3 DELETE addresses one identifier
-/// at a time — and the callers that do hold the removed ids hold an unbounded set of them, so fanning
-/// out would trade one event for a broadcast storm. An AAPS client reads the missing key as <c>""</c>
+/// at a time — and a delete past <see cref="Nocturne.Infrastructure.Data.Extensions.AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/>
+/// records, or a range delete that never read its ids, would otherwise trade one event for a broadcast storm. An AAPS client reads the missing key as <c>""</c>
 /// (<c>JSONObject.optString</c>) and enqueues it; the lookup it then runs
 /// (<c>SELECT … WHERE nightscoutId = ''</c>, <c>GlucoseValueDao.findByNSId</c>) matches no record we
 /// delivered, so the event neither removes anything nor errors.

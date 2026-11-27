@@ -8,7 +8,7 @@ namespace Nocturne.API.Services.Realtime;
 /// </summary>
 /// <remarks>
 /// The four <see cref="V4"/> categories carry native V4 record shapes (with a <c>recordType</c>
-/// discriminator) and are additive: the five legacy <see cref="V1"/> collections — which the Node
+/// discriminator) and are additive: the six legacy <see cref="V1"/> collections — which the Node
 /// socket.io bridge subscribes to — keep their own broadcasts untouched. <c>care</c> is the
 /// treatment-family category, named distinctly so it never collides with the v1 <c>treatments</c> group.
 /// </remarks>
@@ -26,6 +26,9 @@ public static class RealtimeCategories
     /// </summary>
     public const string Settings = "settings";
 
+    /// <summary>The food catalog, which upstream spells singular and AAPS subscribes to as <c>foods</c>.</summary>
+    public const string Food = "food";
+
     // Native V4 categories (record shapes + recordType discriminator).
     public const string Glucose = "glucose";
     public const string Care = "care";
@@ -33,7 +36,7 @@ public static class RealtimeCategories
     public const string Therapy = "therapy";
 
     /// <summary>The legacy v1 collection names.</summary>
-    public static readonly string[] V1 = [Entries, Treatments, DeviceStatus, Profiles, Settings];
+    public static readonly string[] V1 = [Entries, Treatments, DeviceStatus, Profiles, Settings, Food];
 
     /// <summary>The native V4 category names.</summary>
     public static readonly string[] V4 = [Glucose, Care, Device, Therapy];
@@ -62,6 +65,7 @@ public static class RealtimeCategories
             [DeviceStatus] = Scope.DevicesRead,
             [Profiles] = Scope.TherapyRead,
             [Settings] = Scope.TherapyRead,
+            [Food] = Scope.FoodRead,
             [Glucose] = Scope.GlucoseRead,
             [Care] = Scope.TreatmentsRead,
             [Device] = Scope.DevicesRead,

@@ -30,7 +30,6 @@ public sealed class DeviceStatusServicePostCommitFailureTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly Mock<IWriteSideEffects> _sideEffects = new();
     private readonly Mock<IDataEventSink<DeviceStatus>> _events = new();
 
     public DeviceStatusServicePostCommitFailureTests()
@@ -117,7 +116,7 @@ public sealed class DeviceStatusServicePostCommitFailureTests : IDisposable
                 TimeProvider.System,
                 NullLogger<DeviceStatusProjectionService>.Instance),
             decomposer,
-            _sideEffects.Object,
+            Mock.Of<IRecordChangePublisher>(),
             _events.Object,
             NullLogger<DeviceStatusService>.Instance);
 

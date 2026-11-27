@@ -2,7 +2,6 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.DeviceStatuses;
-using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
@@ -10,6 +9,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.DeviceStatuses;
@@ -25,7 +25,7 @@ public class DeviceStatusServiceWriteTests
 
     private readonly Mock<IDeviceStatusGroupRepository> _groups = new();
     private readonly Mock<IApsSnapshotRepository> _aps = new();
-    private readonly Mock<IWriteSideEffects> _sideEffects = new();
+    private readonly RecordingDocumentChanges<DeviceStatus> _changes = new();
     private readonly Mock<IDataEventSink<DeviceStatus>> _events = new();
 
     [Fact]
@@ -43,9 +43,7 @@ public class DeviceStatusServiceWriteTests
         var deleted = await Service(decomposer.Object).DeleteDeviceStatusAsync(MongoObjectId.FromGuid(uuid));
 
         deleted.Should().BeTrue();
-        _sideEffects.Verify(s => s.OnDeletedAsync(
-            "devicestatus", It.Is<DeviceStatus>(d => d.Id == uuid.ToString()), It.IsAny<WriteEffectOptions>(),
-            It.IsAny<CancellationToken>()), Times.Once);
+        _changes.Deleted.Should().ContainSingle().Which.Id.Should().Be(uuid.ToString());
         _events.Verify(e => e.OnDeletedAsync(It.Is<DeviceStatus>(d => d.Id == uuid.ToString()), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -56,7 +54,7 @@ public class DeviceStatusServiceWriteTests
             .DeleteDeviceStatusAsync(StoredId);
 
         deleted.Should().BeFalse();
-        _sideEffects.VerifyNoOtherCalls();
+        _changes.Batches.Should().BeEmpty();
         _events.VerifyNoOtherCalls();
     }
 
@@ -76,12 +74,12 @@ public class DeviceStatusServiceWriteTests
         decomposer.Verify(
             d => d.DeleteStoredAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
-        _sideEffects.Verify(s => s.OnBulkDeletedAsync("devicestatus", 1, It.IsAny<WriteEffectOptions>(), It.IsAny<CancellationToken>()));
+        _changes.Deleted.Should().ContainSingle().Which.Id.Should().Be(StoredId);
         _events.Verify(e => e.OnBulkDeletedAsync(1, It.IsAny<CancellationToken>()));
     }
 
     [Fact]
-    public async Task BulkDelete_MatchingNothing_StillAnnouncesTheBulkDeleteOfNone()
+    public async Task BulkDelete_MatchingNothing_PublishesNothing_AndTellsTheSinkOfNone()
     {
         _groups
             .Setup(r => r.GetAsync(
@@ -93,7 +91,7 @@ public class DeviceStatusServiceWriteTests
             .DeleteDeviceStatusesAsync(FindQuery.ParseDeviceStatus("find[device]=openaps://rig"));
 
         deleted.Should().Be(0);
-        _sideEffects.Verify(s => s.OnBulkDeletedAsync("devicestatus", 0, It.IsAny<WriteEffectOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        _changes.Batches.Should().BeEmpty();
         _events.Verify(e => e.OnBulkDeletedAsync(0, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -129,7 +127,7 @@ public class DeviceStatusServiceWriteTests
             .ReplaceDeviceStatusAsync(StoredId, new DeviceStatus { Device = "loop://iPhone" });
 
         replaced.Should().BeNull();
-        _sideEffects.VerifyNoOtherCalls();
+        _changes.Batches.Should().BeEmpty();
         _events.VerifyNoOtherCalls();
     }
 
@@ -158,7 +156,7 @@ public class DeviceStatusServiceWriteTests
 
         replaced!.Id.Should().Be(writtenId);
         replaced.Device.Should().Be(readsBack ? "served" : "body");
-        _sideEffects.Verify(s => s.OnUpdatedAsync("devicestatus", replaced, It.IsAny<WriteEffectOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        _changes.Updated.Should().ContainSingle().Which.Should().BeSameAs(replaced);
         _events.Verify(e => e.OnUpdatedAsync(replaced, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -180,7 +178,7 @@ public class DeviceStatusServiceWriteTests
                 TimeProvider.System,
                 NullLogger<DeviceStatusProjectionService>.Instance),
             decomposer,
-            _sideEffects.Object,
+            _changes,
             _events.Object,
             NullLogger<DeviceStatusService>.Instance);
     }

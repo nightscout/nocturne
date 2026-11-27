@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -64,7 +65,7 @@ public class FoodByIdTests : IDisposable
         var served = MongoObjectId.Coerce(id.ToString())!;
 
         var updated = await _foods.UpdateFoodAsync(served, new Food { Name = "apple", Carbs = 25 });
-        var deleted = await _foods.DeleteFoodAsync(served);
+        var deleted = await _foods.DeleteFoodAsync(served, WriteOrigin.Live);
 
         updated!.Id.Should().Be(id.ToString());
         updated.Carbs.Should().Be(25);
@@ -84,7 +85,7 @@ public class FoodByIdTests : IDisposable
 
         (await _foods.GetFoodByIdAsync(served))!.Name.Should().Be("apple");
         (await _foods.UpdateFoodAsync(served, new Food { Name = "apple", Carbs = 25 }))!.Carbs.Should().Be(25);
-        (await _foods.DeleteFoodAsync(served)).Should().BeTrue();
+        (await _foods.DeleteFoodAsync(served, WriteOrigin.Live)).Should().BeTrue();
         (await _foods.GetFoodAsync()).Select(f => f.Name).Should().Equal("bread");
     }
 
@@ -112,7 +113,7 @@ public class FoodByIdTests : IDisposable
         var deleted = Guid.CreateVersion7();
         _context.Foods.Add(new FoodEntity { Id = deleted, TenantId = TenantId, Name = "apple", Carbs = 10 });
         await _context.SaveChangesAsync();
-        await _foods.DeleteFoodAsync(deleted.ToString());
+        await _foods.DeleteFoodAsync(deleted.ToString(), WriteOrigin.Live);
 
         (await _foods.ResolveFoodKeyAsync("5f1d7a3b9c0e4a2b8d6c1e0f")).Should().BeNull();
         (await _foods.ResolveFoodKeyAsync(deleted.ToString())).Should().BeNull();

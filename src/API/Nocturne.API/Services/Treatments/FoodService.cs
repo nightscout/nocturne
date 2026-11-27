@@ -9,35 +9,32 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
-/// Domain service implementation for <see cref="Food"/> operations with WebSocket broadcasting.
+/// Domain service implementation for <see cref="Food"/> operations.
 /// On a <see cref="FoodWriteMode.Native"/> create or update, sanitizes food records via
 /// <see cref="IDocumentProcessingService"/> and on create deduplicates by a composite key built from all food properties.
 /// </summary>
 /// <seealso cref="IFoodService"/>
 /// <seealso cref="IFoodRepository"/>
-/// <seealso cref="IWriteSideEffects"/>
 /// <seealso cref="IDocumentProcessingService"/>
 public class FoodService : IFoodService
 {
     private readonly IFoodRepository _food;
     private readonly IDocumentProcessingService _documentProcessingService;
-    private readonly IWriteSideEffects _sideEffects;
     private readonly IDataEventSink<Food> _events;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<FoodService> _logger;
-    private const string CollectionName = "food";
 
     /// <summary>
     /// Initializes a new instance of <see cref="FoodService"/>.
     /// </summary>
     /// <param name="food">The food repository for data access.</param>
     /// <param name="documentProcessingService">Service for HTML sanitization of food fields.</param>
-    /// <param name="sideEffects">Handles cache invalidation and SignalR broadcasting on writes.</param>
     /// <param name="events">The event sink for broadcasting create/update/delete events.</param>
     /// <param name="auditContext">The scope's audit actor, attributed to the system for the deletes an <c>isValid: false</c> upload makes.</param>
     /// <param name="logger">The logger instance.</param>
@@ -45,7 +42,6 @@ public class FoodService : IFoodService
     public FoodService(
         IFoodRepository food,
         IDocumentProcessingService documentProcessingService,
-        IWriteSideEffects sideEffects,
         IDataEventSink<Food> events,
         IAuditContext auditContext,
         ILogger<FoodService> logger
@@ -56,9 +52,6 @@ public class FoodService : IFoodService
         _documentProcessingService =
             documentProcessingService
             ?? throw new ArgumentNullException(nameof(documentProcessingService));
-        _sideEffects =
-            sideEffects
-            ?? throw new ArgumentNullException(nameof(sideEffects));
         _events =
             events
             ?? throw new ArgumentNullException(nameof(events));
@@ -274,7 +267,7 @@ public class FoodService : IFoodService
             {
                 var deleted = announce
                     ? await DeleteFoodAsync(food.Id!, cancellationToken)
-                    : await _food.DeleteFoodAsync(food.Id!, cancellationToken);
+                    : await _food.DeleteFoodAsync(food.Id!, WriteOrigin.Backfill, cancellationToken);
                 if (deleted)
                     invalidated.Add(food);
             }
@@ -292,7 +285,7 @@ public class FoodService : IFoodService
         {
             var rows = announce
                 ? await PersistCreatedAsync(writing, cancellationToken)
-                : await _food.CreateFoodAsync(writing, cancellationToken);
+                : await _food.CreateFoodAsync(writing, WriteOrigin.Backfill, cancellationToken);
             foreach (var (food, row) in writing.Zip(rows))
                 served[food] = row;
         }
@@ -307,10 +300,9 @@ public class FoodService : IFoodService
     {
         try
         {
-            var createdFoods = await _food.CreateFoodAsync(processedList, cancellationToken);
+            var createdFoods = await _food.CreateFoodAsync(processedList, WriteOrigin.Live, cancellationToken);
             var resultList = createdFoods.ToList();
 
-            await _sideEffects.OnCreatedAsync(CollectionName, resultList, cancellationToken: cancellationToken);
             await _events.OnCreatedAsync(resultList, cancellationToken);
 
             _logger.LogDebug("Successfully created {Count} food records", resultList.Count);
@@ -383,7 +375,6 @@ public class FoodService : IFoodService
 
             if (updatedFood != null)
             {
-                await _sideEffects.OnUpdatedAsync(CollectionName, updatedFood, cancellationToken: cancellationToken);
                 await _events.OnUpdatedAsync(updatedFood, cancellationToken);
                 _logger.LogDebug("Successfully updated food record with ID: {Id}", id);
             }
@@ -408,11 +399,10 @@ public class FoodService : IFoodService
             _logger.LogDebug("Deleting food record with ID: {Id}", id);
 
             var existing = await _food.GetFoodByIdAsync(id, cancellationToken);
-            var deleted = await _food.DeleteFoodAsync(id, cancellationToken);
+            var deleted = await _food.DeleteFoodAsync(id, WriteOrigin.Live, cancellationToken);
 
             if (deleted)
             {
-                await _sideEffects.OnDeletedAsync(CollectionName, existing, cancellationToken: cancellationToken);
                 await _events.OnDeletedAsync(existing, cancellationToken);
                 _logger.LogDebug("Successfully deleted food record with ID: {Id}", id);
             }
@@ -438,7 +428,6 @@ public class FoodService : IFoodService
 
             var deletedCount = await _food.BulkDeleteFoodAsync(find, cancellationToken);
 
-            await _sideEffects.OnBulkDeletedAsync(CollectionName, deletedCount, cancellationToken: cancellationToken);
             await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);
 
             return deletedCount;

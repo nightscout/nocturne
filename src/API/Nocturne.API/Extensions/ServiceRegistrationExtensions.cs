@@ -36,7 +36,6 @@ using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.DeviceStatuses;
 using Nocturne.API.Services.Docs;
-using Nocturne.API.Services.Effects;
 using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Sleep;
@@ -819,7 +818,6 @@ public static class ServiceRegistrationExtensions
                 sinks,
                 sp.GetService<ILogger<CompositeDataEventSink<Treatment>>>());
         });
-        services.AddScoped<IWriteSideEffects, WriteSideEffectsService>();
         services.AddScoped<IEntryService, EntryService>();
         services.AddScoped<IEntryStore, EntryReadService>();
         services.AddScoped<IEntryCache, EntryCacheAdapter>();
@@ -1065,6 +1063,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ISyncProgressReporter, SignalRSyncProgressReporter>();
 
         services.AddScoped<IRecordChangeSubscriber, SignalRRecordChangeSubscriber>();
+        services.AddScoped<IRecordChangeSubscriber, LegacyStorageRecordChangeSubscriber>();
         services.AddScoped<IGlucoseReadingBroadcaster, HomeAssistantGlucoseBroadcaster>();
 
         // Push notifications

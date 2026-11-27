@@ -448,7 +448,7 @@ public class ClampedV4RecordUpsertTests(RlsCompletenessFixture fx) : IAsyncLifet
 
         public Task PublishAsync(RecordsChanged batch, CancellationToken ct)
         {
-            Updated.AddRange(batch.Changes.SelectMany(c => c.Updated));
+            Updated.AddRange(batch.Changes.SelectMany(c => c.Updated).Cast<IV4Record>());
             return Task.CompletedTask;
         }
     }

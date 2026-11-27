@@ -8,7 +8,6 @@ using Moq;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.DeviceStatuses;
-using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
@@ -244,7 +243,7 @@ public class LegacyPostBodyTests
             .Callback<IEnumerable<Settings>, CancellationToken>((s, _) => settings.AddRange(s))
             .ReturnsAsync([]);
         var controller = WithContext(new LegacyV3.SettingsController(
-            repository.Object, Mock.Of<IWriteSideEffects>(), Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.SettingsController>.Instance));
+            repository.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<LegacyV3.SettingsController>.Instance));
         return new Handler(
             $$"""{"Key":"units","Mills":{{Millis}}}""",
             """{"Key":"units","Mills":"abc"}""",
@@ -345,9 +344,9 @@ public class LegacyPostBodyTests
     {
         var repository = new Mock<IFoodRepository>();
         repository
-            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<Food>, CancellationToken>((f, _) => foods.AddRange(f))
-            .ReturnsAsync((IEnumerable<Food> f, CancellationToken _) => f);
+            .Setup(r => r.CreateFoodAsync(It.IsAny<IEnumerable<Food>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<Food>, WriteOrigin, CancellationToken>((f, _, _) => foods.AddRange(f))
+            .ReturnsAsync((IEnumerable<Food> f, WriteOrigin _, CancellationToken _) => f);
         return repository.Object;
     }
 

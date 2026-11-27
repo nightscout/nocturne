@@ -9,9 +9,8 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.V3;
 using Nocturne.API.Hubs;
-using Nocturne.API.Services.Caching;
-using Nocturne.API.Services.Effects;
 using Nocturne.API.Services.Realtime;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -59,12 +58,9 @@ public class SettingsBroadcastTests : IDisposable
         );
 
         _controller = new SettingsController(
-            new SettingsRepository(_context.AsFactory()),
-            new WriteSideEffectsService(
-                Mock.Of<ITenantCache>(),
-                broadcast,
-                NullLogger<WriteSideEffectsService>.Instance
-            ),
+            new SettingsRepository(
+                _context.AsFactory(),
+                new SubscribersPublisher(new LegacyStorageRecordChangeSubscriber(broadcast))),
             Mock.Of<IDocumentProcessingService>(),
             NullLogger<SettingsController>.Instance
         )

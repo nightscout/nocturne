@@ -2,6 +2,7 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -97,7 +98,7 @@ public class CreateProbeTests : IDisposable
         // What MigrationJobService writes: a minted key, the Mongo _id kept as OriginalId.
         var storedId = SeedFood(Guid.CreateVersion7(), LegacyObjectId, "Apple");
 
-        await _foods.CreateFoodAsync([new Food { Id = LegacyObjectId, Name = "Apple (edited)", Carbs = 12 }]);
+        await _foods.CreateFoodAsync([new Food { Id = LegacyObjectId, Name = "Apple (edited)", Carbs = 12 }], WriteOrigin.Live);
 
         var rows = await ReadFoodsAsync();
         rows.Should().ContainSingle();
@@ -112,7 +113,7 @@ public class CreateProbeTests : IDisposable
     {
         var storedId = SeedFood(PaddedKey(LegacyObjectId), LegacyObjectId, "Apple");
 
-        await _foods.CreateFoodAsync([new Food { Id = LegacyObjectId, Name = "Apple (edited)" }]);
+        await _foods.CreateFoodAsync([new Food { Id = LegacyObjectId, Name = "Apple (edited)" }], WriteOrigin.Live);
 
         var rows = await ReadFoodsAsync();
         rows.Should().ContainSingle();
@@ -125,7 +126,7 @@ public class CreateProbeTests : IDisposable
     {
         var storedId = SeedFood(Guid.CreateVersion7(), LegacyObjectId, "Apple");
 
-        await _foods.CreateFoodAsync([new Food { Id = storedId.ToString(), Name = "Apple (edited)" }]);
+        await _foods.CreateFoodAsync([new Food { Id = storedId.ToString(), Name = "Apple (edited)" }], WriteOrigin.Live);
 
         var rows = await ReadFoodsAsync();
         rows.Should().ContainSingle();
@@ -137,7 +138,7 @@ public class CreateProbeTests : IDisposable
     {
         SeedFood(Guid.CreateVersion7(), LegacyObjectId, "Apple");
 
-        await _foods.CreateFoodAsync([new Food { Id = "5f8d0d55b54764421b7156ff", Name = "Banana" }]);
+        await _foods.CreateFoodAsync([new Food { Id = "5f8d0d55b54764421b7156ff", Name = "Banana" }], WriteOrigin.Live);
 
         (await ReadFoodsAsync()).Should().HaveCount(2);
     }

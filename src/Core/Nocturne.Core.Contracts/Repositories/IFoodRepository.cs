@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 
@@ -65,9 +66,11 @@ public interface IFoodRepository
     /// Create multiple food entries
     /// </summary>
     /// <param name="foods">The food entries to create</param>
+    /// <param name="origin">Whether clients are told of the write: an import is not announced.</param>
     /// <returns>Collection of created food entries</returns>
     Task<IEnumerable<Food>> CreateFoodAsync(
         IEnumerable<Food> foods,
+        WriteOrigin origin,
         CancellationToken cancellationToken = default
     );
 
@@ -98,8 +101,9 @@ public interface IFoodRepository
         CancellationToken cancellationToken = default
     );
 
+    /// <param name="origin">Whether clients are told of the delete: an import is not announced.</param>
     /// <returns>True if deleted, false if not found</returns>
-    Task<bool> DeleteFoodAsync(string id, CancellationToken cancellationToken = default);
+    Task<bool> DeleteFoodAsync(string id, WriteOrigin origin, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes the food entries a legacy <c>find</c> selects.
