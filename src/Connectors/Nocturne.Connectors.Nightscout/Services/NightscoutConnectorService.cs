@@ -228,7 +228,7 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
             try
             {
                 // The treatment cursor resolves to a bound rather than to an absent resume point:
-                // with none stored it is this connector's own open InitialSyncFloor.
+                // with none stored it is this connector's own open first-sync start.
                 var treatmentFrom = await ResumeFromAsync(request, () =>
                     ResumePointAsync("Treatments", request.Resume.Point(ResumeFamily.Treatments), cancellationToken));
 

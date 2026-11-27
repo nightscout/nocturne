@@ -49,8 +49,9 @@ public sealed class ResumePoints
 
     /// <summary>
     ///     The family's resume point: its newest stored record minus the catch-up overlap. With
-    ///     nothing stored, glucose, treatments and state spans give the connector's initial sync
-    ///     floor, and device status and activity give <c>null</c>, the whole history.
+    ///     nothing stored, glucose, treatments and state spans give the connector's
+    ///     <see cref="Services.BaseConnectorService{TConfig}.FirstSyncStart"/>, and device status and
+    ///     activity give its <see cref="Services.BaseConnectorService{TConfig}.HistoryStart"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">The connector did not declare the family for this run.</exception>
     /// <remarks>Rethrows the failure of a read that failed.</remarks>

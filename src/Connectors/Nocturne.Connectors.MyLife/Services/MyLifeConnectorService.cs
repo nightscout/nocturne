@@ -126,12 +126,12 @@ public class MyLifeConnectorService(
 
             // MyLife streams the source month by month, so every bound below has to be concrete: a
             // range starts at its From, never null since HistoryStart is set, and a family with
-            // nothing stored at the initial-sync floor.
-            var floor = InitialSyncFloor ?? DefaultInitialSyncFloor();
+            // nothing stored at its first-sync start.
+            var floor = ConcreteFirstSyncStart;
             var glucoseSince = ResumeFrom(
-                request, () => request.Resume.Point(ResumeFamily.Glucose) ?? floor).Value;
+                request, () => request.Resume.Point(ResumeFamily.Glucose) ?? floor) ?? floor;
             var treatmentSince = ResumeFrom(
-                request, () => request.Resume.Point(ResumeFamily.Treatments) ?? floor).Value;
+                request, () => request.Resume.Point(ResumeFamily.Treatments) ?? floor) ?? floor;
 
             var overallSince = glucoseSince < treatmentSince ? glucoseSince : treatmentSince;
             var now = Clock.GetUtcNow().UtcDateTime;

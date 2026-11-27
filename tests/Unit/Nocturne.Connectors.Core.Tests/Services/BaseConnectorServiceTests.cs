@@ -204,6 +204,132 @@ public class BaseConnectorServiceTests
         probe.Handed!.From.Should().Be(WindowEnd.AddDays(-3));
     }
 
+    private static readonly DateTime FirstSyncFloorDate = new(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime FirstSyncHistoryStart = new(2026, 7, 31, 0, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>A connector with the given floor and history start, recording the resume points of its scheduled run.</summary>
+    private sealed class FirstSyncProbe(
+        DateTime? floor, DateTime? historyStart, IConnectorPublisher? publisher = null, TimeProvider? clock = null)
+        : BaseConnectorService<TestConfig>(
+            new HttpClient(),
+            new ConnectorServerResolver<TestConfig>(null, null, null),
+            NullLogger<FirstSyncProbe>.Instance,
+            new RecordingRetryDelayStrategy(),
+            publisher,
+            clock)
+    {
+        public Dictionary<ResumeFamily, DateTime?> Points { get; } = [];
+
+        public DateTime? FirstStart => FirstSyncStart;
+        public DateTime ConcreteStart => ConcreteFirstSyncStart;
+
+        protected override string ConnectorSource => "test";
+        public override string ServiceName => "Test";
+        protected override DateTime? InitialSyncFloor => floor;
+        protected override DateTime? HistoryStart => historyStart;
+
+        protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, TestConfig config) =>
+            [ResumeFamily.Glucose, ResumeFamily.Treatments, ResumeFamily.StateSpans,
+                ResumeFamily.DeviceStatus, ResumeFamily.Activity];
+
+        protected override Task<SyncResult> PerformSyncInternalAsync(
+            SyncRequest request, TestConfig config, CancellationToken cancellationToken)
+        {
+            foreach (var family in Enum.GetValues<ResumeFamily>())
+                Points[family] = request.Resume.Point(family);
+            return Task.FromResult(new SyncResult { Success = true });
+        }
+    }
+
+    public static TheoryData<bool, bool> FloorAndHistoryStartPresence => new()
+    {
+        { true, true },
+        { true, false },
+        { false, true },
+        { false, false },
+    };
+
+    [Theory]
+    [MemberData(nameof(FloorAndHistoryStartPresence))]
+    public void FirstSyncStart_IsTheLaterOfTheFloorAndTheHistoryStart_AnAbsentOneLeavingTheOther(
+        bool hasFloor, bool hasHistoryStart)
+    {
+        var floor = hasFloor ? FirstSyncFloorDate : (DateTime?)null;
+        var historyStart = hasHistoryStart ? FirstSyncHistoryStart : (DateTime?)null;
+
+        var start = new FirstSyncProbe(floor, historyStart).FirstStart;
+
+        start.Should().Be((hasFloor, hasHistoryStart) switch
+        {
+            (true, true) => FirstSyncHistoryStart,
+            (true, false) => FirstSyncFloorDate,
+            (false, true) => FirstSyncHistoryStart,
+            _ => (DateTime?)null,
+        });
+    }
+
+    [Fact]
+    public void FirstSyncStart_WithTheHistoryStartBeforeTheFloor_KeepsTheFloor()
+    {
+        new FirstSyncProbe(FirstSyncHistoryStart, FirstSyncFloorDate).FirstStart.Should().Be(FirstSyncHistoryStart);
+    }
+
+    [Fact]
+    public void ConcreteFirstSyncStart_WithBothBoundsOpen_IsTheDefaultInitialSyncFloor()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 31, 9, 30, 0, TimeSpan.Zero));
+
+        new FirstSyncProbe(null, null, clock: clock).ConcreteStart.Should().Be(
+            new DateTime(2026, 2, 28, 9, 30, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void ConcreteFirstSyncStart_WithAHistoryStart_IsFirstSyncStart()
+    {
+        new FirstSyncProbe(null, FirstSyncHistoryStart).ConcreteStart.Should().Be(FirstSyncHistoryStart);
+    }
+
+    [Fact]
+    public async Task ScheduledSync_WithNothingStored_StartsEveryFamilyNoEarlierThanTheHistoryStart()
+    {
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.SetupGet(p => p.IsAvailable).Returns(true);
+        publisher.SetupGet(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
+        publisher.SetupGet(p => p.Treatments).Returns(Mock.Of<ITreatmentPublisher>());
+        publisher.SetupGet(p => p.Device).Returns(Mock.Of<IDevicePublisher>());
+        publisher.SetupGet(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
+        var probe = new FirstSyncProbe(FirstSyncFloorDate, FirstSyncHistoryStart, publisher.Object);
+
+        await probe.SyncDataAsync(new SyncRequest(), new TestConfig(), CancellationToken.None);
+
+        probe.Points.Should().Contain(new Dictionary<ResumeFamily, DateTime?>
+        {
+            [ResumeFamily.Glucose] = FirstSyncHistoryStart,
+            [ResumeFamily.Treatments] = FirstSyncHistoryStart,
+            [ResumeFamily.StateSpans] = FirstSyncHistoryStart,
+            [ResumeFamily.DeviceStatus] = FirstSyncHistoryStart,
+            [ResumeFamily.Activity] = FirstSyncHistoryStart,
+        });
+    }
+
+    [Fact]
+    public async Task ScheduledSync_WithNoHistoryStart_LeavesDeviceStatusAndActivityOpen()
+    {
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.SetupGet(p => p.IsAvailable).Returns(true);
+        publisher.SetupGet(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
+        publisher.SetupGet(p => p.Treatments).Returns(Mock.Of<ITreatmentPublisher>());
+        publisher.SetupGet(p => p.Device).Returns(Mock.Of<IDevicePublisher>());
+        publisher.SetupGet(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
+        var probe = new FirstSyncProbe(FirstSyncFloorDate, null, publisher.Object);
+
+        await probe.SyncDataAsync(new SyncRequest(), new TestConfig(), CancellationToken.None);
+
+        probe.Points[ResumeFamily.Glucose].Should().Be(FirstSyncFloorDate);
+        probe.Points[ResumeFamily.DeviceStatus].Should().BeNull();
+        probe.Points[ResumeFamily.Activity].Should().BeNull();
+    }
+
     /// <summary>A connector whose run is <paramref name="run"/>, so a test can script what the run does.</summary>
     private sealed class ScriptedConnectorService(
         IConnectorPublisher publisher, Func<SyncResult> run)
