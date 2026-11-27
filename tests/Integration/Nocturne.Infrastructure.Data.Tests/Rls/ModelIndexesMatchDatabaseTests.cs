@@ -145,15 +145,18 @@ public class ModelIndexesMatchDatabaseTests
     /// Postgres re-renders a predicate on the way in: it parenthesises, quotes identifiers it
     /// chose to quote, and makes literal casts explicit (<c>status = 'pending'</c> comes back as
     /// <c>status::text = 'pending'::text</c>). Strips all three so only a predicate that is
-    /// genuinely different, or missing, reads as a mismatch.
+    /// genuinely different, or missing, reads as a mismatch. An <c>IN</c> list comes back as
+    /// <c>= ANY (ARRAY[...])</c>, which is folded back into one.
     /// </summary>
     private static string NormalisePredicate(string? filter)
     {
         var stripped = Regex.Replace(filter ?? string.Empty, "::[a-z ]+", string.Empty);
 
-        return new string(stripped
+        var squeezed = new string(stripped
             .Where(ch => !char.IsWhiteSpace(ch) && ch is not ('(' or ')' or '"'))
             .ToArray())
             .ToLowerInvariant();
+
+        return Regex.Replace(squeezed, @"(\w+)=anyarray\[(.*?)\](\[\])?", "$1in$2");
     }
 }

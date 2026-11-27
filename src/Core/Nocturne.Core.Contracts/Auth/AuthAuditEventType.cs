@@ -345,4 +345,35 @@ public static class AuthAuditEventType
     /// new value.
     /// </summary>
     public const string TeamStaffReachChanged = "team_staff_reach_changed";
+
+    /// <summary>
+    /// The event types the member history reads. The two partial indexes that serve it are filtered on this
+    /// list, so the read must send it as constants for the planner to use them. Adding a type changes both
+    /// filters: its migration drops and rebuilds both through <c>ConcurrentIndexBuilder.Drop</c> and
+    /// <c>ConcurrentIndexBuilder.Build</c>, never the generated plain <c>CreateIndex</c>.
+    /// </summary>
+    public static readonly IReadOnlyList<string> MemberChanges =
+    [
+        RoleAssigned,
+        RoleRemoved,
+        HistoryLimitChanged,
+        AccessEndChanged,
+        RolePermissionsChanged,
+        MemberJoined,
+        MemberRemoved,
+        TeamAccessGiven,
+        TeamAccessStopped,
+        TeamAccessChanged,
+        TeamStaffApproved,
+        TeamStaffDeclined,
+        TeamStaffRuleChanged,
+        TeamStaffBlocked,
+        TeamStaffUnblocked,
+        TeamGroupPersonAdded,
+        TeamGroupPersonRemoved,
+        TeamGroupStaffAdded,
+        TeamGroupStaffRemoved,
+        TeamGroupDeleted,
+        TeamStaffReachChanged,
+    ];
 }

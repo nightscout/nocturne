@@ -933,6 +933,16 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_auth_audit_log_tenant_created");
 
+                    b.HasIndex("TenantId", "CreatedAt", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_auth_audit_log_tenant_member_changes")
+                        .HasFilter("event_type IN ('role_assigned', 'role_removed', 'history_limit_changed', 'access_end_changed', 'role_permissions_changed', 'member_joined', 'member_removed', 'team_access_given', 'team_access_stopped', 'team_access_changed', 'team_staff_approved', 'team_staff_declined', 'team_staff_rule_changed', 'team_staff_blocked', 'team_staff_unblocked', 'team_group_person_added', 'team_group_person_removed', 'team_group_staff_added', 'team_group_staff_removed', 'team_group_deleted', 'team_staff_reach_changed')");
+
+                    b.HasIndex("TenantId", "TargetSubjectId", "CreatedAt", "Id")
+                        .IsDescending(false, false, true, true)
+                        .HasDatabaseName("ix_auth_audit_log_tenant_target_member_changes")
+                        .HasFilter("event_type IN ('role_assigned', 'role_removed', 'history_limit_changed', 'access_end_changed', 'role_permissions_changed', 'member_joined', 'member_removed', 'team_access_given', 'team_access_stopped', 'team_access_changed', 'team_staff_approved', 'team_staff_declined', 'team_staff_rule_changed', 'team_staff_blocked', 'team_staff_unblocked', 'team_group_person_added', 'team_group_person_removed', 'team_group_staff_added', 'team_group_staff_removed', 'team_group_deleted', 'team_staff_reach_changed')");
+
                     b.ToTable("auth_audit_log");
                 });
 

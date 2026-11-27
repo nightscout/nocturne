@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.EntityConfigurations;
@@ -44,6 +45,23 @@ internal sealed class AuthAuditLogEntityConfiguration : IEntityTypeConfiguration
             .HasIndex(a => new { a.TenantId, a.CreatedAt })
             .HasDatabaseName("ix_auth_audit_log_tenant_created")
             .IsDescending(false, true);
+
+        // Sign-ins and token events share the table with no retention and far outnumber member changes.
+        // A page narrowed to one member has its own index: a generic plan takes the member's rows to be few,
+        // and a member who signs in often has thousands.
+        var memberChanges = $"event_type IN ({string.Join(", ", AuthAuditEventType.MemberChanges.Select(t => $"'{t}'"))})";
+
+        entity
+            .HasIndex(a => new { a.TenantId, a.CreatedAt, a.Id })
+            .HasDatabaseName("ix_auth_audit_log_tenant_member_changes")
+            .IsDescending(false, true, true)
+            .HasFilter(memberChanges);
+
+        entity
+            .HasIndex(a => new { a.TenantId, a.TargetSubjectId, a.CreatedAt, a.Id })
+            .HasDatabaseName("ix_auth_audit_log_tenant_target_member_changes")
+            .IsDescending(false, false, true, true)
+            .HasFilter(memberChanges);
 
         entity.Property(e => e.Success).HasDefaultValue(true);
 
