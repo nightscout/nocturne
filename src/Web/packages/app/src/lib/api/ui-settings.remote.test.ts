@@ -9,6 +9,7 @@ vi.mock("$app/server", () => ({
   getRequestEvent: () => ({
     locals: {
       isShareHost,
+      signInAddress: () => "/auth/login?returnUrl=%2Fsettings",
       apiClient: {
         uiSettings: {
           getUISettings: () => upstream(),
@@ -124,14 +125,14 @@ describe("a failed UI settings read", () => {
    * expired session as a failed read would replace the form with a card
    * offering no way back to signing in.
    */
-  it("sends an expired session to the login route", async () => {
+  it("sends an expired session to sign in, returning to the page", async () => {
     const rejection = await rejectionFor(
       apiException("Not authenticated.", 401, "")
     );
 
     expect(rejection).toMatchObject({
       status: 302,
-      location: "/auth/login",
+      location: "/auth/login?returnUrl=%2Fsettings",
     });
   });
 

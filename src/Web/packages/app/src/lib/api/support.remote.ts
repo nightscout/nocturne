@@ -106,11 +106,7 @@ export const submitIssue = form("unchecked", async (data: IssueFormInput) => {
   } catch (err) {
     const status = errorStatus(err);
     if (status === 401) {
-      const { url } = getRequestEvent();
-      throw redirect(
-        302,
-        `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`
-      );
+      throw redirect(302, getRequestEvent().locals.signInAddress());
     }
     if (status === 403) throw error(403, "Forbidden");
     console.error("Error in support.submitIssue:", err);

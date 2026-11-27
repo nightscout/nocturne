@@ -2,6 +2,7 @@
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
+	import { signInAddress } from "#lib/navigation/sign-in-address.js";
 	import Loader2 from "@lucide/svelte/icons/loader-circle";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { retainQuery } from "#lib/api/retain-query.svelte.js";
@@ -15,7 +16,8 @@
 	$effect(() => {
 		if (!page.data.isAuthenticated && claim) {
 			const returnUrl = `/auth/bot/discord/finalize?claim=${encodeURIComponent(claim)}`;
-			goto(resolve(`auth/login?returnUrl=${encodeURIComponent(returnUrl)}`), { replace: true });
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- the sign-in address is a same-origin path
+			goto(signInAddress(returnUrl), { replace: true });
 		}
 	});
 

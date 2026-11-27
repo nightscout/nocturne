@@ -5,7 +5,7 @@
  */
 
 import { browser } from "$app/env";
-import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
+import { signInAddress } from "#lib/navigation/sign-in-address.js";
 import { isShareHost } from "#lib/share-host.js";
 
 const REMOTE_CALL_PATH = "/_app/remote/";
@@ -58,8 +58,7 @@ class AuthInterceptorState {
 
     this.isRedirecting = true;
 
-    const returnUrl = safeReturnUrl(window.location.pathname + window.location.search);
-    window.location.href = `/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+    window.location.href = signInAddress(window.location.pathname + window.location.search);
   }
 
   /**

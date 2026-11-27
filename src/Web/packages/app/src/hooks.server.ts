@@ -10,6 +10,7 @@ import {
   getApiBaseUrl,
   createServerApiClient,
 } from "#lib/server/api-client-factory.js";
+import { signInAddressForRequest } from "#lib/server/request-sign-in.js";
 import { isApiOutage } from "#lib/server/api-outage.js";
 import { forgetSession, getCachedSession, sessionCacheKey } from "#lib/server/session-cache.js";
 import { authenticateGuestSession } from "#lib/server/guest-session-auth.js";
@@ -573,6 +574,7 @@ const resetBitsId: Handle = ({ event, resolve }) =>
 const requestContextHandle: Handle = async ({ event, resolve }) => {
   event.locals.isShareHost = isShareHost(getOriginalHost(event.request));
   event.locals.rawSetCookies = [];
+  event.locals.signInAddress = () => signInAddressForRequest(event);
 
   const response = await resolve(event);
 

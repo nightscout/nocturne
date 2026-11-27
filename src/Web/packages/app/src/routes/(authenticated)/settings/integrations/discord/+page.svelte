@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
-	import { resolve } from "$app/paths";
+	import { signInAddress } from "#lib/navigation/sign-in-address.js";
 	import * as Card from "#lib/components/ui/card/index.js";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { Input } from "#lib/components/ui/input/index.js";
@@ -29,7 +29,8 @@
 	// Auth guard
 	$effect(() => {
 		if (!page.data.isAuthenticated) {
-			goto(resolve(`auth/login?returnUrl=${encodeURIComponent(page.url.pathname)}`), { replace: true });
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- the sign-in address is a same-origin path
+			goto(signInAddress(page.url.pathname + page.url.search), { replace: true });
 		}
 	});
 

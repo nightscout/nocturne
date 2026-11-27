@@ -157,6 +157,48 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("hooks — the sign-in address a remote function reads from locals", () => {
+  const loginFor = (page: string) => `/auth/login?returnUrl=${encodeURIComponent(page)}`;
+
+  /** A query the browser calls: the endpoint is the event's URL, and only the Referer names the page. */
+  function browserQuery(host: string, referer: string) {
+    const endpoint = `https://${host}/_app/remote/abc123/getThing`;
+    const event = requestEvent(host, "/_app/remote/abc123/getThing", signedIn);
+    return Object.assign(event, {
+      isRemoteRequest: true,
+      request: new Request(endpoint, { headers: { "x-forwarded-host": host, referer } }),
+    });
+  }
+
+  it("is the page named by a same-origin Referer, for a query the browser calls", async () => {
+    getStatus.mockResolvedValue(ready);
+    const host = freshHost();
+    const event = browserQuery(host, `https://${host}/people/wall?group=family`);
+
+    await run(event);
+
+    expect(event.locals.signInAddress()).toBe(loginFor("/people/wall?group=family"));
+  });
+
+  it("is the bare sign-in address for a query whose Referer is on another origin", async () => {
+    getStatus.mockResolvedValue(ready);
+    const event = browserQuery(freshHost(), "https://evil.test/steal");
+
+    await run(event);
+
+    expect(event.locals.signInAddress()).toBe("/auth/login");
+  });
+
+  it("is the page being rendered, for a page request", async () => {
+    getStatus.mockResolvedValue(ready);
+    const event = requestEvent(freshHost(), "/reports?range=7d", signedIn);
+
+    await run(event);
+
+    expect(event.locals.signInAddress()).toBe(loginFor("/reports?range=7d"));
+  });
+});
+
 describe("hooks — the status probe", () => {
   it("starts the status probe and the session check together", async () => {
     const session = deferred<unknown>();

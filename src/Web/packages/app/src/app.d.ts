@@ -57,6 +57,11 @@ declare global {
 			/** Whether this request arrived on a public share host ({token}.share.{base-domain}). */
 			isShareHost: boolean;
 			/**
+			 * The sign-in address for this request, returning to the page it belongs to where that is
+			 * known. See `signInAddressForRequest`.
+			 */
+			signInAddress: () => string;
+			/**
 			 * Set-Cookie headers to append verbatim to the outgoing response, for the half of a
 			 * same-named pair SvelteKit's cookie jar cannot hold. See propagateAuthCookies.
 			 */

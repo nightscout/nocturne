@@ -14,7 +14,7 @@ export const getUiSettings = query(async () => {
     // authenticated layout, so an expired session has to reach the login route.
     if (errorStatus(err) === 401) {
       if (locals.isShareHost) throw error(401, "Unauthorized");
-      throw redirect(302, "/auth/login");
+      throw redirect(302, locals.signInAddress());
     }
 
     console.error("Error loading UI settings:", err);

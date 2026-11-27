@@ -3,6 +3,7 @@ import type { PageServerLoad } from "./$types";
 import { SETUP_TENANT_COOKIE } from "#lib/server/request-host.js";
 import { isFreshInstallError } from "#lib/server/onboarding-check.js";
 import { setupStageFor } from "#lib/server/setup-hub.js";
+import { signInAddress } from "#lib/navigation/sign-in-address.js";
 
 export const load: PageServerLoad = async ({ locals, cookies, parent }) => {
   const setupTenantSlug = cookies.get(SETUP_TENANT_COOKIE) ?? null;
@@ -35,12 +36,12 @@ export const load: PageServerLoad = async ({ locals, cookies, parent }) => {
     // fresh-install wizard on a deployment that already has tenants would be actively
     // misleading, so send the visitor to the sign-in it actually needs.
     if (tenantless) {
-      redirect(302, "/auth/login?returnUrl=/setup");
+      redirect(302, signInAddress("/setup"));
     }
     // Any other API failure (network error, 500, etc.) — also show setup,
     // since we can't confirm the instance is healthy
     return { setupRequired: true, tenantExists: false, setupTenantSlug };
   }
 
-  redirect(302, "/auth/login?returnUrl=/setup");
+  redirect(302, signInAddress("/setup"));
 };

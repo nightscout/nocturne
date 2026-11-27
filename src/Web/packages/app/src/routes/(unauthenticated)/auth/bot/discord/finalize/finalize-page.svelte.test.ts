@@ -3,7 +3,15 @@ import { render } from "vitest-browser-svelte";
 import { page as browser_page } from "vitest/browser";
 import { page } from "$app/state";
 
-const { confirm_discord_link } = vi.hoisted(() => ({ confirm_discord_link: vi.fn() }));
+const { confirm_discord_link, goto } = vi.hoisted(() => ({
+  confirm_discord_link: vi.fn(),
+  goto: vi.fn(),
+}));
+
+vi.mock("$app/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("$app/navigation")>()),
+  goto,
+}));
 
 vi.mock("./finalize.remote", () => ({
   getDiscordLinkClaim: () => ({ current: { discordUsername: "linked-account" }, error: undefined }),
@@ -41,5 +49,18 @@ describe("finalizing a Discord link", () => {
     await expect.element(browser_page.getByText("Sign in again to link your Discord account.")).toBeVisible();
     expect(browser_page.getByRole("button", { name: "Link account" }).elements()).toHaveLength(0);
     expect(confirm_discord_link).not.toHaveBeenCalled();
+  });
+
+  it("sends a visitor with no session to sign in, returning to the claim", async () => {
+    page.data.isAuthenticated = false;
+    goto.mockClear();
+    render(FinalizePage);
+
+    await vi.waitFor(() =>
+      expect(goto).toHaveBeenCalledWith(
+        `/auth/login?returnUrl=${encodeURIComponent("/auth/bot/discord/finalize?claim=signed-claim")}`,
+        { replace: true }
+      )
+    );
   });
 });

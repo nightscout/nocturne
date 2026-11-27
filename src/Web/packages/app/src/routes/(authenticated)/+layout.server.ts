@@ -7,6 +7,7 @@ import { SHARE_UNAVAILABLE_PATH } from "#lib/share-host.js";
 import { toIsoString } from "#lib/utils/api-date.js";
 import { toTenantSwitcherTargets, type TenantSwitcherTarget } from "#lib/utils/tenant-host.js";
 import { autoLoginEndpoint, autoLoginRedirect } from "#lib/server/auto-login.js";
+import { signInAddress } from "#lib/navigation/sign-in-address.js";
 import { PILL_ROWS_COOKIE, parsePillRows } from "#lib/components/status-pills/pill-rows.js";
 import { SIDEBAR_COOKIE_NAME } from "#lib/components/ui/sidebar/constants.js";
 
@@ -159,7 +160,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
       throw redirect(
         303,
         (endpoint && autoLoginRedirect(endpoint, returnUrl, origin)) ??
-          `/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`
+          signInAddress(returnUrl)
       );
     }
   }
