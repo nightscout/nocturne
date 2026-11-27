@@ -43,7 +43,10 @@
     "transmitter_battery",
     "sensor_state",
     "eventual_glucose",
-    "carbs_required"
+    "carbs_required",
+    "glucose_change",
+    "glucose_count",
+    "glucose_extreme"
   ],
   "AlertWeekday": [
     "sunday",
@@ -123,6 +126,10 @@
     "latest_glucose",
     "target_low",
     "target_high"
+  ],
+  "AlertWindowExtreme": [
+    "min",
+    "max"
   ],
   "PayloadFields": {
     "alert_state": [
@@ -294,6 +301,25 @@
       "clear_margin",
       "operator",
       "value"
+    ],
+    "glucose_change": [
+      "clear_margin",
+      "operator",
+      "value",
+      "window_minutes"
+    ],
+    "glucose_count": [
+      "count",
+      "percent",
+      "reading",
+      "window_minutes"
+    ],
+    "glucose_extreme": [
+      "clear_margin",
+      "of",
+      "operator",
+      "value",
+      "window_minutes"
     ]
   }
 }

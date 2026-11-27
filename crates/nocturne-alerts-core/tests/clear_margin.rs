@@ -140,13 +140,22 @@ fn margined_payloads() -> Vec<(ConditionKind, Value)> {
             ConditionKind::TransmitterBattery,
             json!({ "metric": "voltage_a", "operator": "<", "value": 290, "clear_margin": 10 }),
         ),
+        (
+            ConditionKind::GlucoseChange,
+            json!({ "operator": "<=", "value": -30, "window_minutes": 15, "clear_margin": 10 }),
+        ),
+        (
+            ConditionKind::GlucoseExtreme,
+            json!({ "of": "max", "operator": ">", "value": 250, "window_minutes": 120,
+                "clear_margin": 20 }),
+        ),
     ]
 }
 
 #[test]
 fn every_comparison_leaf_reads_a_margin() {
     let payloads = margined_payloads();
-    assert_eq!(payloads.len(), 11);
+    assert_eq!(payloads.len(), 13);
     for (kind, payload) in payloads {
         let parsed = parse_payload(kind, &payload).unwrap_or_else(|e| panic!("{kind:?}: {e}"));
         let margin = parsed.margined().and_then(|m| m.clear_margin());
@@ -200,6 +209,11 @@ fn a_leaf_without_a_margin_does_not_read_one() {
         (
             ConditionKind::PumpSuspended,
             json!({ "is_active": true, "for_minutes": 20 }),
+        ),
+        (
+            ConditionKind::GlucoseCount,
+            json!({ "reading": { "operator": "<", "value": 70 }, "window_minutes": 20,
+                "count": { "operator": ">=", "value": 3 } }),
         ),
     ];
     for (kind, mut payload) in elapsed {
@@ -705,6 +719,33 @@ fn a_rate_margin_cannot_pass_zero() {
     };
     assert_eq!(trend("0", &mut open()), Truth::True);
     assert_eq!(trend("0.01", &mut open()), Truth::False);
+}
+
+/// A change margin that moves the limit toward zero may bring it to zero, not
+/// past it; one that moves it away from zero has no bound.
+#[test]
+fn a_change_margin_cannot_pass_zero() {
+    let change = |operator: &str, value: i32, margin: &str| {
+        let payload: Value = serde_json::from_str(&format!(
+            r#"{{ "operator": "{operator}", "value": {value}, "window_minutes": 15, "clear_margin": {margin} }}"#
+        ))
+        .unwrap();
+        issues(ConditionKind::GlucoseChange, &payload)
+    };
+    let past = vec![(
+        "glucose_change".to_owned(),
+        "margin_past_zero",
+        Some("clear_margin"),
+    )];
+    for (operator, value) in [("<=", -30), ("<", -30), (">=", 30), (">", 30)] {
+        assert_eq!(change(operator, value, "30"), vec![], "{operator} {value}");
+        assert_eq!(change(operator, value, "30.5"), past, "{operator} {value}");
+    }
+    for (operator, value) in [("<=", 30), (">=", -30)] {
+        assert_eq!(change(operator, value, "100"), vec![], "{operator} {value}");
+    }
+    assert_eq!(change("<=", 0, "1"), past);
+    assert_eq!(change("<=", 0, "0"), vec![]);
 }
 
 #[test]

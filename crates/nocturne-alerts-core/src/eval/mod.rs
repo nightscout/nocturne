@@ -13,6 +13,7 @@ mod insulin;
 mod limit_tests;
 mod signal;
 mod spans;
+mod window;
 
 use chrono::{DateTime, TimeDelta, Utc};
 use rust_decimal::Decimal;
@@ -332,6 +333,9 @@ fn eval_payload_held(payload: &Payload, path: &str, env: &mut Env) -> Held {
         Payload::GlucoseBucket(p) => glucose::glucose_bucket(p, env),
         Payload::DayOfWeek(p) => clock::day_of_week(p, env).into(),
         Payload::SleepSessionActive(p) => spans::sleep_session_active(p, env).into(),
+        Payload::GlucoseChange(p) => window::glucose_change(p, env),
+        Payload::GlucoseCount(p) => window::glucose_count(p, env),
+        Payload::GlucoseExtreme(p) => window::glucose_extreme(p, env),
         Payload::EventualGlucose(_) | Payload::CarbsRequired(_) => {
             determination::determined(payload, env).0
         }

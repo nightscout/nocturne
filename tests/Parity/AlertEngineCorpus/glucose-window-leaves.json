@@ -1,0 +1,1690 @@
+{
+  "schema_version": 1,
+  "name": "glucose-window-leaves",
+  "description": "glucose_change, glucose_extreme and glucose_count over the recent readings of the newest reading's stream, in a window that ends at the newest reading: a fall of 30 in 15 minutes opens and its clear margin holds it at a fall of 20; a high leaves the 60 minute window exactly one window after it was read; while readings stop, every leaf goes stale; after the stop, a window that holds the stop is unknown by glucose_series, inexact, wherever readings it lacks could change the answer, a change with fewer than two readings in its window is unknown by glucose_series, absent, and a count reads again once its window no longer holds the stop",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "glucose_change",
+      "condition_params": {
+        "operator": "<=",
+        "value": -30,
+        "window_minutes": 15,
+        "clear_margin": 10
+      },
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "glucose_extreme",
+      "condition_params": {
+        "of": "max",
+        "operator": ">",
+        "value": 250,
+        "window_minutes": 60
+      },
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "glucose_count",
+      "condition_params": {
+        "reading": {
+          "operator": "<",
+          "value": 70
+        },
+        "window_minutes": 20,
+        "count": {
+          "operator": ">=",
+          "value": 3
+        }
+      },
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "glucose_count",
+      "condition_params": {
+        "reading": {
+          "operator": ">",
+          "value": 100
+        },
+        "window_minutes": 30,
+        "percent": {
+          "operator": ">=",
+          "value": 50
+        }
+      },
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 150,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 140,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 125,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_value": 110,
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "last_reading_at": "2026-01-05T12:15:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:20:00Z",
+        "last_reading_at": "2026-01-05T12:20:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:25:00Z",
+      "context": {
+        "latest_value": 95,
+        "latest_timestamp": "2026-01-05T12:25:00Z",
+        "last_reading_at": "2026-01-05T12:25:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:30:00Z",
+      "context": {
+        "latest_value": 90,
+        "latest_timestamp": "2026-01-05T12:30:00Z",
+        "last_reading_at": "2026-01-05T12:30:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          },
+          {
+            "at": "2026-01-05T12:30:00Z",
+            "mgdl": 90
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:35:00Z",
+      "context": {
+        "latest_value": 88,
+        "latest_timestamp": "2026-01-05T12:35:00Z",
+        "last_reading_at": "2026-01-05T12:35:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          },
+          {
+            "at": "2026-01-05T12:30:00Z",
+            "mgdl": 90
+          },
+          {
+            "at": "2026-01-05T12:35:00Z",
+            "mgdl": 88
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:40:00Z",
+      "context": {
+        "latest_value": 68,
+        "latest_timestamp": "2026-01-05T12:40:00Z",
+        "last_reading_at": "2026-01-05T12:40:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          },
+          {
+            "at": "2026-01-05T12:30:00Z",
+            "mgdl": 90
+          },
+          {
+            "at": "2026-01-05T12:35:00Z",
+            "mgdl": 88
+          },
+          {
+            "at": "2026-01-05T12:40:00Z",
+            "mgdl": 68
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:45:00Z",
+      "context": {
+        "latest_value": 66,
+        "latest_timestamp": "2026-01-05T12:45:00Z",
+        "last_reading_at": "2026-01-05T12:45:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          },
+          {
+            "at": "2026-01-05T12:30:00Z",
+            "mgdl": 90
+          },
+          {
+            "at": "2026-01-05T12:35:00Z",
+            "mgdl": 88
+          },
+          {
+            "at": "2026-01-05T12:40:00Z",
+            "mgdl": 68
+          },
+          {
+            "at": "2026-01-05T12:45:00Z",
+            "mgdl": 66
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:50:00Z",
+      "context": {
+        "latest_value": 64,
+        "latest_timestamp": "2026-01-05T12:50:00Z",
+        "last_reading_at": "2026-01-05T12:50:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          },
+          {
+            "at": "2026-01-05T12:30:00Z",
+            "mgdl": 90
+          },
+          {
+            "at": "2026-01-05T12:35:00Z",
+            "mgdl": 88
+          },
+          {
+            "at": "2026-01-05T12:40:00Z",
+            "mgdl": 68
+          },
+          {
+            "at": "2026-01-05T12:45:00Z",
+            "mgdl": 66
+          },
+          {
+            "at": "2026-01-05T12:50:00Z",
+            "mgdl": 64
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:55:00Z",
+      "context": {
+        "latest_value": 64,
+        "latest_timestamp": "2026-01-05T12:50:00Z",
+        "last_reading_at": "2026-01-05T12:50:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          },
+          {
+            "at": "2026-01-05T12:30:00Z",
+            "mgdl": 90
+          },
+          {
+            "at": "2026-01-05T12:35:00Z",
+            "mgdl": 88
+          },
+          {
+            "at": "2026-01-05T12:40:00Z",
+            "mgdl": 68
+          },
+          {
+            "at": "2026-01-05T12:45:00Z",
+            "mgdl": 66
+          },
+          {
+            "at": "2026-01-05T12:50:00Z",
+            "mgdl": 64
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T13:00:00Z",
+      "context": {
+        "latest_value": 64,
+        "latest_timestamp": "2026-01-05T12:50:00Z",
+        "last_reading_at": "2026-01-05T12:50:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          },
+          {
+            "at": "2026-01-05T12:30:00Z",
+            "mgdl": 90
+          },
+          {
+            "at": "2026-01-05T12:35:00Z",
+            "mgdl": 88
+          },
+          {
+            "at": "2026-01-05T12:40:00Z",
+            "mgdl": 68
+          },
+          {
+            "at": "2026-01-05T12:45:00Z",
+            "mgdl": 66
+          },
+          {
+            "at": "2026-01-05T12:50:00Z",
+            "mgdl": 64
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T13:05:00Z",
+      "context": {
+        "latest_value": 64,
+        "latest_timestamp": "2026-01-05T12:50:00Z",
+        "last_reading_at": "2026-01-05T12:50:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          },
+          {
+            "at": "2026-01-05T12:30:00Z",
+            "mgdl": 90
+          },
+          {
+            "at": "2026-01-05T12:35:00Z",
+            "mgdl": 88
+          },
+          {
+            "at": "2026-01-05T12:40:00Z",
+            "mgdl": 68
+          },
+          {
+            "at": "2026-01-05T12:45:00Z",
+            "mgdl": 66
+          },
+          {
+            "at": "2026-01-05T12:50:00Z",
+            "mgdl": 64
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T13:10:00Z",
+      "context": {
+        "latest_value": 62,
+        "latest_timestamp": "2026-01-05T13:10:00Z",
+        "last_reading_at": "2026-01-05T13:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          },
+          {
+            "at": "2026-01-05T12:30:00Z",
+            "mgdl": 90
+          },
+          {
+            "at": "2026-01-05T12:35:00Z",
+            "mgdl": 88
+          },
+          {
+            "at": "2026-01-05T12:40:00Z",
+            "mgdl": 68
+          },
+          {
+            "at": "2026-01-05T12:45:00Z",
+            "mgdl": 66
+          },
+          {
+            "at": "2026-01-05T12:50:00Z",
+            "mgdl": 64
+          },
+          {
+            "at": "2026-01-05T13:10:00Z",
+            "mgdl": 62
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T13:15:00Z",
+      "context": {
+        "latest_value": 60,
+        "latest_timestamp": "2026-01-05T13:15:00Z",
+        "last_reading_at": "2026-01-05T13:15:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          },
+          {
+            "at": "2026-01-05T12:30:00Z",
+            "mgdl": 90
+          },
+          {
+            "at": "2026-01-05T12:35:00Z",
+            "mgdl": 88
+          },
+          {
+            "at": "2026-01-05T12:40:00Z",
+            "mgdl": 68
+          },
+          {
+            "at": "2026-01-05T12:45:00Z",
+            "mgdl": 66
+          },
+          {
+            "at": "2026-01-05T12:50:00Z",
+            "mgdl": 64
+          },
+          {
+            "at": "2026-01-05T13:10:00Z",
+            "mgdl": 62
+          },
+          {
+            "at": "2026-01-05T13:15:00Z",
+            "mgdl": 60
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T13:20:00Z",
+      "context": {
+        "latest_value": 58,
+        "latest_timestamp": "2026-01-05T13:20:00Z",
+        "last_reading_at": "2026-01-05T13:20:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "glucose_series": [
+          {
+            "at": "2026-01-05T11:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:05:00Z",
+            "mgdl": 260
+          },
+          {
+            "at": "2026-01-05T11:10:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:15:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:20:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:25:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:30:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:35:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:40:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:45:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:50:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T11:55:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:00:00Z",
+            "mgdl": 150
+          },
+          {
+            "at": "2026-01-05T12:05:00Z",
+            "mgdl": 140
+          },
+          {
+            "at": "2026-01-05T12:10:00Z",
+            "mgdl": 125
+          },
+          {
+            "at": "2026-01-05T12:15:00Z",
+            "mgdl": 110
+          },
+          {
+            "at": "2026-01-05T12:20:00Z",
+            "mgdl": 100
+          },
+          {
+            "at": "2026-01-05T12:25:00Z",
+            "mgdl": 95
+          },
+          {
+            "at": "2026-01-05T12:30:00Z",
+            "mgdl": 90
+          },
+          {
+            "at": "2026-01-05T12:35:00Z",
+            "mgdl": 88
+          },
+          {
+            "at": "2026-01-05T12:40:00Z",
+            "mgdl": 68
+          },
+          {
+            "at": "2026-01-05T12:45:00Z",
+            "mgdl": 66
+          },
+          {
+            "at": "2026-01-05T12:50:00Z",
+            "mgdl": 64
+          },
+          {
+            "at": "2026-01-05T13:10:00Z",
+            "mgdl": 62
+          },
+          {
+            "at": "2026-01-05T13:15:00Z",
+            "mgdl": 60
+          },
+          {
+            "at": "2026-01-05T13:20:00Z",
+            "mgdl": 58
+          }
+        ]
+      }
+    }
+  ]
+}

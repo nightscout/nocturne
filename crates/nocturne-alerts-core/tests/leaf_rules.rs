@@ -1995,6 +1995,7 @@ fn presence(ctx: &SensorContext) -> Vec<(&'static str, bool)> {
         predictions,
         prediction_curves,
         aps_determination,
+        glucose_series,
         active_alerts,
         last_aps_cycle_at,
         last_aps_enacted_at,
@@ -2041,6 +2042,7 @@ fn presence(ctx: &SensorContext) -> Vec<(&'static str, bool)> {
         ("predictions", !predictions.is_empty()),
         ("prediction_curves", !prediction_curves.is_empty()),
         ("aps_determination", aps_determination.is_some()),
+        ("glucose_series", !glucose_series.is_empty()),
         ("active_alerts", !active_alerts.is_empty()),
         ("last_aps_cycle_at", last_aps_cycle_at.is_some()),
         ("last_aps_enacted_at", last_aps_enacted_at.is_some()),
@@ -2142,3 +2144,278 @@ fn a_true_leaf_under_not_names_nothing() {
         json!([{ "leaf_id": 1, "kind": "predicted", "curve": "default", "offset_minutes": 5, "value": 185 }])
     );
 }
+
+// ---------------------------------------------------------------------------
+// windows over recent readings
+// ---------------------------------------------------------------------------
+
+/// A newest reading at a whole minute up to ten back or around the default bound, and up to
+/// twelve readings before it, mostly five minutes apart with now and then a longer gap. The
+/// series holds the newest reading nine times in ten, and is listed newest first half the time.
+fn window_case(payload: BoxedStrategy<Value>) -> BoxedStrategy<Case> {
+    let newest = prop_oneof![
+        6 => (0..=10i64).prop_map(|n| n * 60),
+        1 => select(vec![659i64, 660, 661, 900]),
+    ];
+    let steps = vec(
+        select(vec![300i64, 300, 300, 300, 600, 900, 1200, 2400]),
+        0..=12,
+    );
+    (
+        glucose_leaf(payload),
+        newest,
+        steps,
+        vec(quantity(), 13),
+        option::weighted(0.9, Just(())),
+        any::<bool>(),
+        option::weighted(0.9, Just(())),
+    )
+        .prop_map(
+            |(mut c, newest, steps, values, holds_newest, reversed, valued)| {
+                let instant =
+                    |ago: i64| Value::from((base() - TimeDelta::seconds(ago)).to_rfc3339());
+                let mut ages = vec![newest];
+                for step in steps {
+                    ages.push(ages.last().unwrap() + step);
+                }
+                let mut points: Vec<Value> = ages
+                    .iter()
+                    .zip(&values)
+                    .map(|(&ago, mgdl)| json!({ "at": instant(ago), "mgdl": mgdl }))
+                    .collect();
+                if holds_newest.is_none() {
+                    points.remove(0);
+                }
+                if reversed {
+                    points.reverse();
+                }
+                c.ctx["latest_timestamp"] = instant(newest);
+                c.ctx["latest_received_at"] = Value::Null;
+                c.ctx["latest_value"] = valued.map_or(Value::Null, |()| values[0].clone());
+                c.ctx["glucose_series"] = Value::from(points);
+                c
+            },
+        )
+        .boxed()
+}
+
+fn window_minutes() -> BoxedStrategy<Value> {
+    select(vec![5i64, 10, 15, 20, 30, 60])
+        .prop_map(Value::from)
+        .boxed()
+}
+
+/// The readings of the window that ends at the newest reading, as (seconds ago, value), oldest
+/// first; absent when the series does not hold the newest reading.
+fn window_points(c: &Case) -> Result<Vec<(i64, Decimal)>, Verdict> {
+    let newest = ago(&c.ctx, "latest_timestamp").expect("a newest reading");
+    let opens = newest + whole(c, "window_minutes") * 60;
+    let mut points: Vec<(i64, Decimal)> = c.ctx["glucose_series"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (ago_of_instant(&p["at"]), decimal_of(&p["mgdl"])))
+        .filter(|&(age, _)| (newest..=opens).contains(&age))
+        .collect();
+    points.sort_by_key(|&(age, _)| std::cmp::Reverse(age));
+    if points.last().is_none_or(|&(age, _)| age != newest) {
+        return Err(unknown("absent"));
+    }
+    Ok(points)
+}
+
+/// Whether the oldest reading comes more than the bound after the window opens, and whether
+/// two readings in a row are more than the bound apart.
+fn window_holes(c: &Case, points: &[(i64, Decimal)]) -> (bool, bool) {
+    let bound = c.freshness_minutes.unwrap_or(FRESHNESS_MINUTES) * 60;
+    let newest = ago(&c.ctx, "latest_timestamp").unwrap();
+    let opens = newest + whole(c, "window_minutes") * 60;
+    let late = opens - points[0].0 > bound;
+    let gapped = points.windows(2).any(|pair| pair[0].0 - pair[1].0 > bound);
+    (late, gapped)
+}
+
+fn windowed(c: &Case, decide: impl FnOnce(Vec<(i64, Decimal)>) -> Verdict) -> Verdict {
+    judged(c, field(&c.ctx, "latest_value").cloned(), |_| {
+        window_points(c).map_or_else(|absent| absent, decide)
+    })
+}
+
+fn glucose_change_model(c: &Case) -> Verdict {
+    windowed(c, |points| {
+        if points.len() < 2 {
+            return unknown("absent");
+        }
+        if window_holes(c, &points).0 {
+            return unknown("late");
+        }
+        let change = points.last().unwrap().1 - points[0].1;
+        verdict(compared(c, change), "change")
+    })
+}
+
+/// A value read where readings are missing. With `at_least`, more readings could only raise it
+/// (a highest reading, a count); without, only lower it (a lowest reading). It decides the
+/// comparison only where every value past it gives the same answer.
+fn bounded(op: &str, read: Decimal, limit: Decimal, at_least: bool) -> Verdict {
+    let holds = compare(op, read, limit);
+    let rises_true = matches!(op, ">" | ">=") == at_least;
+    match op {
+        "==" if (at_least && read > limit) || (!at_least && read < limit) => {
+            verdict(false, "bound")
+        }
+        "==" => unknown("gap"),
+        _ if rises_true && holds => verdict(true, "bound"),
+        _ if !rises_true && !holds => verdict(false, "bound"),
+        _ => unknown("gap"),
+    }
+}
+
+fn glucose_extreme_model(c: &Case) -> Verdict {
+    windowed(c, |points| {
+        let max = c.payload["of"] == "max";
+        let values = points.iter().map(|&(_, v)| v);
+        let extreme = if max { values.max() } else { values.min() }.unwrap();
+        let (late, gapped) = window_holes(c, &points);
+        if late || gapped {
+            bounded(operator(c), extreme, operand(c, "value"), max)
+        } else {
+            verdict(compared(c, extreme), "exact")
+        }
+    })
+}
+
+fn glucose_count_model(c: &Case) -> Verdict {
+    windowed(c, |points| {
+        let reading = &c.payload["reading"];
+        let (op, value) = (
+            reading["operator"].as_str().unwrap(),
+            decimal_of(&reading["value"]),
+        );
+        let met = points
+            .iter()
+            .filter(|&&(_, v)| compare(op, v, value))
+            .count();
+        let (late, gapped) = window_holes(c, &points);
+        let incomplete = late || gapped;
+        if let Some(tally) = field(&c.payload, "count") {
+            let (op, n) = (
+                tally["operator"].as_str().unwrap(),
+                decimal_of(&tally["value"]),
+            );
+            let met = Decimal::from(met);
+            return if incomplete {
+                bounded(op, met, n, true)
+            } else {
+                verdict(compare(op, met, n), "exact")
+            };
+        }
+        let tally = &c.payload["percent"];
+        let (op, p) = (
+            tally["operator"].as_str().unwrap(),
+            decimal_of(&tally["value"]),
+        );
+        if incomplete {
+            // Any number of readings of either kind could be missing: any percent at all.
+            let (zero, hundred) = (
+                compare(op, Decimal::ZERO, p),
+                compare(op, Decimal::ONE_HUNDRED, p),
+            );
+            return match (zero, hundred, op) {
+                (true, true, _) => verdict(true, "bound"),
+                (false, false, "==") => unknown("gap"),
+                (false, false, _) => verdict(false, "bound"),
+                _ => unknown("gap"),
+            };
+        }
+        let percent = Decimal::from(met) * Decimal::ONE_HUNDRED / Decimal::from(points.len());
+        verdict(compare(op, percent, p), "exact")
+    })
+}
+
+fn glucose_change_payload() -> BoxedStrategy<Value> {
+    (word_value::<CmpOp>(), quantity(), window_minutes())
+        .prop_map(|(operator, value, window)| {
+            json!({ "operator": operator, "value": value, "window_minutes": window })
+        })
+        .boxed()
+}
+
+fn glucose_extreme_payload() -> BoxedStrategy<Value> {
+    (
+        select(vec!["min", "max"]),
+        word_value::<CmpOp>(),
+        quantity(),
+        window_minutes(),
+    )
+        .prop_map(|(of, operator, value, window)| {
+            json!({ "of": of, "operator": operator, "value": value, "window_minutes": window })
+        })
+        .boxed()
+}
+
+fn glucose_count_payload() -> BoxedStrategy<Value> {
+    let tally = prop_oneof![
+        (word_value::<CmpOp>(), 0..=4i32)
+            .prop_map(|(operator, n)| ("count", json!({ "operator": operator, "value": n }))),
+        (word_value::<CmpOp>(), select(vec![0i32, 25, 50, 75, 100]))
+            .prop_map(|(operator, p)| ("percent", json!({ "operator": operator, "value": p }))),
+    ];
+    (word_value::<CmpOp>(), quantity(), window_minutes(), tally)
+        .prop_map(|(operator, value, window, (field, tally))| {
+            let mut payload = json!({
+                "reading": { "operator": operator, "value": value },
+                "window_minutes": window,
+            });
+            payload[field] = tally;
+            payload
+        })
+        .boxed()
+}
+
+family!(
+    glucose_change_compares_the_newest_reading_less_the_oldest_in_the_window,
+    ConditionKind::GlucoseChange,
+    window_case(glucose_change_payload()),
+    glucose_change_model,
+    [
+        "true:change",
+        "false:change",
+        "unknown:late",
+        "unknown:absent",
+        "unknown:stale",
+        "unknown:sensor"
+    ]
+);
+
+family!(
+    glucose_extreme_reads_the_window_and_a_gap_only_where_it_could_decide,
+    ConditionKind::GlucoseExtreme,
+    window_case(glucose_extreme_payload()),
+    glucose_extreme_model,
+    [
+        "true:exact",
+        "false:exact",
+        "true:bound",
+        "false:bound",
+        "unknown:gap",
+        "unknown:absent",
+        "unknown:stale"
+    ]
+);
+
+family!(
+    glucose_count_tallies_the_window_and_a_gap_only_where_it_could_decide,
+    ConditionKind::GlucoseCount,
+    window_case(glucose_count_payload()),
+    glucose_count_model,
+    [
+        "true:exact",
+        "false:exact",
+        "true:bound",
+        "false:bound",
+        "unknown:gap",
+        "unknown:absent",
+        "unknown:stale"
+    ]
+);

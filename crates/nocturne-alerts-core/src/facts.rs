@@ -32,6 +32,7 @@ wire_enum! {
         SensorState = "sensor_state",
         ApsDetermination = "aps_determination",
         TargetRange = "target_range",
+        GlucoseSeries = "glucose_series",
     }
 }
 
@@ -69,6 +70,9 @@ pub fn reads(kind: ConditionKind) -> &'static [ContextFact] {
         ConditionKind::DoNotDisturb => &[F::DoNotDisturb],
         ConditionKind::TimeOfDay | ConditionKind::DayOfWeek => &[F::TimeZone],
         ConditionKind::EventualGlucose | ConditionKind::CarbsRequired => &[F::ApsDetermination],
+        ConditionKind::GlucoseChange
+        | ConditionKind::GlucoseCount
+        | ConditionKind::GlucoseExtreme => &[F::Glucose, F::SensorState, F::GlucoseSeries],
         ConditionKind::Composite | ConditionKind::Not | ConditionKind::Sustained => &[],
     }
 }
@@ -231,7 +235,8 @@ mod tests {
     use super::*;
     use crate::context::{
         ActiveAlertSnapshot, ApsDetermination, PredictedPoint, PumpModeSnapshot, SensorContext,
-        SensorStateSnapshot, StartedSpan, StateSpanSnapshot, TempBasalSnapshot, TrackerReference,
+        SensorStateSnapshot, SeriesPoint, StartedSpan, StateSpanSnapshot, TempBasalSnapshot,
+        TrackerReference,
     };
     use crate::enums::{
         ForecastCurve, GlucoseBucket, LimitFact, PumpMode, SensorState, StateSpanCategory,
@@ -597,6 +602,26 @@ mod tests {
             } else {
                 BTreeMap::new()
             },
+            // Every five minutes for 25 minutes up to the newest reading: falling
+            // from 120 to 60.
+            glucose_series: if has(F::GlucoseSeries) {
+                [
+                    (35, 140),
+                    (30, 130),
+                    (25, 120),
+                    (20, 110),
+                    (15, 90),
+                    (10, 60),
+                ]
+                .into_iter()
+                .map(|(minutes, mgdl)| SeriesPoint {
+                    at: ago(minutes),
+                    mgdl: Decimal::from(mgdl),
+                })
+                .collect()
+            } else {
+                Vec::new()
+            },
             aps_determination: has(F::ApsDetermination).then(|| ApsDetermination {
                 at: ago(3),
                 eventual_mgdl: Some(Decimal::from(60)),
@@ -727,6 +752,14 @@ mod tests {
             ConditionKind::SensorState => json!({"states": ["ok"], "for_minutes": 15}),
             ConditionKind::EventualGlucose => json!({"operator": "<", "value": 70}),
             ConditionKind::CarbsRequired => json!({"operator": ">", "value": 10}),
+            ConditionKind::GlucoseChange => {
+                json!({"operator": "<=", "value": -30, "window_minutes": 15})
+            }
+            ConditionKind::GlucoseCount => json!({"reading": {"operator": "<", "value": 100},
+                "window_minutes": 15, "count": {"operator": ">=", "value": 2}}),
+            ConditionKind::GlucoseExtreme => {
+                json!({"of": "max", "operator": ">", "value": 115, "window_minutes": 15})
+            }
         };
         parse_payload(kind, &params).expect("sample payload parses")
     }

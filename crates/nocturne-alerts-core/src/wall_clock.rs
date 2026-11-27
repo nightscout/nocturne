@@ -53,7 +53,10 @@ pub fn is_wall_clock(kind: ConditionKind) -> bool {
         | ConditionKind::DayOfWeek
         | ConditionKind::SleepSessionActive
         | ConditionKind::EventualGlucose
-        | ConditionKind::CarbsRequired => false,
+        | ConditionKind::CarbsRequired
+        | ConditionKind::GlucoseChange
+        | ConditionKind::GlucoseCount
+        | ConditionKind::GlucoseExtreme => false,
     }
 }
 

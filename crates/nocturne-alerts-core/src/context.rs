@@ -61,6 +61,14 @@ pub struct PredictedPoint {
     pub mgdl: Decimal,
 }
 
+/// A reading of the newest reading's stream with a glucose value: when it
+/// was taken, and its value in mg/dL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SeriesPoint {
+    pub at: DateTime<Utc>,
+    pub mgdl: Decimal,
+}
+
 /// The newest determination of the user's loop (an oref or Loop cycle) at or
 /// before `now`: when it was made, and what it said.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,6 +109,9 @@ pub struct SensorContext {
     /// none of is absent.
     pub prediction_curves: BTreeMap<ForecastCurve, Vec<PredictedPoint>>,
     pub aps_determination: Option<ApsDetermination>,
+    /// The recent readings a windowed leaf reads (engine-semantics.md §4,
+    /// recent readings), in any order; empty when the host sent none.
+    pub glucose_series: Vec<SeriesPoint>,
     pub active_alerts: HashMap<Uuid, ActiveAlertSnapshot>,
     pub last_aps_cycle_at: Option<DateTime<Utc>>,
     pub last_aps_enacted_at: Option<DateTime<Utc>>,
@@ -273,6 +284,8 @@ struct WireContext {
     #[serde(default)]
     aps_determination: Option<WireApsDetermination>,
     #[serde(default)]
+    glucose_series: Option<Vec<WireSeriesPoint>>,
+    #[serde(default)]
     active_alerts: Option<Vec<WireAlert>>,
     #[serde(default)]
     last_aps_cycle_at: Option<DateTime<Utc>>,
@@ -354,6 +367,24 @@ struct WireLapsedSensorState {
 struct WirePrediction {
     offset_minutes: i32,
     mgdl: Number,
+}
+
+#[derive(Deserialize)]
+struct WireSeriesPoint {
+    at: DateTime<Utc>,
+    mgdl: Number,
+}
+
+fn series(wire: Option<Vec<WireSeriesPoint>>) -> Result<Vec<SeriesPoint>, String> {
+    wire.unwrap_or_default()
+        .iter()
+        .map(|p| {
+            Ok(SeriesPoint {
+                at: check_timestamp(p.at, "glucose_series.at")?,
+                mgdl: dec(&p.mgdl, "glucose_series.mgdl")?,
+            })
+        })
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -568,6 +599,7 @@ impl SensorContext {
             last_sensor_start_at: opt_ts(w.last_sensor_start_at, "last_sensor_start_at")?,
             predictions: points(&w.predictions.unwrap_or_default())?,
             prediction_curves: named_curves(w.prediction_curves)?,
+            glucose_series: series(w.glucose_series)?,
             aps_determination: w
                 .aps_determination
                 .map(|d| {
