@@ -19,9 +19,9 @@ internal static class ModelConventions
     /// </summary>
     internal static void ConfigureSharedRecordIndexes(ModelBuilder modelBuilder)
     {
-        foreach (var entity in V4TimeSeriesRecordEntities.Select(t => modelBuilder.Entity(t)))
+        foreach (var entity in TimestampIndexedEntities.Select(t => modelBuilder.Entity(t)))
         {
-            entity.HasIndex(nameof(IV4TimeSeriesEntity.Timestamp))
+            entity.HasIndex(nameof(IObservationTimestamped.Timestamp))
                 .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_timestamp")
                 .IsDescending();
         }

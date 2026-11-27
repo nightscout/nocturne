@@ -9,11 +9,6 @@ internal sealed class StepCountEntityConfiguration : IEntityTypeConfiguration<St
     public void Configure(EntityTypeBuilder<StepCountEntity> entity)
     {
         entity
-            .HasIndex(s => s.Timestamp)
-            .HasDatabaseName("ix_step_counts_timestamp")
-            .IsDescending();
-
-        entity
             .HasIndex(s => s.SysCreatedAt)
             .HasDatabaseName("ix_step_counts_sys_created_at");
 
@@ -42,11 +37,6 @@ internal sealed class HeartRateEntityConfiguration : IEntityTypeConfiguration<He
             .HasIndex(h => new { h.TenantId, h.OriginalId })
             .HasDatabaseName("ix_heart_rates_tenant_original_id")
             .HasFilter("original_id IS NOT NULL");
-
-        entity
-            .HasIndex(h => h.Timestamp)
-            .HasDatabaseName("ix_heart_rates_timestamp")
-            .IsDescending();
 
         entity
             .HasIndex(h => h.SysCreatedAt)
