@@ -415,7 +415,8 @@ public class GlookoConnectorService
     }
 
     /// <summary>Where a full walk from <paramref name="now"/> starts.</summary>
-    public static DateTime FullWalkStart(DateTime now) => now.AddMonths(-GlookoConstants.FullWalkMonths);
+    public static DateTime FullWalkStart(DateTime now) =>
+        HistoryStartAt(now) ?? throw new InvalidOperationException("Glooko declares no history reach.");
 
     /// <remarks>The schedule's stamps choose the window of every type a scheduled run reads.</remarks>
     protected override IReadOnlyDictionary<string, IReadOnlyCollection<SyncDataType>> ResumeStamps =>

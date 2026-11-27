@@ -13,7 +13,7 @@ namespace Nocturne.Connectors.Core.Tests.Services;
 public class ConnectorResumeStampsTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 24, 9, 0, 0, TimeSpan.Zero);
-    private static readonly DateTime Earlier = Now.UtcDateTime.AddDays(-3);
+    private static readonly DateTime ThreeDaysAgo = Now.UtcDateTime.AddDays(-3);
 
     public class TestConfig : BaseConnectorConfiguration;
 
@@ -39,7 +39,7 @@ public class ConnectorResumeStampsTests
             SyncRequest request, TestConfig config, CancellationToken cancellationToken)
         {
             await ResumeStampAsync("low", cancellationToken);
-            await SetResumeStampsAsync(new Dictionary<string, DateTime?> { ["low"] = Earlier, ["high"] = null }, cancellationToken);
+            await SetResumeStampsAsync(new Dictionary<string, DateTime?> { ["low"] = ThreeDaysAgo, ["high"] = null }, cancellationToken);
             SeenAfterTheWrite = (
                 await ResumeStampAsync("low", cancellationToken),
                 await ResumeStampAsync("high", cancellationToken),
@@ -61,7 +61,7 @@ public class ConnectorResumeStampsTests
 
         result.Success.Should().BeTrue();
         writes.Should().Be(1);
-        store.Resume.Should().BeEquivalentTo(new Dictionary<string, DateTime> { ["low"] = Earlier, ["kept"] = Now.UtcDateTime });
-        probe.SeenAfterTheWrite.Should().Be(((DateTime?)Earlier, (DateTime?)null, (DateTime?)Now.UtcDateTime));
+        store.Resume.Should().BeEquivalentTo(new Dictionary<string, DateTime> { ["low"] = ThreeDaysAgo, ["kept"] = Now.UtcDateTime });
+        probe.SeenAfterTheWrite.Should().Be(((DateTime?)ThreeDaysAgo, (DateTime?)null, (DateTime?)Now.UtcDateTime));
     }
 }

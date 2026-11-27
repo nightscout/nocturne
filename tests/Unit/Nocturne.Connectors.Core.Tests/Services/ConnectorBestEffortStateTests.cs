@@ -17,7 +17,7 @@ namespace Nocturne.Connectors.Core.Tests.Services;
 public class ConnectorBestEffortStateTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 24, 9, 0, 0, TimeSpan.Zero);
-    private static readonly DateTime Earlier = Now.UtcDateTime.AddDays(-3);
+    private static readonly DateTime ThreeDaysAgo = Now.UtcDateTime.AddDays(-3);
 
     private static ConnectorStoreUnavailableException Down() =>
         new("connection refused", new InvalidOperationException("connection refused"));
@@ -55,7 +55,7 @@ public class ConnectorBestEffortStateTests
 
         public Task<bool> WriteStamp(CancellationToken cancellationToken) =>
             WriteStateBestEffortAsync(
-                "record the stamp", () => SetResumeStampAsync("stamp", Earlier, cancellationToken), cancellationToken);
+                "record the stamp", () => SetResumeStampAsync("stamp", ThreeDaysAgo, cancellationToken), cancellationToken);
     }
 
     private static (ProbeConnector Connector, ListLogger<ProbeConnector> Log) Probe(InMemoryConnectorStateStore store)
@@ -88,7 +88,7 @@ public class ConnectorBestEffortStateTests
 
         (await probe.WriteStamp(CancellationToken.None)).Should().BeTrue();
 
-        store.Resume["stamp"].Should().Be(Earlier);
+        store.Resume["stamp"].Should().Be(ThreeDaysAgo);
         log.Entries.Should().BeEmpty();
     }
 
@@ -130,10 +130,10 @@ public class ConnectorBestEffortStateTests
     public async Task A_best_effort_read_returns_what_the_store_holds_when_it_is_up()
     {
         var store = new InMemoryConnectorStateStore();
-        store.Resume["stamp"] = Earlier;
+        store.Resume["stamp"] = ThreeDaysAgo;
         var (probe, log) = Probe(store);
 
-        (await probe.ReadStamp("read the stamp", null, CancellationToken.None)).Should().Be(Earlier);
+        (await probe.ReadStamp("read the stamp", null, CancellationToken.None)).Should().Be(ThreeDaysAgo);
         log.Entries.Should().BeEmpty();
     }
 
@@ -142,7 +142,7 @@ public class ConnectorBestEffortStateTests
     {
         var (probe, _) = Probe(new InMemoryConnectorStateStore { BeforeRead = _ => throw new InvalidCastException() });
 
-        var read = () => probe.ReadStamp("read the stamp", Earlier, CancellationToken.None);
+        var read = () => probe.ReadStamp("read the stamp", ThreeDaysAgo, CancellationToken.None);
 
         await read.Should().ThrowAsync<InvalidCastException>();
     }
@@ -155,7 +155,7 @@ public class ConnectorBestEffortStateTests
             BeforeRead = _ => throw new TaskCanceledException("The store timed out."),
         });
 
-        (await probe.ReadStamp("read the stamp", Earlier, CancellationToken.None)).Should().Be(Earlier);
+        (await probe.ReadStamp("read the stamp", ThreeDaysAgo, CancellationToken.None)).Should().Be(ThreeDaysAgo);
     }
 
     [Fact]

@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -26,6 +27,10 @@ namespace Nocturne.Connectors.Glooko.Tests.Services;
 internal static class GlookoSyncHarness
 {
     public const string PatientCode = "eu-west-1-indigo-killdeer-4650";
+
+    /// <summary>Where a full walk from <paramref name="now"/> starts, read from the registration's declared reach.</summary>
+    public static DateTime DeclaredFullWalkStart(DateTime now) =>
+        ConnectorRegistrationAttribute.DeclaredOn(typeof(GlookoConnectorConfiguration)).HistoryReach.StartFrom(now)!.Value;
 
     public static GlookoConnectorConfiguration Config(bool useV3Api) => new()
     {

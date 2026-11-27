@@ -316,12 +316,6 @@ public class TandemConnectorService
     private static DateTime? FirstEvent(TandemBffPump device, TandemTimeResolver time) =>
         ParseWallClockUtc(device.AvailableDataRange?.Start, time);
 
-    private static DateTime Later(DateTime value, DateTime? floor) =>
-        floor is { } bound && bound > value ? bound : value;
-
-    private static DateTime Earlier(DateTime value, DateTime ceiling) =>
-        value < ceiling ? value : ceiling;
-
     /// <returns>What the run has to say about a span it could not close, or <c>null</c>.</returns>
     private async Task<string?> PublishEventsAsync(
         IReadOnlyDictionary<TandemEventClass, List<TandemPumpEvent>> groups,

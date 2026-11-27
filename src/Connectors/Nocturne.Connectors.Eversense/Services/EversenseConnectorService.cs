@@ -164,11 +164,9 @@ public class EversenseConnectorService
 
     /// <summary>
     ///     A first background sync reaches back one day; a longer import is a manual historical sync,
-    ///     bounded by <see cref="EversenseConnectorConfiguration.MaxHistoryDays"/>.
+    ///     bounded by the connector's declared history reach.
     /// </summary>
     protected override DateTime? InitialSyncFloor => Clock.GetUtcNow().UtcDateTime.AddDays(-1);
-
-    private static DateTime HistoryFloor(DateTime now) => now.AddDays(-EversenseConnectorConfiguration.MaxHistoryDays);
 
     /// <summary>
     ///     The request windows for a sync from <paramref name="from"/> to <paramref name="to"/>, oldest
@@ -179,8 +177,7 @@ public class EversenseConnectorService
         DateTime from, DateTime? to, DateTime now)
     {
         var end = to ?? now.AddMinutes(5);
-        var floor = HistoryFloor(now);
-        var start = from > floor ? from : floor;
+        var start = Later(from, HistoryStartAt(now));
 
         var windows = new List<(DateTime, DateTime)>();
         for (var windowStart = start; windowStart < end; windowStart += HistoryChunk)

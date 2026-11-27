@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Eversense.Configurations;
@@ -497,13 +498,14 @@ public class EversenseConnectorServiceTests
     }
 
     [Fact]
-    public void HistoryWindows_ClampsToMaxHistoryDays()
+    public void HistoryWindows_ClampsToTheDeclaredHistoryReach()
     {
         var now = new DateTime(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc);
+        var reach = ConnectorRegistrationAttribute.DeclaredOn(typeof(EversenseConnectorConfiguration)).HistoryReach;
 
         var windows = EversenseConnectorService.HistoryWindows(now.AddDays(-180), to: null, now);
 
-        windows[0].Start.Should().Be(now.AddDays(-EversenseConnectorConfiguration.MaxHistoryDays));
+        windows[0].Start.Should().Be(reach.StartFrom(now));
     }
 
     [Fact]
@@ -550,7 +552,7 @@ public class EversenseConnectorServiceTests
 
     [Theory]
     [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
-    public async Task SyncDataAsync_AWindowWithNoLowerBound_AsksFromMaxHistoryDaysBeforeTheClock(string shape)
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_AsksFromTheDeclaredHistoryReachBeforeTheClock(string shape)
     {
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 10, 16, 12, 0, 0, TimeSpan.Zero));
         var fixture = new ServiceFixture(
