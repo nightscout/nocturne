@@ -2643,7 +2643,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId", "DataSource", "Timestamp")
                         .IsDescending(false, false, true)
-                        .HasDatabaseName("ix_heart_rates_tenant_source_timestamp");
+                        .HasDatabaseName("ix_heart_rates_tenant_source_timestamp")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("TenantId", "Device", "DataSource")
                         .HasDatabaseName("ix_heart_rates_tenant_device_source")
@@ -5376,7 +5377,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId", "DataSource", "Timestamp")
                         .IsDescending(false, false, true)
-                        .HasDatabaseName("ix_step_counts_tenant_source_timestamp");
+                        .HasDatabaseName("ix_step_counts_tenant_source_timestamp")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("TenantId", "Device", "DataSource")
                         .HasDatabaseName("ix_step_counts_tenant_device_source")
