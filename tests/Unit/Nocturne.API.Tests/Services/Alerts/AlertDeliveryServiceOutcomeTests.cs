@@ -32,18 +32,8 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
     private static readonly Guid Tenant = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
     private static readonly Guid Member = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
 
-    private sealed class SharedInMemoryFactory(string dbName) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext()
-        {
-            var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
-            ctx.TenantId = Tenant;
-            return ctx;
-        }
-    }
-
     private readonly IDbContextFactory<NocturneDbContext> _factory =
-        new SharedInMemoryFactory($"delivery_outcome_{Guid.NewGuid()}");
+        TestDbContextFactory.ForInMemoryDatabase($"delivery_outcome_{Guid.NewGuid()}", Tenant);
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
     private readonly Mock<IInAppNotificationService> _inApp = new();
     private readonly List<ServiceProvider> _providers = [];

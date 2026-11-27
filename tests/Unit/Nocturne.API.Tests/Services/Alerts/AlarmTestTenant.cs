@@ -27,21 +27,11 @@ internal sealed class AlarmTestTenant
     public static readonly Guid Tenant = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
     public static readonly DateTime Now = new(2026, 10, 24, 3, 0, 0, DateTimeKind.Utc);
 
-    private sealed class SharedInMemoryFactory(string dbName, Guid tenantId) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext()
-        {
-            var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
-            ctx.TenantId = tenantId;
-            return ctx;
-        }
-    }
-
     private readonly string _dbName = $"engine_alarm_{Guid.NewGuid()}";
 
     public AlarmTestTenant()
     {
-        Contexts = new SharedInMemoryFactory(_dbName, Tenant);
+        Contexts = TestDbContextFactory.ForInMemoryDatabase(_dbName, Tenant);
         Broadcast
             .Setup(b => b.BroadcastEngineAlarmAsync(It.IsAny<string>(), It.IsAny<NotificationBase>()))
             .Callback((string eventName, NotificationBase notify) => Sent.Add(new EngineAlarm(eventName, notify)))
@@ -103,7 +93,8 @@ internal sealed class AlarmTestTenant
         Guid? tenantId = null)
     {
         var tenant = tenantId ?? Tenant;
-        await using var db = new SharedInMemoryFactory(_dbName, tenant).CreateDbContext();
+        await using var db = TestDbContextFactory.CreateInMemoryContext(_dbName);
+        db.TenantId = tenant;
         var rule = new AlertRuleEntity
         {
             Id = Guid.NewGuid(),

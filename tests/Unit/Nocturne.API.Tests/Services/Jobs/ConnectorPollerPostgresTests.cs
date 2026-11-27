@@ -341,7 +341,7 @@ public sealed class ConnectorPollerPostgresTests(ConnectorPollerPostgresTests.Da
         var services = new ServiceCollection();
         services.AddMetrics();
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(_app).Options;
-        services.AddSingleton<IDbContextFactory<NocturneDbContext>>(new Contexts(options));
+        services.AddSingleton<IDbContextFactory<NocturneDbContext>>(TestDbContextFactory.ForOptions(options));
         services.AddSingleton(sp => sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
         services.AddSingleton<TimeProvider>(_clock);
         services.AddTransient<IJobLedger, JobLedgerRepository>();
@@ -366,7 +366,7 @@ public sealed class ConnectorPollerPostgresTests(ConnectorPollerPostgresTests.Da
     }
 
     private IJobLedger Ledger() => new JobLedgerRepository(
-        new Contexts(new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(_app).Options).AsNocturneFactory(),
+        TestDbContextFactory.ForOptions(new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(_app).Options),
         _clock);
 
     private async Task<JobLedgerEntry> RowAsync(Guid tenant) =>
@@ -384,11 +384,6 @@ public sealed class ConnectorPollerPostgresTests(ConnectorPollerPostgresTests.Da
         insert.Parameters.AddWithValue("slug", tenant.ToString("N"));
         insert.Parameters.AddWithValue("active", active);
         await insert.ExecuteNonQueryAsync();
-    }
-
-    private sealed class Contexts(DbContextOptions<NocturneDbContext> options) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
     }
 
     [ConnectorRegistration("PollerTest", "poller-test", "POLLERTEST", "PollerTest")]

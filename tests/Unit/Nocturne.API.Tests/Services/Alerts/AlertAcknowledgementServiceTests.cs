@@ -14,6 +14,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 using Npgsql;
 using Xunit;
 
@@ -25,7 +26,7 @@ public class AlertAcknowledgementServiceTests
     private readonly string _databaseName = $"acknowledgement_tests_{Guid.NewGuid()}";
     private readonly InMemoryDatabaseRoot _databaseRoot = new();
     private readonly DbContextOptions<NocturneDbContext> _options;
-    private readonly TestDbContextFactory _factory;
+    private readonly INocturneDbContextFactory _factory;
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
     private readonly Mock<IEngineAlarmRelay> _alarmRelay = new();
     private readonly Mock<ITenantMemberService> _members = new();
@@ -43,7 +44,7 @@ public class AlertAcknowledgementServiceTests
         {
             db.Database.EnsureCreated();
         }
-        _factory = new TestDbContextFactory(_options) { TenantOverride = _tenantId };
+        _factory = TestDbContextFactory.ForOptions(_options, _tenantId);
 
         var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
@@ -283,7 +284,7 @@ public class AlertAcknowledgementServiceTests
             .AddInterceptors(new ConcurrentMuteWinsInterceptor(_options))
             .Options;
         var service = new AlertAcknowledgementService(
-            new TestDbContextFactory(racingOptions) { TenantOverride = _tenantId },
+            TestDbContextFactory.ForOptions(racingOptions, _tenantId),
             _broadcast.Object,
             _members.Object,
             _alarmRelay.Object,
@@ -538,29 +539,5 @@ public class AlertAcknowledgementServiceTests
                     "duplicate key value violates unique constraint", "ERROR", "ERROR",
                     PostgresErrorCodes.UniqueViolation));
         }
-    }
-
-    private sealed class TestDbContextFactory(DbContextOptions<NocturneDbContext> options)
-        : SingleReaderDbContextFactory
-    {
-        // Optional override so AcknowledgeExcursionAsync (which doesn't take a tenant) can still
-        // resolve the excursion across tenants under the global query filter.
-        public Guid? TenantOverride { get; set; }
-
-        public List<NocturneDbContext> Created { get; } = [];
-
-        public NocturneDbContext CreateDbContext()
-        {
-            var ctx = new NocturneDbContext(options);
-            if (TenantOverride is { } t)
-            {
-                ctx.TenantId = t;
-            }
-            Created.Add(ctx);
-            return ctx;
-        }
-
-        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
-            => ValueTask.FromResult(CreateDbContext());
     }
 }

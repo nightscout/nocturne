@@ -16,7 +16,6 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
@@ -32,12 +31,6 @@ namespace Nocturne.API.Tests.Services.Auth;
 [Trait("Category", "Unit")]
 public class EmailRecoveryTests : IDisposable
 {
-    private sealed class SharedSqliteFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-    }
-
     /// <summary>Records what it is asked to deliver, after an optional gate opens.</summary>
     internal sealed class RecordingDelivery : IAccountLinkDelivery
     {
@@ -80,7 +73,7 @@ public class EmailRecoveryTests : IDisposable
     public void Dispose() => _db.Dispose();
 
     private INocturneDbContextFactory Contexts(Guid tenantId) =>
-        new SharedSqliteFactory(_db.Options).AsNocturneFactory(tenantId);
+        _db.ContextFactory.AsNocturneFactory(tenantId);
 
     private AccountLinkService Links(Guid? tenantId = null) => new(
         Contexts(tenantId ?? _tenantId), _loginCodes, new SubjectRepository(Contexts(tenantId ?? _tenantId), AccountLinkRoutes.Off), _delivery,

@@ -11,7 +11,6 @@ using Nocturne.API.Tests.Services.Alerts.Webhooks;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -69,7 +68,7 @@ public class AlertDeliveryWebhookSigningTests
             ISecretEncryptionService encryption,
             string? storedSecret)
     {
-        var factory = new SharedInMemoryFactory($"webhook_signing_{Guid.NewGuid()}");
+        var factory = TestDbContextFactory.ForInMemoryDatabase($"webhook_signing_{Guid.NewGuid()}");
         var ruleId = Guid.CreateVersion7();
 
         await using (var seed = factory.CreateDbContext())
@@ -102,12 +101,6 @@ public class AlertDeliveryWebhookSigningTests
             providers: services.BuildServiceProvider());
 
         return (service, channels);
-    }
-
-    private sealed class SharedInMemoryFactory(string dbName) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() =>
-            TestDbContextFactory.CreateInMemoryContext(dbName);
     }
 
     private static AlertPayload Payload() => new()

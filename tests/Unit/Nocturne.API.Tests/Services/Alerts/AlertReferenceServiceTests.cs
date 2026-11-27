@@ -26,7 +26,7 @@ public class AlertReferenceServiceTests
     };
 
     private readonly DbContextOptions<NocturneDbContext> _options;
-    private readonly TestDbContextFactory _factory;
+    private readonly IDbContextFactory<NocturneDbContext> _factory;
     private readonly AlertReferenceService _sut;
 
     private readonly Guid _tenantId = Guid.NewGuid();
@@ -40,7 +40,7 @@ public class AlertReferenceServiceTests
         {
             db.Database.EnsureCreated();
         }
-        _factory = new TestDbContextFactory(_options) { TenantOverride = _tenantId };
+        _factory = TestDbContextFactory.ForOptions(_options, _tenantId);
 
         var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
@@ -160,21 +160,5 @@ public class AlertReferenceServiceTests
         var cycle = await _sut.DetectCycleAsync(ruleId: null, [Guid.NewGuid()], CancellationToken.None);
 
         cycle.Should().BeFalse();
-    }
-
-    private sealed class TestDbContextFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public Guid? TenantOverride { get; set; }
-
-        public NocturneDbContext CreateDbContext()
-        {
-            var ctx = new NocturneDbContext(options);
-            if (TenantOverride is { } t) ctx.TenantId = t;
-            return ctx;
-        }
-
-        public Task<NocturneDbContext> CreateDbContextAsync(CancellationToken ct = default)
-            => Task.FromResult(CreateDbContext());
     }
 }

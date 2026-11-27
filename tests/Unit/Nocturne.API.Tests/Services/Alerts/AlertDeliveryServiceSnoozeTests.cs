@@ -34,17 +34,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
 {
     private static readonly Guid Tenant = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
-    private sealed class SharedInMemoryFactory(string dbName) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext()
-        {
-            var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
-            ctx.TenantId = Tenant;
-            return ctx;
-        }
-    }
-
-    private readonly IDbContextFactory<NocturneDbContext> _factory = new SharedInMemoryFactory($"delivery_snooze_{Guid.NewGuid()}");
+    private readonly IDbContextFactory<NocturneDbContext> _factory = TestDbContextFactory.ForInMemoryDatabase($"delivery_snooze_{Guid.NewGuid()}", Tenant);
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
     private readonly Mock<IEngineAlarmRelay> _alarmRelay = new();
     private readonly Mock<IInAppNotificationService> _inApp = new();

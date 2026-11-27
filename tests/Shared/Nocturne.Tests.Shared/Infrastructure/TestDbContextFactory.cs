@@ -33,6 +33,26 @@ public static class TestDbContextFactory
     }
 
     /// <summary>
+    /// A factory over the named InMemory database, for a service that opens a context per operation
+    /// and a test that seeds and reads the same store; each context is pinned to <paramref name="tenantId"/>
+    /// (<see cref="Guid.Empty"/> by default, never unpinned).
+    /// </summary>
+    public static TestNocturneDbContextFactory ForInMemoryDatabase(string databaseName, Guid tenantId = default)
+    {
+        var seed = CreateInMemoryContext(databaseName);
+        seed.TenantId = tenantId;
+        return new TestNocturneDbContextFactory(seed);
+    }
+
+    /// <summary>
+    /// A factory handing out a fresh context over <paramref name="options"/> per call, pinned to
+    /// <paramref name="tenantId"/> (<see cref="Guid.Empty"/> by default, never unpinned).
+    /// </summary>
+    public static TestNocturneDbContextFactory ForOptions(
+        DbContextOptions<NocturneDbContext> options, Guid tenantId = default) =>
+        new(new NocturneDbContext(options) { TenantId = tenantId });
+
+    /// <summary>
     /// Creates an empty SQLite-backed schema with no tenant seeded; contexts it creates carry
     /// <see cref="Guid.Empty"/> as their tenant id. Use when the test seeds its own rows, or none.
     /// </summary>

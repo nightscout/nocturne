@@ -40,7 +40,7 @@ public class TenantAuditConfigCacheTests : IDisposable
     [Fact]
     public async Task GetConfigAsync_WhenNoConfigExists_ReturnsDefaults()
     {
-        var factory = new TestDbContextFactory(_contextOptions);
+        var factory = new TrackingDbContextFactory(_contextOptions);
         var cache = new TenantAuditConfigCache(factory);
 
         var config = await cache.GetConfigAsync(_tenantId);
@@ -69,7 +69,7 @@ public class TenantAuditConfigCacheTests : IDisposable
             context.SaveChanges();
         }
 
-        var factory = new TestDbContextFactory(_contextOptions);
+        var factory = new TrackingDbContextFactory(_contextOptions);
         var cache = new TenantAuditConfigCache(factory);
 
         var config = await cache.GetConfigAsync(_tenantId);
@@ -154,18 +154,6 @@ public class TenantAuditConfigCacheTests : IDisposable
                 modelBuilder.Entity(entityType.ClrType).ClearQueryFilters();
             }
         }
-    }
-
-    /// <summary>
-    /// Simple IDbContextFactory that creates real SQLite-backed contexts.
-    /// </summary>
-    private class TestDbContextFactory : IDbContextFactory<NocturneDbContext>
-    {
-        private readonly DbContextOptions<NocturneDbContext> _options;
-
-        public TestDbContextFactory(DbContextOptions<NocturneDbContext> options) => _options = options;
-
-        public NocturneDbContext CreateDbContext() => new TestAuditConfigDbContext(_options);
     }
 
     /// <summary>

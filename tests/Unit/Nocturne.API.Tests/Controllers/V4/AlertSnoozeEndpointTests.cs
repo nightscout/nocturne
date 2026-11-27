@@ -30,11 +30,6 @@ public class AlertSnoozeEndpointTests
     private readonly Mock<INocturneDbContextFactory> _contextFactory = new();
     private readonly Guid _tenantId = Guid.NewGuid();
 
-    private sealed class InMemoryFactory(DbContextOptions<NocturneDbContext> options) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-    }
-
     public AlertSnoozeEndpointTests()
     {
         _options = new DbContextOptionsBuilder<NocturneDbContext>()
@@ -55,7 +50,7 @@ public class AlertSnoozeEndpointTests
         var tenantAccessor = SettableTenantAccessor.Resolved(_tenantId);
 
         var snoozeService = new AlertSnoozeService(
-            (new InMemoryFactory(_options)).AsNocturneFactory(_tenantId),
+            TestDbContextFactory.ForOptions(_options, _tenantId),
             tenantAccessor,
             Mock.Of<IAlertRepository>(),
             Mock.Of<IAlertRuleRepository>(),

@@ -31,18 +31,8 @@ public class HubCredentialVerifierTests
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly TenantContext TenantContext = new(Tenant, "default", "Default", IsActive: true, IsDemo: false);
 
-    private sealed class SharedInMemoryFactory(string dbName) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext()
-        {
-            var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
-            ctx.TenantId = Tenant;
-            return ctx;
-        }
-    }
-
     private readonly IDbContextFactory<NocturneDbContext> _contexts =
-        new SharedInMemoryFactory($"hub_verifier_{Guid.NewGuid()}");
+        TestDbContextFactory.ForInMemoryDatabase($"hub_verifier_{Guid.NewGuid()}", Tenant);
 
     private readonly Guid _subject = Guid.NewGuid();
     private readonly Guid _grant = Guid.NewGuid();

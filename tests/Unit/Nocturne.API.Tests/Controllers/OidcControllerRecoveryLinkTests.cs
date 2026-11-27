@@ -13,7 +13,6 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -28,12 +27,6 @@ namespace Nocturne.API.Tests.Controllers;
 [Trait("Category", "Unit")]
 public class OidcControllerRecoveryLinkTests : IDisposable
 {
-    private sealed class SharedSqliteFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-    }
-
     private const string RecoveryState = "recovery-state";
 
     private readonly SqliteTestDatabase _db = TestDbContextFactory.CreateSqlite();
@@ -80,9 +73,9 @@ public class OidcControllerRecoveryLinkTests : IDisposable
             _auditService.Object,
             new Mock<ITenantMemberService>().Object,
             new RecoverySession(
-                new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId), _loginCodes,
+                _db.ContextFactory.AsNocturneFactory(_tenantId), _loginCodes,
                 new TenantMemberService(
-                    new TenantMembershipRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId), AccountLinkRoutes.Off), TimeProvider.System),
+                    new TenantMembershipRepository(_db.ContextFactory.AsNocturneFactory(_tenantId), AccountLinkRoutes.Off), TimeProvider.System),
                 Options.Create(_options), NullLogger<RecoverySession>.Instance),
             Options.Create(_options),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example" }),

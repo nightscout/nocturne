@@ -111,12 +111,6 @@ internal static class TenantOverviewTestKit
         }
     }
 
-    public sealed class InMemoryContextFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-    }
-
     /// <summary>A reason a rule of the caller's, or of <paramref name="team"/>, gives, at <paramref name="level"/>.</summary>
     public static TenantOverviewAttention RuleReason(NotificationUrgency level, TenantOverviewRuleTeam? team) =>
         new(TenantOverviewAttentionKind.FlagRule, level)

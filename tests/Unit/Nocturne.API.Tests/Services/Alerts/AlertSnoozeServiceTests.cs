@@ -31,17 +31,7 @@ public class AlertSnoozeServiceTests
     private static readonly Guid Tenant = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
     private static readonly DateTime Now = new(2026, 9, 23, 3, 0, 0, DateTimeKind.Utc);
 
-    private sealed class SharedInMemoryFactory(string dbName) : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext()
-        {
-            var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
-            ctx.TenantId = Tenant;
-            return ctx;
-        }
-    }
-
-    private readonly IDbContextFactory<NocturneDbContext> _factory = new SharedInMemoryFactory($"snooze_{Guid.NewGuid()}");
+    private readonly IDbContextFactory<NocturneDbContext> _factory = TestDbContextFactory.ForInMemoryDatabase($"snooze_{Guid.NewGuid()}", Tenant);
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(Now));
     private readonly Mock<IAlertRepository> _repository = new();
     private readonly Mock<IAlertRuleRepository> _rules = new();

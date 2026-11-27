@@ -624,7 +624,7 @@ public partial class TenantOverviewServiceTests
         var provider = services.BuildServiceProvider();
 
         var service = new TenantOverviewService(
-            new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory(), AccountLinkRoutes.Off),
+            new TenantMembershipRepository(TestDbContextFactory.ForOptions(options), AccountLinkRoutes.Off),
             TenantOverviewTestKit.InNoGroup().Object,
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
@@ -1121,7 +1121,7 @@ public partial class TenantOverviewServiceTests
         var provider = services.BuildServiceProvider();
 
         return new TenantOverviewService(
-            new TenantMembershipRepository((new InMemoryContextFactory(options)).AsNocturneFactory(), AccountLinkRoutes.Off),
+            new TenantMembershipRepository(TestDbContextFactory.ForOptions(options), AccountLinkRoutes.Off),
             TenantOverviewTestKit.InNoGroup().Object,
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(

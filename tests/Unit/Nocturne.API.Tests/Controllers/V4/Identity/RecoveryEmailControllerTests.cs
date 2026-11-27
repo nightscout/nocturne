@@ -15,7 +15,6 @@ using Nocturne.API.Tests.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
@@ -31,12 +30,6 @@ namespace Nocturne.API.Tests.Controllers.V4.Identity;
 [Trait("Category", "Unit")]
 public class RecoveryEmailControllerTests : IDisposable
 {
-    private sealed class SharedSqliteFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-    }
-
     private const string Address = "a@example.test";
     private const string Other = "b@example.test";
 
@@ -61,7 +54,7 @@ public class RecoveryEmailControllerTests : IDisposable
         var jwt = new Mock<IJwtService>();
         jwt.Setup(j => j.GenerateRefreshToken()).Returns(() => Guid.NewGuid().ToString("N"));
         _loginCodes = new LoginCodeService(jwt.Object, new Mock<IAuthAuditService>().Object, TimeProvider.System);
-        _contexts = new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId);
+        _contexts = _db.ContextFactory.AsNocturneFactory(_tenantId);
 
         using var seed = _db.CreateContext(Guid.Empty);
         seed.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "alpha", DisplayName = "Alpha household" });
