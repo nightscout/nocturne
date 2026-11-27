@@ -73,6 +73,7 @@ public class TempBasalController(
     /// Writes temp basal spans and cancels in bulk (max 1000).
     /// </summary>
     /// <param name="requests">The spans and cancels to write, at most 1000 of them.</param>
+    /// <param name="ct">Cancellation token.</param>
     /// <remarks>
     /// Items are processed in timestamp order, one at a time, so a batch may start a temp basal
     /// and cancel it later in the same request. Semantics are per-item, not all-or-nothing:
@@ -89,38 +90,42 @@ public class TempBasalController(
     /// Validation failures reject the whole request with `400 Bad Request` before anything is
     /// persisted. The response contains every record written or truncated, in processing order.
     /// </remarks>
-    public override async Task<ActionResult<TempBasal[]>> CreateBulk(
+    public override Task<ActionResult<TempBasal[]>> CreateBulk(
         [FromBody] IReadOnlyList<CreateTempBasalRequest> requests, CancellationToken ct = default)
-    {
-        var naming = BulkNaming;
-        if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Plural, ct) is { } invalid)
-            return invalid;
+        => base.CreateBulk(requests, ct);
 
-        var results = new List<TempBasal>(requests.Count);
-        foreach (var request in requests.OrderBy(r => r.Timestamp))
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Writes in timestamp order, per <see cref="CreateBulk"/>. A cancel's mapped model is never
+    /// written: the cancel truncates the active span, which is returned in its place. A span whose
+    /// re-creation is blocked is left out.
+    /// </remarks>
+    protected override async Task<TempBasal[]> WriteBulkAsync(
+        IReadOnlyList<CreateTempBasalRequest> requests, IReadOnlyList<TempBasal> models, CancellationToken ct)
+    {
+        var written = new List<TempBasal>(requests.Count);
+        foreach (var index in Enumerable.Range(0, requests.Count).OrderBy(i => requests[i].Timestamp))
         {
-            if (request.IsCancel)
+            if (requests[index].IsCancel)
             {
-                if (await CancelActiveAtAsync(request.Timestamp.UtcDateTime, ct) is { } truncated)
-                    results.Add(truncated);
+                if (await CancelActiveAtAsync(requests[index].Timestamp.UtcDateTime, ct) is { } truncated)
+                    written.Add(truncated);
                 continue;
             }
 
-            var model = MapCreateToModel(request);
+            var model = models[index];
             await StampDeviceAsync(model, ct);
             try
             {
-                results.Add(await Repository.CreateAsync(model, WriteOrigin.Live, ct));
+                written.Add(await Repository.CreateAsync(model, WriteOrigin.Live, ct));
             }
             catch (RecreationBlockedException)
             {
-                // Skipped, per the remarks on this action.
+                // Left out of the response, per the remarks on CreateBulk.
             }
         }
 
-        var written = results.ToArray();
-        await EnrichCommittedAsync(written, ct);
-        return StatusCode(StatusCodes.Status201Created, written);
+        return [.. written];
     }
 
     /// <inheritdoc/>
