@@ -229,9 +229,8 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
             {
                 // The treatment cursor resolves to a bound rather than to an absent resume point:
                 // with none stored it is this connector's own open InitialSyncFloor.
-                var treatmentFrom = openEnded
-                    ? ResumeFrom(request.From, await ResumePointAsync("Treatments", request.Resume.Point(ResumeFamily.Treatments), cancellationToken))
-                    : request.From;
+                var treatmentFrom = await ResumeFromAsync(request, () =>
+                    ResumePointAsync("Treatments", request.Resume.Point(ResumeFamily.Treatments), cancellationToken));
 
                 var now = Clock.GetUtcNow().UtcDateTime;
                 var recent = openEnded && treatmentFrom is { } crawlFrom
@@ -284,9 +283,8 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
         {
             try
             {
-                var deviceStatusFrom = openEnded
-                    ? ResumeFrom(request.From, await ResumePointAsync("DeviceStatus", request.Resume.Point(ResumeFamily.DeviceStatus), cancellationToken))
-                    : request.From;
+                var deviceStatusFrom = await ResumeFromAsync(request, () =>
+                    ResumePointAsync("DeviceStatus", request.Resume.Point(ResumeFamily.DeviceStatus), cancellationToken));
 
                 var recent = openEnded && deviceStatusFrom is { } crawlFrom
                     ? new RecentRecords<DeviceStatus>(crawlFrom - RecentReconcileWindow, Full: false,
@@ -332,9 +330,8 @@ public partial class NightscoutConnectorServiceBase<TConfig> : BaseConnectorServ
         {
             try
             {
-                var activityFrom = openEnded
-                    ? ResumeFrom(request.From, await ResumePointAsync("Activity", request.Resume.Point(ResumeFamily.Activity), cancellationToken))
-                    : request.From;
+                var activityFrom = await ResumeFromAsync(request, () =>
+                    ResumePointAsync("Activity", request.Resume.Point(ResumeFamily.Activity), cancellationToken));
 
                 var recent = openEnded && activityFrom is { } crawlFrom
                     ? new RecentRecords<Activity>(crawlFrom - RecentReconcileWindow, Full: false,

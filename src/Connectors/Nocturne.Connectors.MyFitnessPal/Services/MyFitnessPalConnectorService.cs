@@ -50,6 +50,12 @@ public class MyFitnessPalConnectorService
 
     public override string ServiceName => "MyFitnessPal";
 
+    /// <summary>
+    ///     The diary is read newest first until a page falls before the window, so a start before any
+    ///     diary reads it to its first entry, within <see cref="MyFitnessPalConstants.MaxPagesPerSync"/>.
+    /// </summary>
+    protected override DateTime? HistoryStart => DateTime.UnixEpoch;
+
     /// <inheritdoc />
     protected override IReadOnlyDictionary<string, IReadOnlyCollection<SyncDataType>> ResumeStamps { get; } =
         new Dictionary<string, IReadOnlyCollection<SyncDataType>> { [MyFitnessPalConstants.FullWalkStamp] = [SyncDataType.Food] };
@@ -76,7 +82,7 @@ public class MyFitnessPalConnectorService
             return result;
         }
 
-        // The food diary has no stored record to resume from, so a run with no lower bound, the
+        // The food diary has no stored record to resume from, so a run with neither bound, the
         // scheduled one included, reads the diary's own window. The request carries UTC instants;
         // pin the kind so the window is not reinterpreted as local.
         var from = AsUtc(request.From ?? Clock.GetUtcNow().UtcDateTime.AddDays(-config.LookbackDays));

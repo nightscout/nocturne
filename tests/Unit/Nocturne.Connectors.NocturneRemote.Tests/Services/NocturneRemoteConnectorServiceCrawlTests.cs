@@ -546,6 +546,27 @@ public class NocturneRemoteConnectorServiceCrawlTests
         handler.CrawlOf(NocturneRemoteConstants.CarbIntake).Should().NotContain("from=");
     }
 
+    /// <summary>A window naming no lower bound reads everything the remote holds, past every resume point.</summary>
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_CrawlsTheWholeRemote(string shape)
+    {
+        var stored = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(
+            handler,
+            latestGlucose: stored,
+            latestByType: new Dictionary<SyncDataType, DateTime> { [SyncDataType.Boluses] = stored });
+
+        await fixture.Service.SyncDataAsync(
+            NoLowerBound.Request(shape, DateTime.UtcNow, [SyncDataType.Glucose, SyncDataType.Boluses]),
+            fixture.Config,
+            CancellationToken.None);
+
+        handler.CrawlOf(NocturneRemoteConstants.SensorGlucose).Should().NotContain("from=");
+        handler.CrawlOf(NocturneRemoteConstants.Boluses).Should().NotContain("from=");
+    }
+
     /// <summary>
     /// A background run's lower bound is glucose's resume point, which says nothing about any other
     /// family. Widening them to it ties each to glucose: a remote whose glucose endpoint fails every

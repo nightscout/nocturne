@@ -787,18 +787,14 @@ public class TandemE2eSyncTests
     /// A range naming no lower bound is the reset-cursor shape, and it asks for everything the pump
     /// still holds — the resume point is what it is resetting, so answering from it resets nothing.
     /// </summary>
-    [Fact]
-    public async Task Explicit_range_without_a_lower_bound_crawls_from_the_pumps_available_range()
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task Window_without_a_lower_bound_crawls_from_the_pumps_available_range(string shape)
     {
         var fixture = new Fixture(
             pumperJson: PumperJson.Replace("2026-05-14T00:01:00", "2026-04-01T00:00:00"));
 
-        await fixture.RunAsync(new SyncRequest
-        {
-            From = null,
-            To = Utc(2026, 5, 16, 0, 0, 0),
-            DataTypes = [SyncDataType.Glucose],
-        });
+        await fixture.RunAsync(NoLowerBound.Request(shape, Utc(2026, 5, 16, 0, 0, 0), [SyncDataType.Glucose]));
 
         fixture.Requests.First(r => r.Path.Contains("/pump-logs/")).Path
             .Should().Contain("startDate=2026-04-01T00%3A00%3A00Z");

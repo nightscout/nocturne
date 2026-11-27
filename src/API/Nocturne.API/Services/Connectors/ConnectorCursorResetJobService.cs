@@ -31,7 +31,7 @@ public interface IConnectorCursorResetJobService
     /// configured.
     /// </summary>
     /// <param name="tenantId">The target tenant whose connectors should be re-pulled.</param>
-    /// <param name="from">Optional lower bound. When null, all available history is re-ingested.</param>
+    /// <param name="from">Optional lower bound; null re-pulls from the beginning (<see cref="SyncRequest.From"/>).</param>
     /// <param name="dataTypes">Optional data-type filter. When null/empty, every supported type is reset.</param>
     /// <param name="ct">Cancellation token for the validation work (not the background job).</param>
     /// <returns>The created job, or null when the target tenant does not exist.</returns>

@@ -102,7 +102,7 @@ public class MyFitnessPalFoodEntryMapperTests
         // An unattributed day still yields entries; only the meal name and its implied hour are lost.
         var import = Mapper().Map([Entry()], Config, from, to).Should().ContainSingle().Subject;
 
-        import.MealName.Should().BeEmpty();
+        import.MealName.Should().BeNull("an unnamed import keeps the name already stored");
         import.Carbs.Should().Be(30);
         import.ConsumedAt.Should().Be(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero));
     }

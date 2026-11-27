@@ -493,7 +493,7 @@ public class ServicesController : ControllerBase
     /// Trigger a manual sync for a specific connector.
     /// </summary>
     /// <param name="id">Connector ID (e.g., "dexcom", "tidepool")</param>
-    /// <param name="request">Sync request parameters (date range and data types)</param>
+    /// <param name="request">Sync request parameters (date range and data types). A null <c>from</c> with a <c>to</c> syncs from the beginning; see <see cref="Nocturne.Connectors.Core.Models.SyncRequest.From"/>.</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Sync result with success status and details</returns>
     [HttpPost("connectors/{id}/sync")]
@@ -543,8 +543,8 @@ public class ServicesController : ControllerBase
     /// idempotency keys (see the "Syncing" guide), so it is safe to run after fixing a connector
     /// bug to push corrected data to a tenant.
     ///
-    /// <para><b>Latency:</b> this runs synchronously. A full-history re-pull with no lower bound
-    /// re-ingests every data type over the connector's entire history (glucose can be tens of
+    /// <para><b>Latency:</b> this runs synchronously. A re-pull with no lower bound
+    /// re-ingests every data type over all the history the connector can read (glucose can be tens of
     /// thousands of records), which is a multi-minute request and may approach or exceed
     /// reverse-proxy / browser timeouts. Scope it with <c>from</c> and/or <c>dataTypes</c> when
     /// possible. The cross-tenant equivalent
@@ -552,7 +552,7 @@ public class ServicesController : ControllerBase
     /// avoid this.</para>
     /// </remarks>
     /// <param name="id">Connector ID (e.g., "nightscout", "dexcom").</param>
-    /// <param name="request">Optional lower bound and data-type filter. Omit <c>from</c> to re-pull all available history; omit <c>dataTypes</c> to reset every supported type.</param>
+    /// <param name="request">Optional lower bound and data-type filter. Omit <c>from</c> to re-pull from the beginning (<see cref="Nocturne.Connectors.Core.Models.SyncRequest.From"/>); omit <c>dataTypes</c> to reset every supported type.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Sync result with success status and details.</returns>
     [HttpPost("connectors/{id}/reset-cursor")]
@@ -720,8 +720,8 @@ public class DeleteConnectionRecordsRequest
 public class ResetCursorRequest
 {
     /// <summary>
-    /// Optional lower bound for the re-pull. When null, no lower bound is applied and all
-    /// available history is re-ingested.
+    /// Optional lower bound for the re-pull. When null, it re-pulls from the beginning
+    /// (<see cref="Nocturne.Connectors.Core.Models.SyncRequest.From"/>).
     /// </summary>
     public DateTime? From { get; init; }
 

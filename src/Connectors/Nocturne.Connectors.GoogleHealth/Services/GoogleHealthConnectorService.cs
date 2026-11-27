@@ -41,6 +41,8 @@ public sealed class GoogleHealthConnectorService(
     // Matches GoogleHealthService.ValidateOptions' floor for an explicit ImportFrom.
     private static readonly DateTimeOffset EarliestSupportedDate = new(GoogleHealthState.EarliestSupportedDate);
 
+    protected override DateTime? HistoryStart => GoogleHealthState.EarliestSupportedDate;
+
     /// <summary>
     ///     Persisted backfill progress: <see cref="CursorDate"/> is the oldest UTC day already
     ///     imported (null before the very first sync), <see cref="FloorDate"/> is the oldest day the
@@ -57,20 +59,19 @@ public sealed class GoogleHealthConnectorService(
     ///     Resolves the next historical calendar-month window. The live window is processed
     ///     separately on every managed sync, before this backfill window. Caller-supplied windows
     ///     are completed in full without touching backfill state; reconciliation splits oversized
-    ///     windows as needed. An omitted lower bound uses the earliest supported date.
+    ///     windows as needed. A range arrives with its lower bound resolved (<see cref="HistoryStart"/>);
+    ///     an explicit lower bound with no end runs to now.
     /// </summary>
     private async Task<GoogleHealthSyncWindow> ResolveWindowAsync(
         SyncRequest request, GoogleHealthConnectorConfiguration config, DateTimeOffset now, CancellationToken ct)
     {
         var today = new DateTimeOffset(DateTime.SpecifyKind(now.UtcDateTime.Date, DateTimeKind.Utc));
-        if (request.From is not null || request.To is not null)
+        if (request.From is { } requestedFrom)
         {
             var explicitTo = request.To is { } requestedTo
                 ? new DateTimeOffset(DateTime.SpecifyKind(requestedTo, DateTimeKind.Utc))
                 : now;
-            var explicitFrom = request.From is { } requestedFrom
-                ? new DateTimeOffset(DateTime.SpecifyKind(requestedFrom, DateTimeKind.Utc))
-                : EarliestSupportedDate;
+            var explicitFrom = new DateTimeOffset(DateTime.SpecifyKind(requestedFrom, DateTimeKind.Utc));
             return new GoogleHealthSyncWindow(explicitFrom, explicitTo, IsBackfillDay: false, IsManaged: false);
         }
 

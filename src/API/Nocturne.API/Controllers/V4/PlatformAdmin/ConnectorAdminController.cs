@@ -155,7 +155,8 @@ public class ConnectorAdminController : ControllerBase
 public class AdminResetCursorsRequest
 {
     /// <summary>
-    /// Optional lower bound for the re-pull. When null, all available history is re-ingested.
+    /// Optional lower bound for the re-pull. When null, it re-pulls from the beginning
+    /// (<see cref="SyncRequest.From"/>).
     /// </summary>
     public DateTime? From { get; init; }
 

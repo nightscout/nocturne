@@ -55,7 +55,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
                 ExternalFoodId = food?.Id ?? string.Empty,
                 ConsumedAt = consumedAt,
                 LoggedAt = TryParseTimestamp(entry.LoggedAt),
-                MealName = mealName ?? string.Empty,
+                MealName = mealName,
                 Carbs = nutrition?.Carbs ?? 0,
                 Protein = nutrition?.Protein ?? 0,
                 Fat = nutrition?.Fat ?? 0,

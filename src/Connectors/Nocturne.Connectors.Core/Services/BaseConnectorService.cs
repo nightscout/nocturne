@@ -124,7 +124,8 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
                 if (SignsInBeforeSync)
                     await SignedInAsync(config, cancellationToken);
 
-                return await RunAsync(request.From, request.To, request.DataTypes, scheduled: false, config, cancellationToken);
+                var from = request.To is null ? request.From : request.From ?? HistoryStart;
+                return await RunAsync(from, request.To, request.DataTypes, scheduled: false, config, cancellationToken);
             });
     }
 
@@ -398,18 +399,23 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     }
 
     /// <summary>
-    ///     The lower bound a whole request crawls from, for a source that cannot crawl from an open
-    ///     one. An explicit range is answered as asked: it is the shape a manual re-import of one
-    ///     window sends, and widening it back to a resume point below re-crawls everything in
-    ///     between. A range naming no lower bound is asking for everything available, so it starts
-    ///     at <paramref name="historyFloor"/> — as far back as the connector reaches, which is the
-    ///     reading the reset-cursor endpoint documents and the only one under which it resets
-    ///     anything. <paramref name="resumePoint"/> is read only for an open-ended request, so the
-    ///     connector declares its points (<see cref="ResumesFrom"/>) only for one.
+    ///     The lower bound a whole request, or one family of it, crawls from. A range is answered as
+    ///     asked, from its <see cref="SyncRequest.From"/>: widening it back to a resume point below
+    ///     re-crawls everything in between. An open-ended request goes through
+    ///     <see cref="ResumeFrom(DateTime?, DateTime?)"/> with <paramref name="resumePoint"/>, which is
+    ///     read only then, so the connector declares its points (<see cref="ResumesFrom"/>) only for one.
     /// </summary>
-    protected static DateTime ResumeFrom(
-        SyncRequest request, Func<DateTime> resumePoint, DateTime historyFloor) =>
-        request.To is null ? ResumeFrom(request.From, resumePoint()) : request.From ?? historyFloor;
+    protected static DateTime? ResumeFrom(SyncRequest request, Func<DateTime?> resumePoint) =>
+        WidensToResumePoint(request) ? ResumeFrom(request.From, resumePoint()) : request.From;
+
+    /// <summary>
+    ///     <see cref="ResumeFrom(SyncRequest, Func{DateTime?})"/>, over a resume point read
+    ///     asynchronously (<see cref="ResumePointAsync"/>).
+    /// </summary>
+    protected static async Task<DateTime?> ResumeFromAsync(SyncRequest request, Func<Task<DateTime?>> resumePoint) =>
+        WidensToResumePoint(request) ? ResumeFrom(request.From, await resumePoint()) : request.From;
+
+    private static bool WidensToResumePoint(SyncRequest request) => request.To is null;
 
     /// <summary>
     ///     Applies the catch-up overlap to a latest-record timestamp: returns the timestamp
@@ -474,6 +480,15 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
 
     /// <summary>The default initial backfill window: six months before now.</summary>
     protected DateTime DefaultInitialSyncFloor() => Clock.GetUtcNow().UtcDateTime.AddMonths(-6);
+
+    /// <summary>
+    ///     How far back the source serves records: where a range naming no lower bound starts.
+    ///     <c>null</c>, the default, for a source that reads from an open start, which then fetches
+    ///     its whole history. A connector whose source serves only a recent span, or that needs a
+    ///     concrete start, overrides it.
+    /// </summary>
+    /// <remarks>Not <see cref="InitialSyncFloor"/>, which is a policy for the scheduled first sync.</remarks>
+    protected virtual DateTime? HistoryStart => null;
 
     /// <summary>
     ///     Core synchronization logic: fetches and publishes the data types

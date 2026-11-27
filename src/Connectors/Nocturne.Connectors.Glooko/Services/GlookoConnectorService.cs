@@ -343,10 +343,10 @@ public class GlookoConnectorService
 
             // The request window is real-UTC; Glooko queries expect fake-UTC (local wall-clock). Pad by
             // a day each side so a non-zero offset between the two never clips edge data (dedup absorbs
-            // the overlap). A range naming no lower bound reaches back the full history floor.
+            // the overlap). A request with neither bound reaches back as far as a full walk.
             var now = Clock.GetUtcNow().UtcDateTime;
             var from = context.TimeMapper.ToGlookoTime(
-                WindowStart(request, ResumeFamily.Glucose) ?? now.AddMonths(-GlookoConstants.FullWalkMonths)).AddDays(-1);
+                WindowStart(request, ResumeFamily.Glucose) ?? FullWalkStart(now)).AddDays(-1);
             var to = context.TimeMapper.ToGlookoTime(request.To ?? now).AddDays(1);
 
             var chunks = DateChunker.Chunk(from, to, GlookoConstants.SyncChunkSize).ToList();
@@ -414,6 +414,15 @@ public class GlookoConnectorService
         }
     }
 
+    /// <summary>
+    ///     No limit of Glooko's is known, and the date-windowed fetch needs a concrete start, so a
+    ///     range naming no lower bound reads as far back as a full walk.
+    /// </summary>
+    protected override DateTime? HistoryStart => FullWalkStart(Clock.GetUtcNow().UtcDateTime);
+
+    /// <summary>Where a full walk from <paramref name="now"/> starts.</summary>
+    public static DateTime FullWalkStart(DateTime now) => now.AddMonths(-GlookoConstants.FullWalkMonths);
+
     /// <remarks>The schedule's stamps choose the window of every type a scheduled run reads.</remarks>
     protected override IReadOnlyDictionary<string, IReadOnlyCollection<SyncDataType>> ResumeStamps =>
         new Dictionary<string, IReadOnlyCollection<SyncDataType>>
@@ -466,7 +475,7 @@ public class GlookoConnectorService
         var tier = await ResolveWindowTierAsync(now, cancellationToken);
         var from = tier switch
         {
-            WindowTier.FullWalk => now.AddMonths(-GlookoConstants.FullWalkMonths),
+            WindowTier.FullWalk => FullWalkStart(now),
             WindowTier.Lookback => now.AddDays(-config.LookbackDays),
             _ => now - GlookoConstants.ShortWindow,
         };

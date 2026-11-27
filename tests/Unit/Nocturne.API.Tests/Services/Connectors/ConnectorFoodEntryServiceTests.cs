@@ -49,7 +49,7 @@ public class ConnectorFoodEntryServiceTests
 
     private static ConnectorFoodEntryImport Import(
         string externalEntryId = "entry-1",
-        string mealName = "Breakfast",
+        string? mealName = "Breakfast",
         bool isTimeInferred = true,
         DateTimeOffset? consumedAt = null,
         decimal carbs = 30) =>
@@ -144,6 +144,33 @@ public class ConnectorFoodEntryServiceTests
         stored.ConsumedAt.Should().Be(breakfast, "an inferred time must not overwrite a better one");
         stored.MealName.Should().Be("Breakfast");
         stored.Carbs.Should().Be(45, "nutrition is reported directly and still refreshes");
+    }
+
+    /// <summary>
+    /// A whole-diary re-pull names only the newest days, so an older entry arrives with its reported
+    /// time and no meal name. The name an earlier sync stored stays.
+    /// </summary>
+    [Fact]
+    public async Task ImportAsync_AReportedTimeWithNoMealName_KeepsTheStoredName()
+    {
+        var reported = new DateTimeOffset(2025, 3, 1, 7, 45, 0, TimeSpan.Zero);
+
+        await using (var context = NewContext())
+        {
+            await NewService(context).ImportAsync(UserId, [Import(isTimeInferred: false, consumedAt: reported)]);
+        }
+
+        await using (var context = NewContext())
+        {
+            await NewService(context).ImportAsync(
+                UserId, [Import(mealName: null, isTimeInferred: false, consumedAt: reported, carbs: 40)]);
+        }
+
+        await using var assertContext = NewContext();
+        var stored = await assertContext.ConnectorFoodEntries.SingleAsync();
+
+        stored.MealName.Should().Be("Breakfast");
+        stored.Carbs.Should().Be(40);
     }
 
     [Fact]

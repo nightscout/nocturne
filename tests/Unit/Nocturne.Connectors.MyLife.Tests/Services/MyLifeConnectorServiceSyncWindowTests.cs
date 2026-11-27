@@ -167,8 +167,9 @@ public class MyLifeConnectorServiceSyncWindowTests
         fixture.Sync.Until.Should().Be(clock.GetUtcNow().UtcDateTime);
     }
 
-    [Fact]
-    public async Task SyncDataAsync_WhenAnExplicitRangeNamesNoLowerBound_CrawlsFromSixMonthsBeforeTheClockInstant()
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task SyncDataAsync_WhenAWindowNamesNoLowerBound_CrawlsFromSixMonthsBeforeTheClockInstant(string shape)
     {
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 20, 10, 0, 0, TimeSpan.Zero));
         var fixture = new Fixture(
@@ -176,12 +177,8 @@ public class MyLifeConnectorServiceSyncWindowTests
             clock.GetUtcNow().UtcDateTime.AddDays(-5),
             clock);
 
-        await fixture.RunAsync(new SyncRequest
-        {
-            From = null,
-            To = clock.GetUtcNow().UtcDateTime,
-            DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses],
-        });
+        await fixture.RunAsync(NoLowerBound.Request(
+            shape, clock.GetUtcNow().UtcDateTime, [SyncDataType.Glucose, SyncDataType.Boluses]));
 
         fixture.Sync.Since.Should().Be(clock.GetUtcNow().UtcDateTime.AddMonths(-6));
     }

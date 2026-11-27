@@ -72,7 +72,7 @@ public class ServicesControllerResetCursorTests
         await controller.ResetConnectorCursor("nightscout", new ResetCursorRequest(), CancellationToken.None);
 
         captured.Should().NotBeNull();
-        captured!.From.Should().BeNull("a null lower bound means re-pull all available history");
+        captured!.From.Should().BeNull("the connector reads a null lower bound as its beginning (SyncRequest.From)");
         captured.To.Should().NotBeNull();
         captured.DataTypes.Should().BeEmpty("an empty data-type set means reset every supported type");
     }

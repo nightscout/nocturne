@@ -54,6 +54,26 @@ public class MyFitnessPalClockTests
             .BeEquivalentTo("lookback-day", "later-today");
     }
 
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task Sync_OfAWindowWithNoLowerBound_ImportsTheWholeDiaryUpToItsEnd(string shape)
+    {
+        var fixture = new Fixture(new FakeTimeProvider(Now),
+        [
+            ("years-back", "2019-03-01"),
+            ("lookback-day", "2026-07-14"),
+        ]);
+        fixture.State.Resume[MyFitnessPalConstants.FullWalkStamp] = Now.UtcDateTime;
+
+        await fixture.Service.SyncDataAsync(
+            NoLowerBound.Request(shape, Now.UtcDateTime, [SyncDataType.Food]), fixture.Config, CancellationToken.None);
+
+        fixture.Imported.Select(e => e.ExternalEntryId).Should()
+            .BeEquivalentTo("years-back", "lookback-day");
+        fixture.Imported.Single(e => e.ExternalEntryId == "years-back").MealName.Should().BeNull(
+            "a day past the naming budget arrives unnamed, which keeps the name already stored");
+    }
+
     [Fact]
     public async Task Sync_StampsTheFullWalkAtTheClockInstant()
     {
