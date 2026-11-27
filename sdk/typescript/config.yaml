@@ -1,12 +1,14 @@
 generatorName: typescript-fetch
 outputDir: ./out
+# The generator reads these at the top level only; package.json's repository comes from them, and npm
+# trusted publishing refuses a package whose repository is not this one.
+gitUserId: "nightscout"
+gitRepoId: "nocturne"
 globalProperties:
   skipFormModel: true
 additionalProperties:
   npmName: "@nightscoutfoundation/nocturne"
   npmVersion: "0.1.0"
-  gitUserId: "nightscout"
-  gitRepoId: "nocturne"
   supportsES6: true
   typescriptThreePlus: true
   withInterfaces: true
