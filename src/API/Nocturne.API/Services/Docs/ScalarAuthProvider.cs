@@ -140,11 +140,11 @@ public sealed class ScalarAuthProvider
         {
             await PrepareScalarAuthAsync(resolved, context);
         }
-        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException)
+        catch (Exception ex) when (StoreFailure.Is(ex) || ex is SubjectNotFoundException)
         {
             // The reference is worth serving even unauthenticated: fall through to the
             // static configuration rather than failing the page. The session is refused with
-            // InvalidOperationException for a demo member a reset has retired since the lookup.
+            // SubjectNotFoundException for a demo member a reset has retired since the lookup.
             _logger.LogWarning(ex, "Failed to prepare Scalar authentication context");
         }
 

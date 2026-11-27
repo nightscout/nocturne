@@ -450,7 +450,7 @@ public static class DatabaseInitializationExtensions
                     "Could not bring the team reasons of {Count} memberships into line; they are checked again on the next startup.",
                     failed);
         }
-        catch (Exception ex) when (MembershipReasons.IsMembershipFailure(ex))
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             logger.LogError(ex, "Could not check memberships against their reasons; the check runs again on the next startup.");
         }

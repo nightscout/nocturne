@@ -10,6 +10,7 @@ public interface ISessionService
     /// Issue a new session (access + refresh token pair) for a subject.
     /// </summary>
     /// <param name="context">Contextual metadata for the session.</param>
+    /// <exception cref="SubjectNotFoundException">No subject has <paramref name="subjectId"/>.</exception>
     Task<SessionTokenPair> IssueSessionAsync(
         Guid subjectId, SessionContext context, CancellationToken ct = default);
 
@@ -32,6 +33,12 @@ public interface ISessionService
     Task<SessionClaims?> ReadRefreshClaimsAsync(
         string refreshToken, Guid subjectId, CancellationToken ct = default);
 }
+
+/// <summary>
+/// <see cref="ISessionService.IssueSessionAsync"/> found no subject to issue a session for.
+/// </summary>
+public sealed class SubjectNotFoundException(Guid subjectId)
+    : InvalidOperationException($"Subject {subjectId} not found.");
 
 /// <summary>
 /// The subject, roles and permissions an access token is minted from.

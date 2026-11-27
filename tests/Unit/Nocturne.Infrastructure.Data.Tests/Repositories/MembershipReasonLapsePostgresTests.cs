@@ -226,6 +226,28 @@ public class MembershipReasonLapsePostgresTests(MembershipReasonLapsePostgresTes
         (await LapseAsync(site, bad.Member)).Should().Be(CampEnds);
     }
 
+    [Theory]
+    [InlineData("""{"not":"a list"}""")]
+    [InlineData("[1,2]")]
+    [InlineData("[[\"a\"]]")]
+    [InlineData("\"text\"")]
+    [InlineData("5")]
+    [InlineData("null")]
+    public async Task A_direct_permissions_value_that_is_not_a_list_of_strings_fails_the_recompute_as_a_membership_failure(string malformed)
+    {
+        var site = await SiteAsync("malformed");
+        var bad = await LapsingAsync(site, "malformed-bad");
+        await NpgsqlTestCommands.ExecuteAsync(site.Migrator, $$"""
+            UPDATE tenant_member_reasons SET direct_permissions = '{{malformed}}'::jsonb
+             WHERE tenant_member_id = '{{bad.Member}}' AND kind = 'direct';
+            """);
+
+        var act = () => MembershipReasons.RecomputeAsync(site.Factory, site.Tenant, bad.Subject, After, Ct);
+
+        var failure = (await act.Should().ThrowAsync<Exception>()).Which;
+        MembershipReasons.IsMembershipFailure(failure).Should().BeTrue();
+    }
+
     [Fact]
     public async Task Recompute_is_idempotent()
     {

@@ -30,6 +30,7 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 using Nocturne.Infrastructure.Data.Repositories;
+using Npgsql;
 
 namespace Nocturne.API.Tests.Controllers;
 
@@ -1007,7 +1008,7 @@ public class PasskeyControllerTests : IDisposable
         var failingContexts = new Mock<INocturneDbContextFactory>();
         failingContexts
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("database unavailable"));
+            .ThrowsAsync(new NpgsqlException("database unavailable"));
         var controller = new PasskeyController(
             _passkeyService.Object,
             new SignInCompletion(_totpService.Object, new TenantMemberService(new TenantMembershipRepository(failingContexts.Object, AccountLinkRoutes.Off), TimeProvider.System),
@@ -1029,6 +1030,87 @@ public class PasskeyControllerTests : IDisposable
         });
 
         result.Result.Should().BeOfType<OkObjectResult>("the passkey was saved");
+    }
+
+    [Fact]
+    public async Task RegisterComplete_WhenSignedInAndVoidingRecoveryCodesHitsADefect_ReachesTheErrorHandlerNotARefusal()
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        Authenticate(subjectId);
+        StubRegistration(subjectId);
+        var controller = ControllerWhereVoidingFails(new InvalidOperationException("defect"));
+
+        var act = () => controller.RegisterComplete(RegisterCompleteRequest());
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("defect");
+    }
+
+    [Fact]
+    public async Task RegisterComplete_WhenARecoverySessionEnrolsAndVoidingRecoveryCodesHitsADefect_ReachesTheErrorHandlerNotARefusal()
+    {
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        await GiveRecoverySessionAsync(subjectId);
+        StubRegistration(subjectId);
+        var controller = ControllerWhereVoidingFails(new InvalidOperationException("defect"));
+
+        var act = () => controller.RegisterComplete(RegisterCompleteRequest());
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("defect");
+    }
+
+    private static PasskeyRegisterCompleteRequest RegisterCompleteRequest() => new()
+    {
+        AttestationResponseJson = "{}",
+        ChallengeToken = "token",
+    };
+
+    private PasskeyController ControllerWhereVoidingFails(Exception failure)
+    {
+        var tenantContexts = new SharedSqliteFactory(_db.Options).AsNocturneFactory(_tenantId);
+        var recoverySession = new RecoverySession(
+            tenantContexts, new VoidFailsLoginCodes(_loginCodes, failure),
+            new TenantMemberService(new TenantMembershipRepository(tenantContexts, AccountLinkRoutes.Off), TimeProvider.System),
+            Options.Create(FixtureCookieOptions()), NullLogger<RecoverySession>.Instance);
+        return new PasskeyController(
+            _passkeyService.Object,
+            new SignInCompletion(_totpService.Object, new TenantMemberService(new TenantMembershipRepository(tenantContexts, AccountLinkRoutes.Off), TimeProvider.System),
+                _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object),
+            _trustedDevices.Object, _recoveryCodeService.Object, recoverySession,
+            _subjectService.Object, new Mock<IAuthAuditService>().Object,
+            _tenantAccessor, _tenantService.Object, new TenantMemberService(new TenantMembershipRepository(tenantContexts, AccountLinkRoutes.Off), TimeProvider.System),
+            new SubjectRepository(tenantContexts, AccountLinkRoutes.Off), new TenantRepository(tenantContexts), new TenantMembershipRepository(tenantContexts, AccountLinkRoutes.Off),
+            tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object, TimeProvider.System)
+        {
+            ControllerContext = _controller.ControllerContext,
+        };
+    }
+
+    private sealed class VoidFailsLoginCodes(ILoginCodeService inner, Exception failure) : ILoginCodeService
+    {
+        public Task<LoginCode> IssueAsync(
+            NocturneDbContext dbContext, Guid subjectId, LoginCodePurpose purpose, string? ipAddress, string? userAgent,
+            AuthAuditActor actor, CancellationToken ct = default) =>
+            inner.IssueAsync(dbContext, subjectId, purpose, ipAddress, userAgent, actor, ct);
+
+        public Task<LoginCode?> IssueEmailedAsync(
+            NocturneDbContext dbContext, Guid subjectId, LoginCodePurpose purpose, string email, string? ipAddress,
+            string? userAgent, AuthAuditActor actor, CancellationToken ct = default) =>
+            inner.IssueEmailedAsync(dbContext, subjectId, purpose, email, ipAddress, userAgent, actor, ct);
+
+        public Task<RedeemedLoginCode?> FindLiveAsync(
+            NocturneDbContext dbContext, string code, IReadOnlyCollection<LoginCodePurpose> purposes,
+            Func<RedeemedLoginCode, CancellationToken, Task<bool>>? admits = null, CancellationToken ct = default) =>
+            inner.FindLiveAsync(dbContext, code, purposes, admits, ct);
+
+        public Task<RedeemedLoginCode?> RedeemAsync(
+            NocturneDbContext dbContext, string code, IReadOnlyCollection<LoginCodePurpose> purposes,
+            Func<RedeemedLoginCode, CancellationToken, Task<bool>>? admits,
+            Func<RedeemedLoginCode, CancellationToken, Task>? withSpend, string? ipAddress, string? userAgent,
+            CancellationToken ct = default) =>
+            inner.RedeemAsync(dbContext, code, purposes, admits, withSpend, ipAddress, userAgent, ct);
+
+        public Task VoidRecoveryCodesAsync(NocturneDbContext dbContext, Guid subjectId, CancellationToken ct = default) =>
+            Task.FromException(failure);
     }
 
     private async Task SeedMembershipAsync(Guid subjectId, Guid tenantId)

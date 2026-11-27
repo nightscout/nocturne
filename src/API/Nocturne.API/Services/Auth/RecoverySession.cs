@@ -132,8 +132,8 @@ public sealed class RecoverySession(
     /// <summary>
     /// Ends any session the request carries and voids the member's outstanding recovery codes
     /// (<see cref="ILoginCodeService.VoidRecoveryCodesAsync"/>), because <paramref name="subjectId"/>
-    /// has just gained a way to sign in. The enrolment exists whatever happens here, so a failure to
-    /// void is logged rather than thrown.
+    /// has just gained a way to sign in. The enrolment exists whatever happens here, so a store
+    /// failure while voiding is logged rather than thrown.
     /// </summary>
     public async Task EndAsync(HttpContext http, Guid subjectId, CancellationToken ct)
     {
@@ -144,7 +144,7 @@ public sealed class RecoverySession(
             await using var db = await contexts.CreateAsync(ct);
             await loginCodes.VoidRecoveryCodesAsync(db, subjectId, ct);
         }
-        catch (Exception ex) when (StoreFailure.Is(ex) || ex is InvalidOperationException)
+        catch (Exception ex) when (StoreFailure.Is(ex))
         {
             logger.LogWarning(ex, "Could not void outstanding recovery codes for {SubjectId}", subjectId);
         }

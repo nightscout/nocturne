@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using Nocturne.API.Services.Auth;
@@ -9,6 +10,7 @@ using Nocturne.API.Services.Docs;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Docs;
@@ -499,13 +501,57 @@ public class ScalarAuthProviderTests : IDisposable
         _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
         _fixture.SessionService
             .Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("Subject not found."));
+            .ThrowsAsync(new SubjectNotFoundException(Guid.NewGuid()));
         var context = DocsTenantFixture.BuildContext("demo.nocturne.run");
 
         (await _fixture.BuildProvider().TryPrepareAsync(context)).Should().BeTrue();
 
         Auth(context).Should().BeNull();
     }
+
+    [Theory]
+    [MemberData(nameof(SessionStoreFailures))]
+    public async Task TryPrepareAsync_ServesTheDocsWithoutAuthentication_WhenTheDemoSessionCannotBeStored(Exception failure)
+    {
+        _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
+        _fixture.SessionService
+            .Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        var context = DocsTenantFixture.BuildContext("demo.nocturne.run");
+
+        (await _fixture.BuildProvider().TryPrepareAsync(context)).Should().BeTrue();
+
+        Auth(context).Should().BeNull();
+    }
+
+    [Theory]
+    [MemberData(nameof(SessionDefects))]
+    public async Task TryPrepareAsync_LetsADefectOfTheDemoSessionPropagate(Exception defect)
+    {
+        _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
+        _fixture.SessionService
+            .Setup(s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(defect);
+        var context = DocsTenantFixture.BuildContext("demo.nocturne.run");
+
+        var act = () => _fixture.BuildProvider().TryPrepareAsync(context);
+
+        (await act.Should().ThrowAsync<Exception>()).Which.Should().BeSameAs(defect);
+    }
+
+    public static TheoryData<Exception> SessionStoreFailures => new()
+    {
+        new NpgsqlException("connection refused"),
+        new RetryLimitExceededException("retries exhausted", new NpgsqlException("connection refused")),
+        new DbUpdateException("save failed", new NpgsqlException("connection refused")),
+    };
+
+    public static TheoryData<Exception> SessionDefects => new()
+    {
+        new NullReferenceException(),
+        new InvalidOperationException("Subject not found."),
+        new TimeoutException(),
+    };
 
     [Fact]
     public async Task TryPrepareAsync_LetsAnUnexpectedFailureOfTheAuthenticationPreparationPropagate()
