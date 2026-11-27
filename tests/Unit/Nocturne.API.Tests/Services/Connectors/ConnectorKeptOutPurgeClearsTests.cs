@@ -37,10 +37,9 @@ public class ConnectorKeptOutPurgeClearsTests
     };
 
     private static IEnumerable<ConnectorRegistrationAttribute> Registrations() =>
-        Directory.GetFiles(AppContext.BaseDirectory, "Nocturne.Connectors.*.dll")
-            .Where(path => !Path.GetFileName(path).Contains(".Tests", StringComparison.Ordinal))
-            .Select(path => Assembly.Load(AssemblyName.GetAssemblyName(path)))
-            .SelectMany(assembly => assembly.GetTypes())
+        ConnectorAssemblies.Load()
+            .Where(assembly => !assembly.GetName().Name!.Contains(".Tests", StringComparison.Ordinal))
+            .SelectMany(assembly => assembly.LoadableTypes())
             .Select(type => type.GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false))
             .OfType<ConnectorRegistrationAttribute>();
 

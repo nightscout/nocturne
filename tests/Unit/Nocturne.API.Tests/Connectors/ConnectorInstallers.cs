@@ -1,16 +1,14 @@
 using System.Collections.Concurrent;
-using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 
 namespace Nocturne.API.Tests.Connectors;
 
 /// <summary>
-/// Finds the shipped connectors by reflection. The connector projects are references of this test
-/// project without any test naming their types, so nothing has loaded them by the time a test asks
-/// what connectors exist — they have to be pulled off disk first.
+/// Finds the shipped connectors by reflection, through the scan the host itself uses.
 /// </summary>
 internal static class ConnectorInstallers
 {
@@ -69,36 +67,6 @@ internal static class ConnectorInstallers
     /// <summary>
     /// Every type across the connector assemblies.
     /// </summary>
-    internal static IEnumerable<Type> Types()
-    {
-        // Touch one type per connector assembly so they are loaded before the scan.
-        _ = typeof(IConnectorInstaller);
-        foreach (var path in Directory.GetFiles(AppContext.BaseDirectory, "Nocturne.Connectors.*.dll"))
-        {
-            try
-            {
-                Assembly.LoadFrom(path);
-            }
-            catch (BadImageFormatException)
-            {
-                // Not a managed assembly; nothing to scan.
-            }
-        }
-
-        return AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => a.GetName().Name?.StartsWith("Nocturne.Connectors.", StringComparison.Ordinal) == true)
-            .SelectMany(SafeTypes);
-    }
-
-    private static IEnumerable<Type> SafeTypes(Assembly assembly)
-    {
-        try
-        {
-            return assembly.GetTypes();
-        }
-        catch (ReflectionTypeLoadException ex)
-        {
-            return ex.Types.Where(t => t is not null)!;
-        }
-    }
+    internal static IEnumerable<Type> Types() =>
+        ConnectorAssemblies.Load().SelectMany(assembly => assembly.LoadableTypes());
 }

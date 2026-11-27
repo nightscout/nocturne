@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -242,29 +241,7 @@ public static class ConnectorServiceCollectionExtensions
             IConfiguration configuration,
             Type? pollingService = null)
         {
-            // The host references no connector assembly, so the scan below would find none until they
-            // are loaded from the app's base directory.
-            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            foreach (var dll in Directory.GetFiles(baseDir, "Nocturne.Connectors.*.dll"))
-            {
-                try
-                {
-                    var assemblyName = AssemblyName.GetAssemblyName(dll);
-                    if (AppDomain.CurrentDomain.GetAssemblies()
-                        .All(a => a.GetName().Name != assemblyName.Name))
-                    {
-                        Assembly.LoadFrom(dll);
-                    }
-                }
-                catch (Exception ex) when (ex is BadImageFormatException or FileLoadException or FileNotFoundException)
-                {
-                    // Not a loadable managed assembly; nothing in it can register a connector.
-                }
-            }
-
-            var connectorAssemblies = AppDomain.CurrentDomain.GetAssemblies()
-                .Where(a => a.FullName?.Contains("Nocturne.Connectors") == true)
-                .ToList();
+            var connectorAssemblies = ConnectorAssemblies.Load();
 
             // Discover and invoke all IConnectorInstaller implementations
             foreach (var assembly in connectorAssemblies)

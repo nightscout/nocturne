@@ -13,6 +13,7 @@ public static class ConnectorMetadataService
 {
     private static readonly Dictionary<string, ConnectorDisplayInfo> ConnectorsByDataSourceId = new();
     private static readonly Dictionary<string, ConnectorRegistrationAttribute> RegistrationsByConnectorId = new();
+    private static readonly Dictionary<string, Type> ConfigurationTypesByConnectorId = new();
     private static bool _initialized;
     private static readonly Lock Lock = new();
 
@@ -62,6 +63,21 @@ public static class ConnectorMetadataService
     }
 
     /// <summary>
+    ///     Gets the configuration type that declares the registration of a connector by Connector ID
+    ///     (name) (e.g., "dexcom"). Returns null if the connectorId is not found.
+    /// </summary>
+    public static Type? GetConfigurationTypeByConnectorId(string? connectorId)
+    {
+        if (string.IsNullOrEmpty(connectorId))
+            return null;
+
+        EnsureInitialized();
+
+        ConfigurationTypesByConnectorId.TryGetValue(ConnectorNames.Canonical(connectorId), out var type);
+        return type;
+    }
+
+    /// <summary>
     ///     Gets all registered connector display info.
     /// </summary>
     public static IReadOnlyCollection<ConnectorDisplayInfo> GetAll()
@@ -103,13 +119,7 @@ public static class ConnectorMetadataService
             if (_initialized)
                 return;
 
-            // Scan all loaded assemblies for ConnectorRegistration attributes
-            // Connector assemblies are loaded through normal DI registration (AddXxxConnector methods)
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-                .Where(a => a.FullName?.Contains("Nocturne.Connectors") == true)
-                .ToList();
-
-            foreach (var assembly in assemblies)
+            foreach (var assembly in ConnectorAssemblies.Load())
                 foreach (var type in assembly.LoadableTypes())
                 {
                     var attr = type.GetCustomAttribute<ConnectorRegistrationAttribute>();
@@ -134,6 +144,7 @@ public static class ConnectorMetadataService
                     ConnectorsByDataSourceId[attr.DataSourceId] = info;
 
                     RegistrationsByConnectorId[attr.ConnectorId] = attr;
+                    ConfigurationTypesByConnectorId[attr.ConnectorId] = type;
                 }
 
             _initialized = true;

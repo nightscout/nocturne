@@ -27,10 +27,9 @@ public class ConnectorDestinationFieldsTests
     private static readonly string[] AddressWords = ["Url", "Uri", "Host", "Endpoint", "Address", "Domain", "Server", "Region"];
 
     private static IEnumerable<PropertyInfo> ConnectorProperties() =>
-        Directory.GetFiles(AppContext.BaseDirectory, "Nocturne.Connectors.*.dll")
-            .Where(path => !Path.GetFileName(path).Contains(".Tests", StringComparison.Ordinal))
-            .Select(path => Assembly.Load(AssemblyName.GetAssemblyName(path)))
-            .SelectMany(a => a.GetTypes())
+        ConnectorAssemblies.Load()
+            .Where(a => !a.GetName().Name!.Contains(".Tests", StringComparison.Ordinal))
+            .SelectMany(a => a.LoadableTypes())
             .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(BaseConnectorConfiguration).IsAssignableFrom(t))
             .SelectMany(t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
             .Where(p => p.GetCustomAttribute<ConnectorPropertyAttribute>() is not null);
