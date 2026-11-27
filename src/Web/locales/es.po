@@ -241,6 +241,7 @@ msgstr "Alta urgente"
 #: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
+#: src/lib/components/reports/sensor-integrity/format.svelte.ts
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
 #: src/lib/components/schedule/ScheduleView.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
@@ -264,6 +265,7 @@ msgstr "Bajo"
 #: src/lib/components/people/WallLegend.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/reports/TIRStackedChart.svelte
+#: src/lib/components/reports/sensor-integrity/format.svelte.ts
 #: src/lib/components/schedule/ScheduleView.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/stores/alarm-state.svelte.ts
@@ -2202,6 +2204,7 @@ msgstr "Grosor"
 #: ../cms/src/lib/components/edra/shadcn/components/toolbar/FontSize.svelte
 #: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/lib/components/food/GiLabel.svelte
+#: src/lib/components/reports/sensor-integrity/format.svelte.ts
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/settings/migration/NightscoutTransitionStatus.svelte
 msgid "Medium"
@@ -8157,10 +8160,8 @@ msgstr "Intentar de nuevo"
 #~ msgstr "Todavía no hay alimentos — añade uno para empezar"
 
 #. 0: picked.length
-#. 0: foods.length
 #. 0: state.foods.length
 #: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
-#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 #: src/routes/(authenticated)/food/+page.svelte
 #, python-brace-format
 msgid "{0} foods"
@@ -8211,12 +8212,14 @@ msgstr "Ordenar: añadidos recientemente"
 #. 0: idx + 1; 1: REPORTS.length
 #. 0: current; 1: total
 #. 0: r.wentBelowRange ?? 0; 1: plural(r.wentBelowRangeObserved ?? 0, ["# event", "# events"])
+#. 0: tracked; 1: nights
 #. 0: state.filteredFoods.length; 1: state.foods.length
 #. 0: s?.nightCount ?? 0; 1: s?.daysInRange ?? 0
 #. 0: filteredRows.length; 1: allRows.length
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
 #: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+#: src/lib/components/reports/sleep/SleepWeeklyBreakdown.svelte
 #: src/routes/(authenticated)/food/+page.svelte
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
@@ -9712,7 +9715,9 @@ msgstr "No hay datos para la media de 90 días"
 msgid "{0} days with data"
 msgstr "{0} días con datos"
 
+#. 0: average
 #. 0: unitLabel
+#: src/lib/components/reports/sleep/SleepWeeklyBreakdown.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #, python-brace-format
 msgid "avg {0}"
@@ -21353,17 +21358,13 @@ msgstr "Vertical: {0} ({1})"
 msgid "Horizontal: {0} ({1})"
 msgstr "Horizontal: {0} ({1})"
 
-#. 0: week.totalHypoCount ?? 0; 1: week.totalHypoCount === 1 ? "" \\: "s"
-#: src/lib/components/reports/sleep/SleepWeeklyBreakdown.svelte
 #, python-brace-format
-msgid "{0} low{1}"
-msgstr "{0} bajo{1}"
+#~ msgid "{0} low{1}"
+#~ msgstr "{0} bajo{1}"
 
-#. 0: week.nightCount; 1: week.daysInRange; 2: week.daysInRange === 1 ? "" \\: "s"; 3: statsParts(week).join(" · ")
-#: src/lib/components/reports/sleep/SleepWeeklyBreakdown.svelte
 #, python-brace-format
-msgid "{0} of {1} night{2} · {3}"
-msgstr "{0} de {1} noche{2} · {3}"
+#~ msgid "{0} of {1} night{2} · {3}"
+#~ msgstr "{0} de {1} noche{2} · {3}"
 
 #: src/lib/components/reports/sleep/SleepWeeklyBreakdown.svelte
 msgid "No nights tracked"
@@ -27142,7 +27143,7 @@ msgstr "Restablecer filtros"
 #~ msgid "This report cannot calculate the total steps for each local day."
 #~ msgstr ""
 
-#. 0: days.map(weekdayLabel).join(", ")
+#. 0: formatList(days.map(weekdayLabel))
 #: src/lib/components/reports/loop-analysis/AppliedFiltersSummary.svelte
 #, python-brace-format
 msgid "Days: {0}."
@@ -27154,7 +27155,7 @@ msgstr "Días: {0}."
 msgid "Profile: {0}."
 msgstr "Perfil: {0}."
 
-#. 0: excluded.join(", ")
+#. 0: formatList(excluded)
 #: src/lib/components/reports/loop-analysis/AppliedFiltersSummary.svelte
 #, python-brace-format
 msgid "Time not used: {0}."
@@ -27607,11 +27608,9 @@ msgstr "<0/> Añadir grupo"
 #~ msgid "Open in Day in Review"
 #~ msgstr ""
 
-#. 0: (event.cohorts ?? []) .map((n) => cohorts.find((c) => c.cohort === n)) .filter((c) => c != null) .map((c) => cohortLabel(c)) .join("\; ")
-#: src/lib/components/reports/loop-analysis/EventList.svelte
 #, python-brace-format
-msgid ", in {0}"
-msgstr ", en {0}"
+#~ msgid ", in {0}"
+#~ msgstr ", en {0}"
 
 #: src/lib/components/reports/loop-analysis/EventList.svelte
 #: src/routes/(unauthenticated)/setup/(guided)/alerts/AlertSetup.svelte
@@ -27702,23 +27701,20 @@ msgstr[1] "# no tuvieron insulina por encima de la programada"
 msgid "The figures are medians, with the middle half of events below each median. Faded figures have too few events to show a pattern. These figures are observations of what occurred, not settings to change."
 msgstr "Las cifras son medianas, con la mitad central de los eventos por debajo de cada mediana. Las cifras atenuadas tienen muy pocos eventos para mostrar un patrón. Son observaciones de lo ocurrido, no ajustes que debas cambiar."
 
-#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
-msgid "# not included because of another event in its window"
-msgid_plural "# not included because of another event in their window"
-msgstr[0] "# no se incluyó porque hubo otro evento durante su intervalo"
-msgstr[1] "# no se incluyeron porque hubo otro evento durante su intervalo"
+#~ msgid "# not included because of another event in its window"
+#~ msgid_plural "# not included because of another event in their window"
+#~ msgstr[0] "# no se incluyó porque hubo otro evento durante su intervalo"
+#~ msgstr[1] "# no se incluyeron porque hubo otro evento durante su intervalo"
 
-#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
-msgid "# without a glucose reading at the time"
-msgid_plural "# without a glucose reading at the time"
-msgstr[0] "# sin lectura de glucemia en ese momento"
-msgstr[1] "# sin lecturas de glucemia en ese momento"
+#~ msgid "# without a glucose reading at the time"
+#~ msgid_plural "# without a glucose reading at the time"
+#~ msgstr[0] "# sin lectura de glucemia en ese momento"
+#~ msgstr[1] "# sin lecturas de glucemia en ese momento"
 
-#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
-msgid "# not included because the time before it is outside the history that you can see"
-msgid_plural "# not included because the time before them is outside the history that you can see"
-msgstr[0] "# no se incluyó porque el periodo anterior queda fuera del historial disponible"
-msgstr[1] "# no se incluyeron porque el periodo anterior queda fuera del historial disponible"
+#~ msgid "# not included because the time before it is outside the history that you can see"
+#~ msgid_plural "# not included because the time before them is outside the history that you can see"
+#~ msgstr[0] "# no se incluyó porque el periodo anterior queda fuera del historial disponible"
+#~ msgstr[1] "# no se incluyeron porque el periodo anterior queda fuera del historial disponible"
 
 #: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
 msgid "Glucose change from the event"
@@ -27732,17 +27728,13 @@ msgstr "Corrección neta del sistema de asa cerrada desde el evento"
 msgid "Net insulin above schedule since the event"
 msgstr "Insulina neta por encima de la programada desde el evento"
 
-#. 0: label; 1: panel.format(value.p50 ?? 0); 2: plural(value.n ?? 0, ["# event", "# events"])
-#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
 #, python-brace-format
-msgid "{0}: median {1}, {2}"
-msgstr "{0}: mediana {1}, {2}"
+#~ msgid "{0}: median {1}, {2}"
+#~ msgstr "{0}: mediana {1}, {2}"
 
-#. 0: label
-#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
 #, python-brace-format
-msgid "{0}: no data"
-msgstr "{0}: sin datos"
+#~ msgid "{0}: no data"
+#~ msgstr "{0}: sin datos"
 
 #: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
 msgid "No data recorded near these events"
@@ -27902,13 +27894,13 @@ msgstr "Sesgo comparado"
 msgid "A settings signal. At this horizon, the loop has not yet acted on the prediction."
 msgstr "Una señal sobre los ajustes. En este horizonte, el sistema de asa cerrada aún no ha actuado sobre la predicción."
 
-#. 0: noAccess.map(ignoredFilterLabel).join(", ")
+#. 0: formatList(noAccess.map(ignoredFilterLabel))
 #: src/lib/components/reports/loop-analysis/IgnoredFiltersNotice.svelte
 #, python-brace-format
 msgid "Your access does not include the data for these filters, so the report did not use them: {0}."
 msgstr "Tu acceso no incluye los datos de estos filtros, por lo que el informe no los ha utilizado: {0}."
 
-#. 0: outOfLimits.map(ignoredFilterLabel).join(", ")
+#. 0: formatList(outOfLimits.map(ignoredFilterLabel))
 #: src/lib/components/reports/loop-analysis/IgnoredFiltersNotice.svelte
 #, python-brace-format
 msgid "These values are outside the limits of the report, so the report used its default values: {0}."
@@ -28018,7 +28010,7 @@ msgid_plural "# h"
 msgstr[0] "# h"
 msgstr[1] "# h"
 
-#. 0: compared ?? "–"
+#. 0: value
 #: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 #, python-brace-format
 msgid "Compared: {0}"
@@ -28417,7 +28409,7 @@ msgid_plural "These curves are hidden"
 msgstr[0] "Esta curva está oculta"
 msgstr[1] "Estas curvas están ocultas"
 
-#. 0: plural(hiddenCurves.length, ["This curve is hidden", "These curves are hidden"]); 1: hiddenCurves.map(curveLabel).join(", ")
+#. 0: plural(hiddenCurves.length, ["This curve is hidden", "These curves are hidden"]); 1: formatList(hiddenCurves.map(curveLabel))
 #: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
 #, python-brace-format
 msgid "<0/> {0}: {1}. The report reads each curve only in the contexts where the algorithm uses it. These contexts come from treatments, and your access does not include treatments."
@@ -28941,7 +28933,7 @@ msgstr "Subidas no anunciadas"
 msgid "{0}–{1} g"
 msgstr "{0}–{1} g"
 
-#. 0: cohort.cohort; 1: filters.join(", ")
+#. 0: cohort.cohort; 1: described
 #: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 #, python-brace-format
 msgid "Cohort {0}: {1}"
@@ -43419,17 +43411,15 @@ msgstr "Grupo {0}: {1}"
 msgid "Isolated events have no other meal, correction bolus or unannounced rise in their window. A window across midnight, for example 22:00 to 02:00, continues into the next day. A food filter uses only meals with a food record. Meals with only carbs are not included, and the page shows how many there are."
 msgstr "Un evento se considera aislado si en su intervalo no hay otra comida, ningún bolus de corrección ni ninguna subida sin anunciar. Si el intervalo pasa de medianoche, por ejemplo de 22:00 a 02:00, continúa al día siguiente. El filtro de alimentos solo incluye comidas con algún alimento registrado. Las comidas que solo tienen hidratos de carbono registrados quedan fuera y la página indica cuántas son."
 
-#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
-msgid "# meal with a food record"
-msgid_plural "# meals with a food record"
-msgstr[0] "# comida con algún alimento registrado"
-msgstr[1] "# comidas con algún alimento registrado"
+#~ msgid "# meal with a food record"
+#~ msgid_plural "# meals with a food record"
+#~ msgstr[0] "# comida con algún alimento registrado"
+#~ msgstr[1] "# comidas con algún alimento registrado"
 
-#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
-msgid "# meal with only carbs not included because the food filter cannot apply to it"
-msgid_plural "# meals with only carbs not included because the food filter cannot apply to them"
-msgstr[0] "Se ha excluido # comida con solo hidratos de carbono registrados porque no se le puede aplicar el filtro de alimentos"
-msgstr[1] "Se han excluido # comidas con solo hidratos de carbono registrados porque no se les puede aplicar el filtro de alimentos"
+#~ msgid "# meal with only carbs not included because the food filter cannot apply to it"
+#~ msgid_plural "# meals with only carbs not included because the food filter cannot apply to them"
+#~ msgstr[0] "Se ha excluido # comida con solo hidratos de carbono registrados porque no se le puede aplicar el filtro de alimentos"
+#~ msgstr[1] "Se han excluido # comidas con solo hidratos de carbono registrados porque no se les puede aplicar el filtro de alimentos"
 
 #: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
 msgid "The range that you selected ends before the last hour. You can see only the last hour, so this page has no data for this range."
@@ -43443,7 +43433,7 @@ msgid_plural "This page uses only the data from the last # hours in each range t
 msgstr[0] "Esta página solo usa los datos de la última hora de cada intervalo que selecciones."
 msgstr[1] "Esta página solo usa los datos de las últimas # horas de cada intervalo que selecciones."
 
-#. 0: food.map(ignoredFilterLabel).join(", ")
+#. 0: formatList(food.map(ignoredFilterLabel))
 #: src/lib/components/reports/loop-analysis/IgnoredFiltersNotice.svelte
 msgid "Your access does not include food data, so these cohorts show no events: {0}."
 msgstr "Tu acceso no incluye los datos de alimentos, así que estos grupos no muestran ningún evento: {0}."
@@ -44920,7 +44910,7 @@ msgstr "Aún no hay variables"
 #~ msgid "{0}: {1} figures {2}"
 #~ msgstr "{0}: {1} cifras {2}"
 
-#. 0: joinAgainst(texts); 1: range
+#. 0: groups; 1: range
 #: src/lib/components/reports/custom/workspace/report.svelte.ts
 msgid "{0}, one row for each event {1}"
 msgstr "{0}, una fila por cada evento {1}"
@@ -45888,7 +45878,7 @@ msgstr "¿Qué pasa cuando cambias la zona de infusión?"
 msgid "Glucose from 1 hour before to 8 hours after each site change."
 msgstr "Glucemia desde 1 hora antes hasta 8 horas después de cada cambio de zona de infusión."
 
-#. 0: formatList(words, "disjunction")
+#. 0: eitherScope
 #: src/lib/components/reports/custom/workspace/vocabulary-words.svelte.ts
 msgid "Your access cannot read {0}, which this needs."
 msgstr "Tu acceso no incluye {0}, un dato necesario para mostrar esto."
@@ -47418,12 +47408,16 @@ msgid "everything else"
 msgstr ""
 
 #. 0: g.min
+#. 0: cohort.minGrams
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "at least {0} g"
 msgstr ""
 
 #. 0: g.max
+#. 0: cohort.maxGrams
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "at most {0} g"
 msgstr ""
 
@@ -53079,10 +53073,8 @@ msgstr ""
 msgid "All {0}"
 msgstr ""
 
-#. 0: anchorHeading(moment.what); 1: narrowings
-#: src/lib/components/reports/custom/workspace/workspace.svelte.ts
-msgid "{0} {1}"
-msgstr ""
+#~ msgid "{0} {1}"
+#~ msgstr ""
 
 #. 0: beforeText(b.min)
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
@@ -53347,4 +53339,134 @@ msgstr ""
 #. 0: reading; 1: minutes; 2: opSymbol(p.count?.operator); 3: p.count?.value ?? 0
 #: src/lib/components/alerts/summarizeCondition.svelte.ts
 msgid "Number of readings {0} in {1} {2} {3}"
+msgstr ""
+
+#. 0: label
+#: src/lib/components/reports/loop-analysis/EventList.svelte
+msgid "In {0}."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "# meal with a food record."
+msgid_plural "# meals with a food record."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "# meal with only carbs not included because the food filter cannot apply to it."
+msgid_plural "# meals with only carbs not included because the food filter cannot apply to them."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "# not included because of another event in its window."
+msgid_plural "# not included because of another event in their window."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "# without a glucose reading at the time."
+msgid_plural "# without a glucose reading at the time."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "# not included because the time before it is outside the history that you can see."
+msgid_plural "# not included because the time before them is outside the history that you can see."
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: label
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "{0}: no data."
+msgstr ""
+
+#. 0: label; 1: median; 2: events
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "{0}: median {1}, {2}."
+msgstr ""
+
+#. 0: head; 1: range
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgctxt "cohort-anchor-and-times"
+msgid "{0} {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "# food"
+msgid_plural "# foods"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/sensor-integrity/format.svelte.ts
+msgid "# reversal"
+msgid_plural "# reversals"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: percent
+#: src/lib/components/reports/sensor-integrity/format.svelte.ts
+msgid "{0}% incoherent"
+msgstr ""
+
+#. 0: step
+#: src/lib/components/reports/sensor-integrity/format.svelte.ts
+msgid "{0} single-step change"
+msgstr ""
+
+#. 0: d.chainSize
+#: src/lib/components/reports/sensor-integrity/format.svelte.ts
+msgid "part of a {0}-window run"
+msgstr ""
+
+#: src/lib/components/reports/sleep/SleepWeeklyBreakdown.svelte
+msgid "# night"
+msgid_plural "# nights"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: score
+#: src/lib/components/reports/sleep/SleepWeeklyBreakdown.svelte
+msgid "score {0}"
+msgstr ""
+
+#. 0: tir
+#: src/lib/components/reports/sleep/SleepWeeklyBreakdown.svelte
+msgid "TIR {0}%"
+msgstr ""
+
+#: src/lib/components/reports/sleep/SleepWeeklyBreakdown.svelte
+msgid "# low"
+msgid_plural "# lows"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: source; 1: range
+#: src/lib/components/reports/custom/workspace/report.svelte.ts
+msgctxt "table-block-caption"
+msgid "{0} {1}"
+msgstr ""
+
+#. 0: phrase; 1: narrowings
+#: src/lib/components/reports/custom/workspace/workspace.svelte.ts
+msgctxt "moment-in-sentence"
+msgid "{0} {1}"
+msgstr ""
+
+#. 0: anchorHeading(moment.what); 1: narrowings
+#: src/lib/components/reports/custom/workspace/workspace.svelte.ts
+msgctxt "moment-heading"
+msgid "{0} {1}"
+msgstr ""
+
+#. 0: when; 1: axis
+#: src/lib/components/reports/custom/workspace/workspace.svelte.ts
+msgctxt "when-caption"
+msgid "{0}, {1}"
+msgstr ""
+
+#. 0: around; 1: window
+#: src/lib/components/reports/custom/workspace/workspace.svelte.ts
+msgctxt "around-window-caption"
+msgid "{0}, {1}"
 msgstr ""
