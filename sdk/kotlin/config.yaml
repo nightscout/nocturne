@@ -5,6 +5,9 @@ outputDir: ./out
 templateDir: sdk/kotlin/templates
 globalProperties:
   skipFormModel: true
+  # Generated test stubs assert nothing, and compiling them outgrew the Kotlin compiler's heap.
+  apiTests: false
+  modelTests: false
 additionalProperties:
   groupId: org.nightscoutfoundation
   artifactId: nocturne

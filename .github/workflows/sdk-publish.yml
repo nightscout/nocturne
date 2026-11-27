@@ -287,7 +287,8 @@ jobs:
 
       - name: Build and publish to local
         working-directory: sdk/kotlin/out
-        run: ./gradlew build publishToMavenLocal
+        # The generated sources outgrew the default Gradle and Kotlin daemon heaps.
+        run: ./gradlew build publishToMavenLocal -Dorg.gradle.jvmargs=-Xmx4g -Pkotlin.daemon.jvmargs=-Xmx4g
         env:
           SIGNING_KEY: ${{ secrets.MAVEN_SIGNING_KEY }}
           SIGNING_PASSWORD: ${{ secrets.MAVEN_SIGNING_PASSWORD }}

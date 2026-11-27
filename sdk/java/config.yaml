@@ -5,6 +5,9 @@ outputDir: ./out
 templateDir: sdk/java/templates
 globalProperties:
   skipFormModel: true
+  # Generated test stubs assert nothing.
+  apiTests: false
+  modelTests: false
 additionalProperties:
   groupId: org.nightscoutfoundation
   artifactId: nocturne-java
