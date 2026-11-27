@@ -31,6 +31,17 @@ describe("holdText", () => {
     ]);
   });
 
+  it("names a window rule held by missing readings, or by a gap that could change the answer", () => {
+    expect(
+      holdFactLines({
+        facts: [
+          { fact: "glucose_series", reason: "absent" },
+          { fact: "glucose_series", reason: "inexact" },
+        ],
+      }),
+    ).toEqual(["Recent glucose readings: missing", "Recent glucose readings: not exact"]);
+  });
+
   it("shows a fact or reason this build does not know as the API sent it", () => {
     expect(heldFactName("sensor_mood")).toBe("sensor_mood");
     expect(heldReason("sensor_sulking")).toBe("sensor_sulking");

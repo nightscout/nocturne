@@ -21,6 +21,7 @@ export const KNOWN_FACTS = [
   "sensor_state",
   "aps_determination",
   "target_range",
+  "glucose_series",
 ] as const;
 
 export const KNOWN_REASONS = ["absent", "stale", "ahead_of_clock", "unrecognised", "inexact", "sensor_not_ok"] as const;
@@ -66,6 +67,8 @@ function factName(fact: KnownFact): string {
       return "Loop result";
     case "target_range":
       return "Target range";
+    case "glucose_series":
+      return "Recent glucose readings";
     default: {
       const unhandled: never = fact;
       return unhandled;

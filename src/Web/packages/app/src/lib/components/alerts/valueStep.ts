@@ -13,6 +13,9 @@ export function valueStep(
     case "threshold":
     case "predicted":
     case "eventual_glucose":
+    case "glucose_change":
+    case "glucose_extreme":
+    case "glucose_count":
       return units === "mmol" ? 0.1 : 1;
     case "carbs_required":
       return 1;

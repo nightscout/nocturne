@@ -67,6 +67,9 @@ export const LEAF_FACTS: readonly FactDef[] = [
 	{ kind: "predicted", group: "glucose", icon: "trending-up" },
 	{ kind: "eventual_glucose", group: "glucose", icon: "trending-up" },
 	{ kind: "rate_of_change", group: "glucose", icon: "trending-up" },
+	{ kind: "glucose_change", group: "glucose", icon: "trending-up" },
+	{ kind: "glucose_extreme", group: "glucose", icon: "chart-line" },
+	{ kind: "glucose_count", group: "glucose", icon: "chart-line" },
 	{ kind: "trend", group: "glucose", icon: "trending-up" },
 	{ kind: "staleness", group: "glucose", icon: "alert-triangle" },
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AlertLimitFact, AlertWeekday, defaultPayload, ForecastCurve, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TransmitterBatteryMetric, type ConditionNode, type PredictedCondition } from "./types";
+import { AlertLimitFact, AlertWeekday, AlertWindowExtreme, defaultPayload, ForecastCurve, GlucoseBucket, PumpModeState, SensorState, StateSpanCategory, TransmitterBatteryMetric, type ConditionNode, type PredictedCondition } from "./types";
 import { alertWeekdayLabel, summarizeCondition } from "./summarizeCondition.svelte";
 import { LEAF_FACTS } from "./factCatalog";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
@@ -39,6 +39,51 @@ describe("summarizeCondition", () => {
 		expect(summarizeCondition({ type: "carbs_required", carbs_required: { operator: ">=", value: 10 } })).toBe(
 			"Carbs needed ≥ 10 g",
 		);
+	});
+
+	it("summarizes the conditions on a time window of readings", () => {
+		glucoseUnits.current = "mg/dl";
+		expect(
+			summarizeCondition({
+				type: "glucose_change",
+				glucose_change: { operator: "<=", value: -30, window_minutes: 15, clear_margin: 5 },
+			}),
+		).toBe("Glucose change in 15 minutes ≤ -30 mg/dL, clear margin 5 mg/dL");
+		expect(
+			summarizeCondition({ type: "glucose_change", glucose_change: { operator: ">=", value: 40, window_minutes: 30 } }),
+		).toBe("Glucose change in 30 minutes ≥ +40 mg/dL");
+		expect(
+			summarizeCondition({
+				type: "glucose_extreme",
+				glucose_extreme: { of: AlertWindowExtreme.Min, operator: "<", value: 70, window_minutes: 60 },
+			}),
+		).toBe("Lowest glucose in 1 hour < 70 mg/dL");
+		expect(
+			summarizeCondition({
+				type: "glucose_extreme",
+				glucose_extreme: { of: AlertWindowExtreme.Max, operator: ">", value: 250, window_minutes: 120, clear_margin: 10 },
+			}),
+		).toBe("Highest glucose in 2 hours > 250 mg/dL, clear margin 10 mg/dL");
+		expect(
+			summarizeCondition({
+				type: "glucose_count",
+				glucose_count: { reading: { operator: "<", value: 70 }, window_minutes: 60, count: { operator: ">=", value: 3 } },
+			}),
+		).toBe("Number of readings < 70 mg/dL in 1 hour ≥ 3");
+		expect(
+			summarizeCondition({
+				type: "glucose_count",
+				glucose_count: { reading: { operator: ">", value: 180 }, window_minutes: 180, percent: { operator: ">", value: 50 } },
+			}),
+		).toBe("Percent of readings > 180 mg/dL in 3 hours > 50%");
+	});
+
+	it("says a glucose change in the display unit, with its sign", () => {
+		glucoseUnits.current = "mmol";
+		expect(
+			summarizeCondition({ type: "glucose_change", glucose_change: { operator: "<=", value: -36, window_minutes: 20 } }),
+		).toBe("Glucose change in 20 minutes ≤ -2.0 mmol/L");
+		glucoseUnits.current = "mg/dl";
 	});
 
 	it("says a limit from a fact in words, with its offset", () => {

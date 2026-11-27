@@ -24,6 +24,11 @@ import {
 	limitSource,
 	setLimitSource,
 	type ThresholdCondition,
+	AlertWindowExtreme,
+	marginedPayload,
+	windowTally,
+	setWindowTally,
+	type GlucoseCountCondition,
 } from "./types";
 import { AlertConditionType, AlertRuleSeverity, ChannelType } from "@nocturne/api-client";
 import type { AlertRuleResponse } from "@nocturne/api-client";
@@ -902,5 +907,70 @@ describe("loop conditions", () => {
 			expect(node.type).toBe(kind);
 			expect(node[kind]).toMatchObject({ operator: expect.any(String), value: expect.any(Number) });
 		}
+	});
+});
+
+describe("conditions on a time window", () => {
+	it("start with a window and a comparison the engine reads", () => {
+		expect(defaultPayload("glucose_change").glucose_change).toEqual({ operator: "<=", value: -30, window_minutes: 15 });
+		expect(defaultPayload("glucose_extreme").glucose_extreme).toEqual({
+			of: AlertWindowExtreme.Min,
+			operator: "<",
+			value: 70,
+			window_minutes: 60,
+		});
+		expect(defaultPayload("glucose_count").glucose_count).toEqual({
+			reading: { operator: "<", value: 70 },
+			window_minutes: 60,
+			count: { operator: ">=", value: 3 },
+		});
+	});
+
+	it("offer a clear margin on a change and an extreme, never on a count", () => {
+		for (const kind of ["glucose_change", "glucose_extreme"] as const) {
+			expect(marginedPayload(defaultPayload(kind), "notify", false), kind).toBeDefined();
+		}
+		expect(marginedPayload(defaultPayload("glucose_count"), "notify", false)).toBeUndefined();
+	});
+
+	it("fill what a stored rule leaves out, so a save sends what the editor shows", () => {
+		expect(nodeFromApi("glucose_change", { operator: "<" })?.glucose_change).toEqual({
+			operator: "<",
+			value: 0,
+			window_minutes: 15,
+		});
+		expect(nodeFromApi("glucose_count", { percent: { value: 20 } })?.glucose_count).toEqual({
+			reading: { operator: ">=", value: 0 },
+			window_minutes: 15,
+			percent: { operator: ">=", value: 20 },
+		});
+		const neither = nodeFromApi("glucose_count", { reading: { operator: "<", value: 70 }, window_minutes: 30, count: null });
+		expect(JSON.parse(JSON.stringify(nodeToApi(neither)?.conditionParams))).toEqual({
+			reading: { operator: "<", value: 70 },
+			window_minutes: 30,
+			count: { operator: ">=", value: 0 },
+		});
+	});
+
+	it("keep one tally at a time, so a save never sends both", () => {
+		const p: GlucoseCountCondition = { reading: { operator: "<", value: 70 }, window_minutes: 60, count: { operator: ">", value: 2.6 } };
+		expect(windowTally(p)).toBe("count");
+
+		setWindowTally(p, "percent");
+		expect(p).toMatchObject({ count: undefined, percent: { operator: ">", value: 2.6 } });
+		expect(windowTally(p)).toBe("percent");
+
+		p.percent = { operator: ">=", value: 250 };
+		setWindowTally(p, "count");
+		expect(p).toMatchObject({ percent: undefined, count: { operator: ">=", value: 250 } });
+
+		setWindowTally(p, "percent");
+		expect(p.percent?.value).toBe(100);
+	});
+
+	it("round a count to a whole number of readings", () => {
+		const p: GlucoseCountCondition = { window_minutes: 60, percent: { operator: ">=", value: 12.5 } };
+		setWindowTally(p, "count");
+		expect(p.count).toEqual({ operator: ">=", value: 13 });
 	});
 });

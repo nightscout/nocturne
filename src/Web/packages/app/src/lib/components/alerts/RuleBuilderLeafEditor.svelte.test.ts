@@ -2,7 +2,16 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import RuleBuilderLeafEditor from "./RuleBuilderLeafEditor.svelte";
-import { AlertLimitFact, buildBody, defaultPayload, ForecastCurve, parseRule, SensorState, type ConditionNode } from "./types";
+import {
+	AlertLimitFact,
+	AlertWindowExtreme,
+	buildBody,
+	defaultPayload,
+	ForecastCurve,
+	parseRule,
+	SensorState,
+	type ConditionNode,
+} from "./types";
 import { flushSync } from "svelte";
 import { AlertConditionType } from "@nocturne/api-client";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
@@ -129,6 +138,21 @@ describe("RuleBuilderLeafEditor clear margin", () => {
 				"Value",
 				"1",
 				"1",
+			],
+			[
+				{ type: "glucose_change", glucose_change: { operator: "<=", value: -30, window_minutes: 15, clear_margin: 5 } },
+				"Value",
+				"1",
+				"0.1",
+			],
+			[
+				{
+					type: "glucose_extreme",
+					glucose_extreme: { of: AlertWindowExtreme.Max, operator: ">", value: 250, window_minutes: 60, clear_margin: 10 },
+				},
+				"Value",
+				"1",
+				"0.1",
 			],
 			[
 				{ type: "sensitivity_ratio", sensitivity_ratio: { operator: "<", value: 0.9, clear_margin: 0.1 } },
@@ -347,5 +371,67 @@ describe("RuleBuilderLeafEditor forecast curve", () => {
 
 		expect(leaf.eventual_glucose?.value).toBeCloseTo(72, 0);
 		glucoseUnits.current = "mg/dl";
+	});
+});
+
+describe("RuleBuilderLeafEditor time window conditions", () => {
+	it("edits a fall in the display unit, stores the signed change in mg/dL, and says what the change is", async () => {
+		glucoseUnits.current = "mmol";
+		try {
+			const leaf: ConditionNode = $state({
+				type: "glucose_change",
+				glucose_change: { operator: "<=", value: -36, window_minutes: 15, clear_margin: 9 },
+			});
+			render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+			await expect.element(page.getByRole("spinbutton", { name: "Value" })).toHaveValue(-2);
+			await expect.element(page.getByRole("spinbutton", { name: "Clear margin" })).toHaveValue(0.5);
+			await page.getByRole("spinbutton", { name: "Value" }).fill("-1.5");
+			expect(leaf.glucose_change?.value).toBe(-27);
+			await page.getByRole("spinbutton", { name: "Window minutes" }).fill("20");
+			expect(leaf.glucose_change?.window_minutes).toBe(20);
+			await expect
+				.element(page.getByText("The change is the newest reading minus the oldest reading in the window.", { exact: false }))
+				.toBeVisible();
+		} finally {
+			glucoseUnits.current = "mg/dl";
+		}
+	});
+
+	it("chooses the lowest or the highest reading of the window", async () => {
+		glucoseUnits.current = "mg/dl";
+		const leaf: ConditionNode = $state(defaultPayload("glucose_extreme"));
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await expect.element(page.getByLabelText("Lowest or highest")).toHaveTextContent("Lowest");
+		await page.getByLabelText("Lowest or highest").click();
+		await page.getByRole("option", { name: "Highest" }).click();
+		expect(leaf.glucose_extreme?.of).toBe(AlertWindowExtreme.Max);
+		await expect.element(page.getByText("The time window ends at the newest reading.")).toBeVisible();
+	});
+
+	it("compares a number of readings, or a percent, never both", async () => {
+		glucoseUnits.current = "mg/dl";
+		const leaf: ConditionNode = $state(defaultPayload("glucose_count"));
+		render(RuleBuilderLeafEditor, { props: { node: leaf } });
+
+		await expect.element(page.getByRole("spinbutton", { name: "Number of readings" })).toHaveValue(3);
+		await page.getByRole("spinbutton", { name: "Reading value" }).fill("60");
+		expect(leaf.glucose_count?.reading?.value).toBe(60);
+
+		await page.getByLabelText("Number or percent").click();
+		await page.getByRole("option", { name: "Percent" }).click();
+
+		await expect.element(page.getByRole("spinbutton", { name: "Percent" })).toHaveAttribute("max", "100");
+		await page.getByRole("spinbutton", { name: "Percent" }).fill("25");
+		expect(leaf.glucose_count?.percent).toEqual({ operator: ">=", value: 25 });
+		expect(leaf.glucose_count?.count).toBeUndefined();
+	});
+
+	it("offers no clear margin on a reading count", async () => {
+		render(RuleBuilderLeafEditor, { props: { node: defaultPayload("glucose_count") } });
+
+		await expect.element(page.getByRole("spinbutton", { name: "Window minutes" })).toBeVisible();
+		await expect.element(page.getByRole("spinbutton", { name: "Clear margin" })).not.toBeInTheDocument();
 	});
 });

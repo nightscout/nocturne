@@ -23,6 +23,7 @@ export const FACT_NAMES: Record<string, string> = {
   sensor_state: "Sensor state",
   aps_determination: "Loop result",
   target_range: "Target range",
+  glucose_series: "Recent glucose readings",
 };
 
 export const REASONS: Record<string, string> = {

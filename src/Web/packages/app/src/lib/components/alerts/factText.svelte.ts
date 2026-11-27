@@ -70,6 +70,12 @@ export function factLabel(kind: LeafKind): string {
       return "Eventual glucose";
     case "carbs_required":
       return "Carbs needed";
+    case "glucose_change":
+      return "Glucose change";
+    case "glucose_extreme":
+      return "Lowest or highest glucose";
+    case "glucose_count":
+      return "Reading count";
     default: {
       const unhandled: never = kind;
       return unhandled;
@@ -147,6 +153,12 @@ export function factDescription(kind: LeafKind): string {
       return "The glucose that the loop expects at the end of its forecast is above or below a level";
     case "carbs_required":
       return "The grams of carbs that the loop says are necessary to prevent a low";
+    case "glucose_change":
+      return "The change from the oldest to the newest reading in a time window";
+    case "glucose_extreme":
+      return "The lowest or highest reading in a time window is above or below a level";
+    case "glucose_count":
+      return "The number or percent of readings in a time window that are above or below a level";
     default: {
       const unhandled: never = kind;
       return unhandled;

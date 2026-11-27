@@ -1,7 +1,8 @@
-import type { ConditionNode, GlucoseLimitPayload, PredictedCondition } from "./types";
-import { AlertWeekday, PumpModeState, StateSpanCategory } from "@nocturne/api-client";
+import { windowTally, type ConditionNode, type GlucoseCountCondition, type GlucoseLimitPayload, type PredictedCondition } from "./types";
+import { AlertWeekday, AlertWindowExtreme, PumpModeState, StateSpanCategory } from "@nocturne/api-client";
 import {
 	bg,
+	bgDelta,
 	bgLabel,
 	convertRateToDisplayUnits,
 	formatList,
@@ -104,6 +105,33 @@ export function summarizeCondition(
 				p.clear_margin,
 				(m) => `${m} g`,
 			);
+		}
+		case "glucose_change": {
+			const p = node.glucose_change;
+			if (!p) return "";
+			return withMargin(
+				`Glucose change in ${formatMinutes(p.window_minutes ?? 0)} ${opSymbol(p.operator)} ${bgDelta(p.value ?? 0)} ${bgLabel()}`,
+				p.clear_margin,
+				(m) => `${bg(m)} ${bgLabel()}`,
+			);
+		}
+		case "glucose_extreme": {
+			const p = node.glucose_extreme;
+			if (!p) return "";
+			const minutes = formatMinutes(p.window_minutes ?? 0);
+			const limit = `${opSymbol(p.operator)} ${bg(p.value ?? 0)} ${bgLabel()}`;
+			return withMargin(
+				p.of === AlertWindowExtreme.Max
+					? `Highest glucose in ${minutes} ${limit}`
+					: `Lowest glucose in ${minutes} ${limit}`,
+				p.clear_margin,
+				(m) => `${bg(m)} ${bgLabel()}`,
+			);
+		}
+		case "glucose_count": {
+			const p = node.glucose_count;
+			if (!p) return "";
+			return readingCountChip(p);
 		}
 		case "trend": {
 			const p = node.trend;
@@ -309,6 +337,16 @@ function limitPhrase(p: GlucoseLimitPayload): string {
 	if (offset > 0) return `${fact} plus ${bg(offset)} ${bgLabel()}`;
 	if (offset < 0) return `${fact} minus ${bg(-offset)} ${bgLabel()}`;
 	return fact;
+}
+
+/** A reading count as the summary says it: the readings it counts, then what it compares the tally with. */
+function readingCountChip(p: GlucoseCountCondition): string {
+	const reading = `${opSymbol(p.reading?.operator)} ${bg(p.reading?.value ?? 0)} ${bgLabel()}`;
+	const minutes = formatMinutes(p.window_minutes ?? 0);
+	if (windowTally(p) === "percent") {
+		return `Percent of readings ${reading} in ${minutes} ${opSymbol(p.percent?.operator)} ${p.percent?.value ?? 0}%`;
+	}
+	return `Number of readings ${reading} in ${minutes} ${opSymbol(p.count?.operator)} ${p.count?.value ?? 0}`;
 }
 
 /** Which forecast a predicted condition reads, as the summary names it. */
