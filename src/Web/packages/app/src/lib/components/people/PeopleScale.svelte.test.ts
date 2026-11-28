@@ -95,7 +95,6 @@ import { FIRST_ROWS, ROWS_PER_STEP } from "./PeopleRoster.svelte";
 
 const PEOPLE = 300;
 const NO_SORT = JSON.stringify(null);
-/** Loose enough for a loaded CI machine; the report states the measured frames. */
 const FRAME_CAP_MS = 300;
 
 interface Sample {
@@ -104,8 +103,8 @@ interface Sample {
   scenario: string;
   longestFrameMs: number;
   longTaskTotalMs: number;
-  /** For an answer that replaces the rows: how many its first frame mounted. */
-  firstFrameRows?: number;
+  /** Rows its first frame mounted for a render or an answer that replaces the rows, cells for a lens switch. */
+  firstFrameMounted?: number;
 }
 
 const samples: Sample[] = [];
@@ -157,7 +156,7 @@ async function measure(action: () => unknown, settled: () => boolean) {
 async function record(lens: string, rate: number, scenario: string, action: () => unknown, settled: () => boolean) {
   const sample = { lens, rate, scenario, ...(await measure(action, settled)) };
   samples.push(sample);
-  if (rate === 1) expect.soft(sample.longestFrameMs, scenario).toBeLessThan(FRAME_CAP_MS);
+  if (BUDGET && rate === 1) expect.soft(sample.longestFrameMs, scenario).toBeLessThan(FRAME_CAP_MS);
 }
 
 async function scrollThrough() {
@@ -209,8 +208,10 @@ afterAll(async () => {
 /**
  * The rates the roster is measured at. The 4x run takes minutes, so it runs only when asked for:
  * `VITE_PEOPLE_SCALE_4X=1 pnpm exec vitest --config vitest.browser.config.ts --run src/lib/components/people/PeopleScale.svelte.test.ts`.
+ * `VITE_PEOPLE_SCALE_BUDGET=1` makes a longest frame of {@link FRAME_CAP_MS} or more at 1x fail its scenario.
  */
 const RATES = import.meta.env.VITE_PEOPLE_SCALE_4X === "1" ? [1, 4] : [1];
+const BUDGET = import.meta.env.VITE_PEOPLE_SCALE_BUDGET === "1";
 
 /** Types `text` into the search box as a person would, and leaves the debounce to send it. */
 function typeSearch(text: string) {
@@ -220,16 +221,59 @@ function typeSearch(text: string) {
 }
 
 /**
- * How many rows are mounted in the first frame that shows `changed`. The check runs first in each frame, so it sees
- * what the answer's own render mounted, before any reveal step of that frame. Unlike the frame times, this does not
- * depend on how fast the machine is.
+ * How many rows, or the `count` of other things, are mounted in the first frame that shows `changed`. The check runs
+ * first in each frame, so it sees what the answer's own render mounted, before any reveal step of that frame. Unlike
+ * the frame times, this does not depend on how fast the machine is.
  */
-function rowsInFirstFrameWhere(changed: () => boolean) {
+function mountedInFirstFrameWhere(changed: () => boolean, count = () => rows().length) {
   return new Promise<number>((resolve) => {
-    const onFrame = () => (changed() ? resolve(rows().length) : requestAnimationFrame(onFrame));
+    const onFrame = () => (changed() ? resolve(count()) : requestAnimationFrame(onFrame));
     requestAnimationFrame(onFrame);
   });
 }
+
+/** Fails when the first frame that showed the answer mounted more than a reveal step past the first rows. */
+async function expectMountedAStepAtATime(firstFrame: Promise<number>) {
+  const mounted = await firstFrame;
+  const sample = samples[samples.length - 1];
+  sample.firstFrameMounted = mounted;
+  expect.soft(mounted, `${sample.scenario}: mounted in the first frame`).toBeLessThanOrEqual(FIRST_ROWS + ROWS_PER_STEP);
+}
+
+/**
+ * Resolves when the roster has changed in none of three frames in a row, so no reveal step is left to run ahead of
+ * the next first-frame check.
+ */
+async function rosterQuiet() {
+  let changes = 0;
+  const observer = new MutationObserver((records) => (changes += records.length));
+  observer.observe(page.getByTestId("people-rows").element(), {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    characterData: true,
+  });
+  const deadline = performance.now() + 30_000;
+  try {
+    for (let quiet = 0; quiet < 3; quiet = changes === 0 ? quiet + 1 : 0) {
+      if (performance.now() > deadline) throw new Error("The roster kept changing for 30 seconds");
+      changes = 0;
+      await frame();
+    }
+  } finally {
+    observer.disconnect();
+  }
+}
+
+/** How many mounted rows are not elements of `before`: a sort moves the rows it has and mounts none again. */
+function rowsMountedSince(before: Set<Element>) {
+  return [...rows()].filter((row) => !before.has(row)).length;
+}
+
+const mountedWithTestId = (testId: string) => () => document.querySelectorAll(`[data-testid="${testId}"]`).length;
+const reviewGmis = mountedWithTestId("review-gmi");
+const reviewLoadings = mountedWithTestId("review-loading");
+const pumpCells = mountedWithTestId("pump-cell");
 
 describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
   it("renders, scrolls, takes a poll, sorts and switches lens in the Now lens", { timeout: 600_000 }, async () => {
@@ -237,7 +281,9 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
     overviews = { [NO_SORT]: answerOf(people) };
     await cdp().send("Emulation.setCPUThrottlingRate", { rate });
 
+    const firstRender = mountedInFirstFrameWhere(() => rows().length > 0);
     await record("now", rate, "first render", () => render(PeoplePage), () => rows().length === PEOPLE);
+    await expectMountedAStepAtATime(firstRender);
     await record("now", rate, "scroll", scrollThrough, () => true);
 
     const changed = people.filter((person) => !person.attention?.length).slice(0, 10);
@@ -255,6 +301,7 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
     );
 
     const sorted = flaggedFirstBy(polled, (person) => person.latest?.mgdl ?? 0);
+    const rowsBeforeSort = new Set(rows());
     await record(
       "now",
       rate,
@@ -266,8 +313,11 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
       },
       () => slugsShown()[0] === sorted[0].slug
     );
+    expect.soft(rowsMountedSince(rowsBeforeSort), "rows mounted again by the sort").toBe(0);
 
     reviews = {};
+    await rosterQuiet();
+    const reviewRowsMounted = mountedInFirstFrameWhere(() => reviewLoadings() > 0);
     await record(
       "now",
       rate,
@@ -277,8 +327,9 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
         await frame();
         reviews = { [requested.review]: crowdReview(sorted) };
       },
-      () => document.querySelectorAll('[data-testid="review-gmi"]').length === PEOPLE
+      () => reviewGmis() === PEOPLE
     );
+    await expectMountedAStepAtATime(reviewRowsMounted);
   });
 
   it("renders, scrolls, takes a poll, sorts and switches lens in the Review lens", { timeout: 600_000 }, async () => {
@@ -289,13 +340,9 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
     nav.address = new URL(pageState.url.href);
     await cdp().send("Emulation.setCPUThrottlingRate", { rate });
 
-    await record(
-      "review",
-      rate,
-      "first render",
-      () => render(PeoplePage),
-      () => document.querySelectorAll('[data-testid="review-gmi"]').length === PEOPLE
-    );
+    const firstRender = mountedInFirstFrameWhere(() => rows().length > 0);
+    await record("review", rate, "first render", () => render(PeoplePage), () => reviewGmis() === PEOPLE);
+    await expectMountedAStepAtATime(firstRender);
     await record("review", rate, "scroll", scrollThrough, () => true);
 
     const changed = people.filter((person) => !person.attention?.length).slice(0, 10);
@@ -313,6 +360,7 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
     );
 
     const byTimeInRange = flaggedFirstBy(polled, (person) => crowdIndex(person) % 50);
+    const rowsBeforeSort = new Set(rows());
     await record(
       "review",
       rate,
@@ -325,14 +373,18 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
       },
       () => slugsShown()[0] === byTimeInRange[0].slug
     );
+    expect.soft(rowsMountedSince(rowsBeforeSort), "rows mounted again by the sort").toBe(0);
 
+    await rosterQuiet();
+    const pumpCellsMounted = mountedInFirstFrameWhere(() => pumpCells() > 0, pumpCells);
     await record(
       "review",
       rate,
       "lens switch",
       () => click(page.getByRole("radio", { name: "Now" }).element()),
-      () => document.querySelectorAll('[data-testid="pump-cell"]').length === PEOPLE
+      () => pumpCells() === PEOPLE
     );
+    await expectMountedAStepAtATime(pumpCellsMounted);
   });
 
   it("mounts the people a cleared search brings back a step at a time", { timeout: 600_000 }, async () => {
@@ -348,11 +400,9 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
     await expect.poll(() => slugsShown(), { timeout: 30_000 }).toEqual([found.slug]);
     await cdp().send("Emulation.setCPUThrottlingRate", { rate });
 
-    const firstFrame = rowsInFirstFrameWhere(() => rows().length !== 1);
+    const firstFrame = mountedInFirstFrameWhere(() => rows().length !== 1);
     await record("now", rate, "search cleared", () => typeSearch(""), () => rows().length === PEOPLE);
-    const firstFrameRows = await firstFrame;
-    samples[samples.length - 1].firstFrameRows = firstFrameRows;
-    expect(firstFrameRows, "rows mounted in the first frame of the answer").toBeLessThanOrEqual(FIRST_ROWS + ROWS_PER_STEP);
+    await expectMountedAStepAtATime(firstFrame);
   });
 
   it("mounts the people of a second search the same size as the first a step at a time", { timeout: 600_000 }, async () => {
@@ -368,7 +418,7 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
     await cdp().send("Emulation.setCPUThrottlingRate", { rate });
 
     const afterSlugs = after.map((person) => person.slug);
-    const firstFrame = rowsInFirstFrameWhere(() => slugsShown()[0] !== before[0].slug);
+    const firstFrame = mountedInFirstFrameWhere(() => slugsShown()[0] !== before[0].slug);
     await record(
       "now",
       rate,
@@ -376,9 +426,7 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
       () => typeSearch("other"),
       () => slugsShown().join() === afterSlugs.join()
     );
-    const firstFrameRows = await firstFrame;
-    samples[samples.length - 1].firstFrameRows = firstFrameRows;
-    expect(firstFrameRows, "rows mounted in the first frame of the answer").toBeLessThanOrEqual(FIRST_ROWS + ROWS_PER_STEP);
+    await expectMountedAStepAtATime(firstFrame);
   });
 });
 
