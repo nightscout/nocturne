@@ -309,13 +309,57 @@ public class AuthTokenProviderBaseRetryTests
     ///     could not verify rather than throw into the settings page that asked.
     /// </summary>
     [Fact]
-    public async Task VerifyCredentialsAsync_AcquireTimesOut_ReturnsFalse()
+    public async Task VerifyCredentialsAsync_AcquireTimesOut_SaysTheFailureIsTemporary()
     {
         using var provider = new ThrowingTokenProvider(new TaskCanceledException("timed out"));
 
         var verified = await provider.VerifyCredentialsAsync(new TestConnectorConfig(), CancellationToken.None);
 
-        verified.Should().BeFalse("a timeout is a failed credential check, not a withdrawn run");
+        verified.Success.Should().BeFalse("a timeout is a failed credential check, not a withdrawn run");
+        verified.Message.Should().Be(provider.SignInFailureReason).And.Contain("usually temporary");
+    }
+
+    [Fact]
+    public async Task VerifyCredentialsAsync_RefusedByTheSource_GivesTheReasonASyncWould()
+    {
+        using var provider = BuildSignInProvider(new ConnectorTokenCache(), Guid.NewGuid(),
+            _ => throw new HttpRequestException("refused", null, HttpStatusCode.Unauthorized));
+
+        var verified = await provider.VerifyCredentialsAsync(new TestConnectorConfig(), CancellationToken.None);
+
+        verified.Success.Should().BeFalse();
+        verified.Message.Should().Be(provider.SignInFailureReason)
+            .And.Contain("did not accept this sign-in")
+            .And.Contain("the username and password");
+    }
+
+    [Fact]
+    public async Task VerifyCredentialsAsync_RunsOutOfAttempts_SaysTheFailureIsTemporary()
+    {
+        using var provider = BuildSignInProvider(new ConnectorTokenCache(), Guid.NewGuid(),
+            _ => Task.FromResult<(string? Result, bool ShouldRetry)>((null, true)));
+
+        var verified = await provider.VerifyCredentialsAsync(
+            new TestConnectorConfig { MaxRetryAttempts = 2 }, CancellationToken.None);
+
+        verified.Success.Should().BeFalse();
+        verified.Message.Should().Contain("usually temporary").And.NotContain("did not accept this sign-in");
+    }
+
+    [Fact]
+    public async Task VerifyCredentialsAsync_ARefusalDoesNotLeakIntoTheNextVerification()
+    {
+        HttpStatusCode? status = HttpStatusCode.Unauthorized;
+        using var provider = BuildSignInProvider(new ConnectorTokenCache(), Guid.NewGuid(),
+            _ => throw new HttpRequestException("failed", null, status));
+        var config = new TestConnectorConfig { MaxRetryAttempts = 1 };
+
+        var refused = await provider.VerifyCredentialsAsync(config, CancellationToken.None);
+        status = null;
+        var unreachable = await provider.VerifyCredentialsAsync(config, CancellationToken.None);
+
+        refused.Message.Should().Contain("did not accept this sign-in");
+        unreachable.Message.Should().Contain("usually temporary").And.NotContain("did not accept this sign-in");
     }
 
     /// <summary>A caller who cancelled still has to see the cancellation, not a false verdict.</summary>

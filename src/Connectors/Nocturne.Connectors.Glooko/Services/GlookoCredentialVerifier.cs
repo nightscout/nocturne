@@ -19,14 +19,7 @@ public class GlookoCredentialVerifier(
 {
     public override string ConnectorId => "glooko";
 
-    protected override async Task<ConnectorCredentialVerificationResult> VerifyConfiguredAsync(
-        GlookoConnectorConfiguration config, CancellationToken ct)
-    {
-        var authenticated = await tokenProvider.Provider.VerifyCredentialsAsync(config, ct);
-
-        return authenticated
-            ? ConnectorCredentialVerificationResult.Verified()
-            : ConnectorCredentialVerificationResult.Failed(
-                "Glooko did not accept the sign-in. Check the email, password, and server region.");
-    }
+    protected override Task<ConnectorCredentialVerificationResult> VerifyConfiguredAsync(
+        GlookoConnectorConfiguration config, CancellationToken ct) =>
+        tokenProvider.Provider.VerifyCredentialsAsync(config, ct);
 }

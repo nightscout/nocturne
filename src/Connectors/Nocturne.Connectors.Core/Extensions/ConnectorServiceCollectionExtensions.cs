@@ -169,7 +169,7 @@ public static class ConnectorServiceCollectionExtensions
         }
 
         /// <summary>
-        ///     Registers a token provider as a singleton, resolving the named HttpClient
+        ///     Registers a token provider as scoped, resolving the named HttpClient
         ///     from IHttpClientFactory and all other constructor dependencies from DI.
         ///     This replaces the manual factory lambda pattern used across connector installers.
         /// </summary>
