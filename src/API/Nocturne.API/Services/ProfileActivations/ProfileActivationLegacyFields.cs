@@ -38,7 +38,7 @@ internal static class ProfileActivationLegacyFields
         ProfileSpanMetadata.TimeshiftKey,
         ProfileSpanMetadata.OriginalPercentageKey,
         ProfileSpanMetadata.OriginalTimeshiftKey,
-        ProfileSpanMetadata.AppKey,
+        UploadedAppFields.AppKey,
         UploadedAppFields.EnteredByKey,
         StateSpanMetadataExtensions.UtcOffsetKey,
         InsulinNameKey,
@@ -137,7 +137,7 @@ internal static class ProfileActivationLegacyFields
         }
 
         if (activation.App is { } app)
-            metadata[ProfileSpanMetadata.AppKey] = app;
+            metadata[UploadedAppFields.AppKey] = app;
         if (activation.EnteredBy is { } enteredBy)
             metadata[UploadedAppFields.EnteredByKey] = enteredBy;
         if (activation.UtcOffset is { } utcOffset)

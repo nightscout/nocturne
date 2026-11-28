@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
 
@@ -91,4 +92,26 @@ public static class KeptField
         JsonElement element => element,
         var other => JsonSerializer.SerializeToElement(other),
     };
+
+    /// <summary><paramref name="kept"/> copied into the metadata of the span or activation it is kept in.</summary>
+    public static void CopyInto(IDictionary<string, object> metadata, Dictionary<string, object?>? kept)
+    {
+        foreach (var (key, value) in kept ?? [])
+            metadata[key] = value!;
+    }
+
+    /// <summary>
+    /// Span or activation metadata read as a record is, for the readers above. The same instance when it is
+    /// already read-only, as a <see cref="Dictionary{TKey, TValue}"/> is.
+    /// </summary>
+    public static IReadOnlyDictionary<string, object?>? OfMetadata(IDictionary<string, object>? metadata) =>
+        Nullable(metadata as IReadOnlyDictionary<string, object>
+            ?? (metadata is null ? null : new ReadOnlyDictionary<string, object>(metadata)));
+
+    /// <summary>
+    /// <see cref="IReadOnlyDictionary{TKey, TValue}"/> is invariant in its value, so the compiler cannot see
+    /// that a bag of non-null values is a bag of nullable ones.
+    /// </summary>
+    public static IReadOnlyDictionary<string, object?>? Nullable(IReadOnlyDictionary<string, object>? bag) =>
+        (IReadOnlyDictionary<string, object?>?)(object?)bag;
 }

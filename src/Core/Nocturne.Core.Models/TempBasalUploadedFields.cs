@@ -17,8 +17,7 @@ public static class TempBasalUploadedFields
     public static Dictionary<string, object?>? Keep(Dictionary<string, object?>? record, Treatment treatment)
     {
         record = UploadedPumpFields.Keep(record, treatment);
-        record = UploadedAppFields.Keep(record, treatment);
-        record = UploadedAppFields.KeepUploader(record, treatment);
+        record = UploadedAppFields.KeepAll(record, treatment);
         return KeptField.Add(
             record,
             StateSpanMetadataExtensions.UploadedDurationKey,
@@ -28,9 +27,8 @@ public static class TempBasalUploadedFields
     public static void Restore(Treatment treatment, TempBasal tempBasal)
     {
         UploadedPumpFields.Restore(treatment, tempBasal.AdditionalProperties, tempBasal.PumpRecordId);
-        UploadedAppFields.Restore(treatment, tempBasal.AdditionalProperties, tempBasal.App);
-        UploadedAppFields.RestoreUploader(
-            treatment, tempBasal.AdditionalProperties, V4ClientApp(tempBasal), tempBasal.Device);
+        UploadedAppFields.RestoreAll(
+            treatment, tempBasal.AdditionalProperties, tempBasal.App, V4ClientApp(tempBasal), tempBasal.Device);
     }
 
     /// <summary>The app a V4 client named itself by, on a row it wrote; the decomposer keeps a legacy id on every row it writes.</summary>

@@ -20,7 +20,7 @@ public class AapsProfileSwitchReadbackIntegrationTests : ApiIntegrationTestBase
     public AapsProfileSwitchReadbackIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
         : base(fixture, output) { }
 
-    private const string ProfileJson =
+    internal const string ProfileJson =
         """{"units":"mmol","dia":5,"timezone":"UTC","sens":[{"time":"00:00","timeAsSeconds":0,"value":2.0}],"carbratio":[{"time":"00:00","timeAsSeconds":0,"value":9.1}],"basal":[{"time":"00:00","timeAsSeconds":0,"value":0.8}],"target_low":[{"time":"00:00","timeAsSeconds":0,"value":5.5}],"target_high":[{"time":"00:00","timeAsSeconds":0,"value":5.5}]}""";
 
     private static readonly string[] EffectiveSwitchFields =
@@ -31,7 +31,7 @@ public class AapsProfileSwitchReadbackIntegrationTests : ApiIntegrationTestBase
 
     private static long MinutesAgo(int minutes) => DateTimeOffset.UtcNow.AddMinutes(-minutes).ToUnixTimeMilliseconds();
 
-    private static object EffectiveSwitchV1(long mills) => new
+    internal static object EffectiveSwitchV1(long mills) => new
     {
         eventType = "Note",
         created_at = DateTimeOffset.FromUnixTimeMilliseconds(mills).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),

@@ -19,10 +19,10 @@ public class UploadedIsValidTests
     public void A_span_keeps_isValid_only_when_true(bool? uploaded, bool? kept)
     {
         var metadata = new Dictionary<string, object>();
-        SpanUploadedFields.Keep(metadata, new Treatment { IsValid = uploaded });
+        UploadedPumpFields.KeepInMetadata(metadata, new Treatment { IsValid = uploaded });
 
         var served = new Treatment();
-        SpanUploadedFields.Restore(served, metadata);
+        UploadedPumpFields.RestoreFromMetadata(served, metadata);
 
         served.IsValid.Should().Be(kept);
     }

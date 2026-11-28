@@ -42,8 +42,6 @@ public sealed record ProfileSpanMetadata
     public const string OriginalDurationKey = "originalDuration";
     public const string OriginalEndKey = "originalEnd";
 
-    public const string AppKey = "app";
-
     private const double MillisPerHour = 3_600_000;
 
     /// <summary>The name the switch was uploaded under; AAPS names it after its customization (<c>"Rhys (110%)"</c>).</summary>
@@ -109,7 +107,7 @@ public sealed record ProfileSpanMetadata
         {
             uploaded = timeshift;
             unit = timeshift is { } raw
-                ? UnitOfUploadedTimeshift(raw, metadata.TryReadString(UploadedAppFields.EnteredByKey), metadata.TryReadString(AppKey), originalProfileName)
+                ? UnitOfUploadedTimeshift(raw, metadata.TryReadString(UploadedAppFields.EnteredByKey), metadata.TryReadString(UploadedAppFields.AppKey), originalProfileName)
                 : null;
             hours = timeshift is { } value ? ToHours(value, unit!.Value) : 0;
         }
@@ -132,7 +130,7 @@ public sealed record ProfileSpanMetadata
             OriginalDuration = (long?)metadata.TryReadDecimal(OriginalDurationKey),
             OriginalEnd = (long?)metadata.TryReadDecimal(OriginalEndKey),
             DurationInMilliseconds = (long?)metadata.TryReadDecimal(DurationInMillisecondsKey),
-            App = metadata.TryReadString(AppKey),
+            App = metadata.TryReadString(UploadedAppFields.AppKey),
         };
     }
 
