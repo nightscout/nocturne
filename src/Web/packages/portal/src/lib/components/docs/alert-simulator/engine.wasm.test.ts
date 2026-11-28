@@ -16,7 +16,8 @@ const WASM = new URL("../../../../../static/alerts-engine/nocturne_alerts_bg.was
 
 /**
  * Without the engine the suite is skipped, as `pnpm test` is run without a Rust toolchain; CI
- * builds it and sets ALERTS_ENGINE_REQUIRED, so a missing engine fails there instead.
+ * builds it and sets ALERTS_ENGINE_REQUIRED, so a missing engine fails there instead. A local run
+ * tests the engine `build-alerts-engine.mjs` last produced, so rebuild it after changing crates/.
  */
 const runs = existsSync(WASM) || process.env.ALERTS_ENGINE_REQUIRED === "true";
 
@@ -52,6 +53,10 @@ function comparing(leaf: LeafNode, operator: CompareOperator): LeafNode | undefi
 		case "signal_loss":
 		case "time_of_day":
 			return undefined;
+		default: {
+			const unhandled: never = copy;
+			throw new Error(`no comparison case for ${JSON.stringify(unhandled)}`);
+		}
 	}
 }
 
@@ -78,6 +83,23 @@ const built: [string, ConditionNode][] = [
 		`every kind under ${operator}`,
 		collapse({ type: "composite", composite: { operator, conditions: leaves } }),
 	]),
+	[
+		"a fractional threshold",
+		collapse(asGroup({ type: "threshold", threshold: { operator: "<", value: 69.5 } })),
+	],
+	[
+		"a group with one condition nested in a group",
+		collapse({
+			type: "composite",
+			composite: {
+				operator: "and",
+				conditions: [
+					defaultLeaf("rate_of_change"),
+					{ type: "composite", composite: { operator: "or", conditions: [defaultLeaf("threshold")] } },
+				],
+			},
+		}),
+	],
 	[
 		"a group nested in a group",
 		collapse({

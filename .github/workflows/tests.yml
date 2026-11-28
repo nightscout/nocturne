@@ -88,6 +88,7 @@ jobs:
               - *alert-crates
               - *crates-workspace
               - 'crates/clippy.toml'
+              - 'crates/rust-toolchain.toml'
               - 'src/API/**'
               - 'tests/Parity/**'
               - 'tests/Unit/Nocturne.Alerts.Native.Tests/**'
@@ -549,8 +550,7 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       # The key and paths of portal-pages.yml's WebAssembly build, so a pull request restores the
-      # cache main's portal deploy saved, including the wasm-bindgen CLI the build script installs
-      # into crates/target/tools. Sources, not just the lockfile: see the alerts-ffi-parity job.
+      # cache main's portal deploy saved. Sources, not just the lockfile: see the alerts-ffi-parity job.
       - name: Cache cargo
         uses: actions/cache@v5
         with:
@@ -560,6 +560,21 @@ jobs:
             crates/target
             src/Web/vendor/water-ui/target
           key: cargo-wasm-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+      # The build script installs the wasm-bindgen CLI that matches Cargo.lock into
+      # crates/target/tools when it is missing. The cache above misses on every crates change, so the
+      # CLI has its own key, which changes only with its version.
+      - name: wasm-bindgen version
+        id: wasm-bindgen
+        working-directory: crates
+        run: |
+          version=$(awk '$0 == "name = \"wasm-bindgen\"" { getline; gsub(/version = |"/, ""); print; exit }' Cargo.lock)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Cache the wasm-bindgen CLI
+        uses: actions/cache@v5
+        with:
+          path: crates/target/tools
+          key: wasm-bindgen-cli-${{ runner.os }}-${{ steps.wasm-bindgen.outputs.version }}
       - name: Build the alert engine for WebAssembly
         run: pnpm --filter @nocturne/portal run alerts-engine
       - name: Simulator trees in the engine
