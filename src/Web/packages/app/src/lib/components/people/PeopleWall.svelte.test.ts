@@ -22,6 +22,7 @@ import { bg, bgLabel, time } from "#lib/utils/formatting.js";
 import { wallStep } from "./wall-layout.js";
 import { OVERLAY_REVEAL_MS } from "#lib/utils/overlay-reveal.svelte.js";
 import { OVERVIEW_PING_DEBOUNCE_MS } from "./live-overview.svelte.js";
+import { answerOf, crowd as clinic, nextPoll } from "./people-crowd-fixtures.js";
 import { makePerson } from "./people-fixtures.js";
 import { overviewFeed as feed, overviewSockets as clients } from "./people-socket-fixture.svelte.js";
 
@@ -49,7 +50,19 @@ const navigation = vi.hoisted(() => ({
   address: new URL("http://localhost/people/wall"),
 }));
 
+const namedFor = vi.hoisted(() => [] as (string | undefined)[]);
+
 vi.mock("$app/navigation", () => navigation);
+vi.mock("./person.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./person.js")>();
+  return {
+    ...actual,
+    personName: (person: TenantOverviewItem) => {
+      namedFor.push(person.slug);
+      return actual.personName(person);
+    },
+  };
+});
 vi.mock("#lib/utils/poll-while-visible.svelte.js", () => ({ pollWhileVisible: () => {} }));
 vi.mock("#lib/websocket/websocket-client.svelte.js", () => import("./people-socket-fixture.svelte.js"));
 vi.mock("#lib/api/generated/myTenants.generated.remote.js", () => ({
@@ -149,6 +162,21 @@ function clippedCards() {
 
 const wall = () => page.getByTestId("people-wall");
 
+const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+/** Resolves once the tiles have held their places for ten frames, as the band is measured after the first draw. */
+async function laidOut() {
+  const layout = () =>
+    `${page.getByTestId("wall-flagged").elements().length}|${allNameElements().map((name) => name.title).join(",")}`;
+  let last = layout();
+  for (let steady = 0; steady < 10; ) {
+    await frame();
+    const now = layout();
+    steady = now === last ? steady + 1 : 0;
+    last = now;
+  }
+}
+
 /** Puts the wall's address at `/people/wall` with `search`; the wall reads it when it is drawn. */
 function openAt(search: string) {
   pageState.url = new URL(`http://localhost/people/wall${search}`);
@@ -165,6 +193,7 @@ beforeEach(async () => {
   overview.groupErrors = {};
   views.list = [];
   views.error = undefined;
+  namedFor.length = 0;
   feed.connected = false;
   refreshes.count = 0;
   refreshes.run = async () => {};
@@ -479,6 +508,28 @@ describe("People wall display", () => {
 
       await expect.element(page.getByTestId("wall-line")).toHaveTextContent(bg(95));
       expect(refreshes.count).toBe(1);
+    });
+  });
+
+  describe("a poll answer", () => {
+    it("works out again only the tile of the person whose data changed, in the band or the columns", async () => {
+      const people = clinic(24);
+      overview.data = answerOf(people);
+      render(PeopleWall);
+      await expect.poll(() => allNameElements().length).toBe(people.length);
+      await laidOut();
+      const inBand = new Set(namesIn("wall-band"));
+      const changed = people.find(
+        (person) => !person.attention?.length && !inBand.has(person.displayName!)
+      )!;
+      namedFor.length = 0;
+
+      overview.data = answerOf(nextPoll(people, [changed.slug!], ""));
+      await expect
+        .element(page.getByTestId("wall-columns"))
+        .toHaveTextContent(bg((changed.latest?.mgdl ?? 0) + 7));
+
+      expect(new Set(namedFor)).toEqual(new Set([changed.slug]));
     });
   });
 

@@ -6,7 +6,11 @@
   import { isHttpError } from "@sveltejs/kit";
   import { getGroups } from "#lib/api/generated/myTenants.generated.remote.js";
   import { getPeopleViews } from "#lib/api/generated/peopleViews.generated.remote.js";
-  import { OverviewRuleSet, type TenantOverviewResponse } from "@nocturne/api-client";
+  import {
+    OverviewRuleSet,
+    type TenantOverviewItem,
+    type TenantOverviewResponse,
+  } from "@nocturne/api-client";
   import RevealableOverlay from "#lib/components/shared/RevealableOverlay.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -42,11 +46,11 @@
     withTabQuery,
     type Unsaved,
   } from "./people-query.js";
-  import { splitFlagged } from "./person.js";
+  import { keepUnchanged, splitFlagged } from "./person.js";
   import { setReadState } from "./read-state.js";
   import WallFlagged from "./WallFlagged.svelte";
   import WallGroupHeading from "./WallGroupHeading.svelte";
-  import { wallSections } from "./wall-groups.js";
+  import { wallSections, type WallHeading } from "./wall-groups.js";
   import WallLegend from "./WallLegend.svelte";
   import WallLine from "./WallLine.svelte";
   import {
@@ -55,8 +59,10 @@
     intoColumns,
     wallColumnCapacity,
     wallStep,
+    type WallSlot,
   } from "./wall-layout.js";
 
+  type PersonSlot = Extract<WallSlot<TenantOverviewItem, WallHeading>, { kind: "person" }>;
   const address = (page.shallow?.url ?? page.url).searchParams;
   let tab = $state<PeopleTab>(tabOf(address));
   /** The search, filters and sort the People page had not saved when it opened the wall. */
@@ -136,10 +142,14 @@
       encodeSort(peopleQuery?.sort ?? null),
     ].join(" ")
   );
-  let lastRead = $state<{ key: string; response: TenantOverviewResponse; at: Date } | null>(null);
+  let heldPeople: TenantOverviewItem[] = [];
+  /** Raw, so the people `keepUnchanged` holds keep the identity that Svelte compares. */
+  let lastRead = $state.raw<{ key: string; response: TenantOverviewResponse; at: Date } | null>(null);
   $effect.pre(() => {
     const current = query?.current;
-    if (current) lastRead = { key: readKey, response: current, at: new Date() };
+    if (!current) return;
+    heldPeople = keepUnchanged(heldPeople, current.tenants ?? []);
+    lastRead = { key: readKey, response: { ...current, tenants: heldPeople }, at: new Date() };
   });
   const kept = $derived(lastRead?.key === readKey ? lastRead : null);
 
@@ -200,11 +210,23 @@
       : [{ heading: null, people: rest }]
   );
   const capacity = $derived(wallColumnCapacity(columnsWidth, columnsHeight));
-  const columns = $derived(
-    capacity
+  let heldSlots: { tenantId?: string; slot: PersonSlot }[] = [];
+  /** A person's slot stays the same object while it holds the same person, since a tile reads its person through the slot. */
+  const columns = $derived.by(() => {
+    const laid = capacity
       ? intoColumns(sections, capacity.rows, capacity.columns)
-      : intoColumns(sections, Number.POSITIVE_INFINITY, 1)
-  );
+      : intoColumns(sections, Number.POSITIVE_INFINITY, 1);
+    heldSlots = keepUnchanged(
+      heldSlots,
+      laid.flat().flatMap((slot) =>
+        slot.kind === "person" ? [{ tenantId: slot.person.tenantId, slot }] : []
+      )
+    );
+    const held = new Map(heldSlots.map((entry) => [entry.tenantId, entry.slot]));
+    return laid.map((column) =>
+      column.map((slot) => (slot.kind === "person" ? (held.get(slot.person.tenantId) ?? slot) : slot))
+    );
+  });
   const shown = $derived(
     new Set(columns.flat().flatMap((slot) => (slot.kind === "person" ? [slot.person] : [])))
   );
