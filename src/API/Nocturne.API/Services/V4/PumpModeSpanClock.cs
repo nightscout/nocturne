@@ -33,6 +33,12 @@ internal static class PumpModeSpanClock
         /// <summary>Whether <paramref name="span"/> ends where this transition ends a span that starts no later than it.</summary>
         public bool Ended(StateSpan span) =>
             span.EndTimestamp == At || (IsAhead(At, ArrivedAt) && span.EndTimestamp == ArrivedAt);
+
+        /// <summary>
+        /// The times a fold reads the spans around: <see cref="At"/>, and the arrival of one ahead of it, where
+        /// <see cref="EndAt"/> ends a span and <see cref="Ended"/> finds that end when the fold runs again.
+        /// </summary>
+        public IEnumerable<DateTime> ReadAt => IsAhead(At, ArrivedAt) ? [At, ArrivedAt!.Value] : [At];
     }
 
     /// <summary>
