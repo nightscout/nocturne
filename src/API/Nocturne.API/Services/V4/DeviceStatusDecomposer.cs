@@ -981,12 +981,46 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             return;
 
         var timeline = await _pumpRepo.GetTimelineAsync(pumps[0].Timestamp, pumps[^1].Timestamp, ct);
+        var openerOf = await OpenersAsync(spans, timeline, ct);
         foreach (var pump in pumps)
         {
             var prior = timeline.Where(p => p.Timestamp < pump.Timestamp).MaxBy(p => p.Timestamp);
-            foreach (var span in FoldSuspension(pump, prior, spans).Concat(FoldPumpMode(pump, prior, spans)))
+            foreach (var span in FoldSuspension(pump, prior, spans, openerOf).Concat(FoldPumpMode(pump, prior, spans, openerOf)))
                 owners[span] = pump.CorrelationId ?? Guid.Empty;
         }
+    }
+
+    /// <summary>
+    /// The transition of the snapshot that opened a pump-mode span, for the spans <paramref name="spans"/> holds
+    /// and those the batch opens, whose snapshots are in <paramref name="timeline"/>. <see cref="PumpModeSpanClock"/>
+    /// orders it against each transition. A span another source wrote has none.
+    /// </summary>
+    private async Task<Func<StateSpan, PumpModeSpanClock.Transition?>> OpenersAsync(
+        SpanState spans, IReadOnlyList<V4Models.PumpSnapshot> timeline, CancellationToken ct)
+    {
+        var openers = timeline.DistinctBy(p => p.Id).ToDictionary(p => p.Id);
+        var missing = spans[StateSpanCategory.PumpMode].Select(OpenerId).OfType<Guid>()
+            .Where(id => !openers.ContainsKey(id)).Distinct().ToList();
+        if (missing.Count > 0)
+        {
+            foreach (var opener in await _pumpRepo.GetByIdsAsync(missing, ct))
+                openers[opener.Id] = opener;
+        }
+
+        return span => OpenerId(span) is { } id && openers.TryGetValue(id, out var opener) ? TransitionOf(opener) : null;
+    }
+
+    private const string SuspendedSpanKey = "pump-suspended:";
+    private const string ModeSpanKey = "pump-mode:";
+
+    /// <summary>The id of the snapshot whose transition opened <paramref name="span"/>, read off its key.</summary>
+    private static Guid? OpenerId(StateSpan span)
+    {
+        var key = span.OriginalId;
+        var id = key?.StartsWith(SuspendedSpanKey, StringComparison.Ordinal) == true ? key[SuspendedSpanKey.Length..]
+            : key?.StartsWith(ModeSpanKey, StringComparison.Ordinal) == true ? key[ModeSpanKey.Length..]
+            : null;
+        return Guid.TryParse(id, out var opener) ? opener : null;
     }
 
     /// <summary>
@@ -1009,7 +1043,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// </remarks>
     /// <returns>The spans the transition opened or changed.</returns>
     private List<StateSpan> FoldSuspension(
-        V4Models.PumpSnapshot snapshot, V4Models.PumpSnapshot? prior, SpanState spans)
+        V4Models.PumpSnapshot snapshot, V4Models.PumpSnapshot? prior, SpanState spans,
+        Func<StateSpan, PumpModeSpanClock.Transition?> openerOf)
     {
         var priorSuspended = prior?.Suspended ?? false;
         var nowSuspended = snapshot.Suspended ?? false;
@@ -1025,11 +1060,11 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         {
             // A span already keyed to this snapshot was opened by it, and upserting it again would
             // reopen a suspension a later resume closed.
-            var key = $"pump-suspended:{snapshot.Id}";
+            var key = $"{SuspendedSpanKey}{snapshot.Id}";
             if (pumpModes.Any(s => s.OriginalId == key))
                 return [];
 
-            DateTime? Overtaken(StateSpan s) => PumpModeSpanClock.OvertakenEnd(s, transition);
+            DateTime? Overtaken(StateSpan s) => PumpModeSpanClock.OvertakenEnd(s, transition, openerOf(s));
             var reading = PumpModeSpanClock.OpenAfterRelease(pumpModes, suspended, Overtaken);
             var overtaken = End(reading, Overtaken, spans);
 
@@ -1043,21 +1078,23 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
             if (reading.Count > overtaken.Count)
                 return overtaken;
 
-            var span = PumpModeSpan(suspended, transitionAt, snapshot.Device, key, snapshot.CreatedAt);
+            var span = PumpModeSpan(
+                suspended, PumpModeSpanClock.OpensAt(transition, pumpModes), snapshot.Device, key, snapshot.CreatedAt);
             spans.Open(span);
             return [.. overtaken, span];
         }
 
         // A Suspended span already ending where this transition ends one means this resume was folded before.
-        if (pumpModes.Any(s => s.State == suspended && transition.Ended(s)))
+        if (pumpModes.Any(s => s.State == suspended && transition.Ended(s, openerOf(s))))
             return [];
 
         // Every open span the resume reaches is ended, not just one: leftover duplicates (created
         // before the open-guard above, or by concurrent decomposition) would keep the pump latched
         // "suspended".
-        DateTime? EndAt(StateSpan s) => PumpModeSpanClock.EndAt(s, transition);
+        DateTime? EndAt(StateSpan s) => PumpModeSpanClock.EndAt(s, transition, openerOf(s));
         var ended = End(PumpModeSpanClock.OpenAfterRelease(pumpModes, suspended, EndAt), EndAt, spans);
-        if (ended.Any(s => s.StartTimestamp <= transitionAt))
+        // One ended at its own start was overtaken, not resumed.
+        if (ended.Any(s => s.StartTimestamp <= transitionAt || s.EndTimestamp > s.StartTimestamp))
             return ended;
 
         // No open span exists: the suspended=true state predates the StateSpan feature or the
@@ -1072,12 +1109,12 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         }
 
         // A span keyed to the prior snapshot already records this suspension.
-        var backfillKey = $"pump-suspended:{prior.Id}";
+        var backfillKey = $"{SuspendedSpanKey}{prior.Id}";
         if (pumpModes.Any(s => s.OriginalId == backfillKey))
             return ended;
 
         var backfilled = PumpModeSpan(suspended, TransitionOf(prior).At, snapshot.Device, backfillKey, prior.CreatedAt);
-        if (PumpModeSpanClock.EndAt(backfilled, transition) is not { } backfilledEnd
+        if (PumpModeSpanClock.EndAt(backfilled, transition, TransitionOf(prior)) is not { } backfilledEnd
             || backfilledEnd == backfilled.StartTimestamp)
             return ended;
         backfilled.EndTimestamp = backfilledEnd;
@@ -1106,7 +1143,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// </remarks>
     /// <returns>The spans the transition opened or changed.</returns>
     private static List<StateSpan> FoldPumpMode(
-        V4Models.PumpSnapshot snapshot, V4Models.PumpSnapshot? prior, SpanState spans)
+        V4Models.PumpSnapshot snapshot, V4Models.PumpSnapshot? prior, SpanState spans,
+        Func<StateSpan, PumpModeSpanClock.Transition?> openerOf)
     {
         if (ParsePumpMode(snapshot.PumpMode) is not { } mode || ParsePumpMode(prior?.PumpMode) == mode)
             return [];
@@ -1116,20 +1154,21 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         var opposite = (mode == PumpModeState.Automatic ? PumpModeState.Manual : PumpModeState.Automatic).ToString();
         var pumpModes = spans[StateSpanCategory.PumpMode];
 
-        DateTime? EndAt(StateSpan s) => PumpModeSpanClock.EndAt(s, transition);
+        DateTime? EndAt(StateSpan s) => PumpModeSpanClock.EndAt(s, transition, openerOf(s));
         var touched = End(PumpModeSpanClock.OpenAfterRelease(pumpModes, opposite, EndAt), EndAt, spans);
 
         // A span already keyed to this snapshot was opened by it; upserting it again would reopen it.
-        var key = $"pump-mode:{snapshot.Id}";
+        var key = $"{ModeSpanKey}{snapshot.Id}";
         if (pumpModes.Any(s => s.OriginalId == key))
             return touched;
 
-        DateTime? Overtaken(StateSpan s) => PumpModeSpanClock.OvertakenEnd(s, transition);
+        DateTime? Overtaken(StateSpan s) => PumpModeSpanClock.OvertakenEnd(s, transition, openerOf(s));
         touched.AddRange(End(PumpModeSpanClock.OpenAfterRelease(pumpModes, state, Overtaken), Overtaken, spans));
         if (pumpModes.Any(s => s.State == state && s.EndTimestamp == null))
             return touched;
 
-        var opened = PumpModeSpan(state, transition.At, snapshot.Device, key, snapshot.CreatedAt);
+        var opened = PumpModeSpan(
+            state, PumpModeSpanClock.OpensAt(transition, pumpModes), snapshot.Device, key, snapshot.CreatedAt);
         spans.Open(opened);
         touched.Add(opened);
         return touched;
@@ -1153,10 +1192,11 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
     /// <summary>
     /// A snapshot's transition: the pump's own clock, else the ingestion timestamp, judged against when the
-    /// server stored the snapshot.
+    /// server stored the snapshot. The ingestion timestamp is the time the source dated the status, which
+    /// orders it.
     /// </summary>
     private static PumpModeSpanClock.Transition TransitionOf(V4Models.PumpSnapshot snapshot) =>
-        new(ParseTimestampToDateTime(snapshot.Clock) ?? snapshot.Timestamp, snapshot.CreatedAt);
+        new(ParseTimestampToDateTime(snapshot.Clock) ?? snapshot.Timestamp, snapshot.CreatedAt, snapshot.Timestamp);
 
     /// <summary>
     /// A pump-mode span whose arrival, until it is stored, is <paramref name="arrivedAt"/>: when the snapshot

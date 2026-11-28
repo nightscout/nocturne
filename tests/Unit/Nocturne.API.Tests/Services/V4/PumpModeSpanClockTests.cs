@@ -6,7 +6,8 @@ namespace Nocturne.API.Tests.Services.V4;
 
 /// <summary>
 /// The times a fold reads the spans around a transition (<see cref="PumpModeSpanClock.Transition.ReadAt"/>):
-/// its own, and its arrival only when it was dated beyond the clock bound as it arrived.
+/// its own, and its arrival only when it was dated beyond the clock bound as it arrived. The order the source
+/// sent a transition and a span's opener in decides the end, when both were sent no later than they arrived.
 /// </summary>
 [Trait("Category", "Unit")]
 public class PumpModeSpanClockTests
@@ -61,4 +62,45 @@ public class PumpModeSpanClockTests
 
         new PumpModeSpanClock.Transition(at, Arrived).ReadAt.Should().Equal(at);
     }
+
+    [Fact]
+    public void ATransitionSentAfterTheSpansOpener_DatedBeforeTheSpan_EndsItWhenItsSourceDatedIt()
+    {
+        var opener = new PumpModeSpanClock.Transition(Arrived, Arrived, Arrived);
+        var sent = Arrived.AddMinutes(30).AddTicks(1_234_567);
+        var transition = new PumpModeSpanClock.Transition(Arrived.AddMinutes(-30), Arrived.AddMinutes(40), sent);
+
+        PumpModeSpanClock.EndAt(Span(Arrived, Arrived), transition, opener).Should().Be(RecordTime.AtMillisecond(sent));
+        PumpModeSpanClock.EndAt(Span(Arrived, Arrived), transition).Should().BeNull();
+    }
+
+    [Fact]
+    public void ATransitionSentBeforeTheSpansOpener_DatedAfterTheSpanArrived_EndsNothing()
+    {
+        var fast = TimeSpan.FromHours(1);
+        var opener = new PumpModeSpanClock.Transition(Arrived + fast, Arrived, Arrived);
+        var old = Arrived.AddMinutes(-30);
+        var transition = new PumpModeSpanClock.Transition(old + fast, Arrived.AddHours(3), old);
+
+        PumpModeSpanClock.EndAt(Span(Arrived + fast, Arrived), transition, opener).Should().BeNull();
+        PumpModeSpanClock.EndAt(Span(Arrived + fast, Arrived), transition).Should().Be(Arrived + fast);
+    }
+
+    [Fact]
+    public void AnOpenerSentAheadOfItsArrival_GivesNoOrder()
+    {
+        var ahead = Arrived.AddDays(1);
+        var opener = new PumpModeSpanClock.Transition(ahead, Arrived.AddMinutes(-30), ahead);
+        var transition = new PumpModeSpanClock.Transition(Arrived, Arrived.AddMinutes(30), Arrived);
+
+        PumpModeSpanClock.EndAt(Span(ahead, Arrived.AddMinutes(-30)), transition, opener).Should().Be(ahead);
+    }
+
+    private static StateSpan Span(DateTime start, DateTime arrived) => new()
+    {
+        Category = StateSpanCategory.PumpMode,
+        State = PumpModeState.Suspended.ToString(),
+        StartTimestamp = start,
+        CreatedAt = arrived,
+    };
 }
