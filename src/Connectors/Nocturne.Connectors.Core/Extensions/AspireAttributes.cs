@@ -142,9 +142,10 @@ public class ConnectorRegistrationAttribute(
     public int HistoryReachAmount { get; set; }
 
     /// <summary>
-    ///     How far back the source serves records. This is the one declaration of it: a range naming
-    ///     no lower bound starts at it (<c>BaseConnectorService.HistoryStart</c>) and the connector
-    ///     dialogs show it, so neither keeps a figure of its own.
+    ///     How far back the source serves records. This is the one declaration of it, which a
+    ///     configuration answers through <see cref="BaseConnectorConfiguration.HistoryReach"/>: a range
+    ///     naming no lower bound starts at that (<c>BaseConnectorService.HistoryStart</c>) and the
+    ///     connector dialogs show it, so neither keeps a figure of its own.
     /// </summary>
     public ConnectorHistoryReach HistoryReach => new(HistoryReachUnit, HistoryReachAmount);
 
@@ -216,7 +217,14 @@ public class ConnectorRegistrationAttribute(
     ///     dispatch to it.
     /// </exception>
     public static ConnectorRegistrationAttribute DeclaredOn(Type configType) =>
-        configType.GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)
+        Find(configType)
         ?? throw new InvalidOperationException(
             $"{configType.Name} declares no {nameof(ConnectorRegistrationAttribute)} of its own.");
+
+    /// <summary>
+    ///     The registration <paramref name="configType"/> declares itself, read as
+    ///     <see cref="DeclaredOn"/> reads it, or null for a configuration that carries none.
+    /// </summary>
+    public static ConnectorRegistrationAttribute? Find(Type configType) =>
+        configType.GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false);
 }

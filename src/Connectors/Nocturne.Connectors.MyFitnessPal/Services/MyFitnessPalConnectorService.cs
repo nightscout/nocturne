@@ -54,7 +54,7 @@ public class MyFitnessPalConnectorService
     ///     The diary is read newest first until a page falls before the window, so a start before any
     ///     diary reads it to its first entry, within <see cref="MyFitnessPalConstants.MaxPagesPerSync"/>.
     /// </summary>
-    protected override DateTime? HistoryStart => DateTime.UnixEpoch;
+    protected override DateTime? HistoryStart(MyFitnessPalConnectorConfiguration config) => DateTime.UnixEpoch;
 
     /// <inheritdoc />
     protected override IReadOnlyDictionary<string, IReadOnlyCollection<SyncDataType>> ResumeStamps { get; } =

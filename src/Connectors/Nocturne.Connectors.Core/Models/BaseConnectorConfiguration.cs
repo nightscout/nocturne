@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Core.Models.Services;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Core.Models;
@@ -141,6 +142,15 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     ///     every cycle with empty credentials and fails authentication forever.
     /// </summary>
     public bool HasRequiredConfiguration() => MissingRequiredProperties().Count == 0;
+
+    /// <summary>
+    ///     How far back the source serves records under this configuration: the registration's
+    ///     <see cref="ConnectorRegistrationAttribute.HistoryReach"/>, unless a setting changes the
+    ///     protocol the connector reads the source with. A range naming no lower bound starts at it
+    ///     and the connector dialogs show it.
+    /// </summary>
+    public virtual ConnectorHistoryReach HistoryReach() =>
+        ConnectorRegistrationAttribute.Find(GetType())?.HistoryReach ?? ConnectorHistoryReach.Whole;
 
     /// <summary>
     ///     The display names of the required properties that have no value, so a caller can say which

@@ -343,17 +343,23 @@ public class GlookoConnectorService
 
             // The request window is real-UTC; Glooko queries expect fake-UTC (local wall-clock). Pad by
             // a day each side so a non-zero offset between the two never clips edge data (dedup absorbs
-            // the overlap).
+            // the overlap). Only SSV2 reads from an open start: its cursors begin at the account's first
+            // record.
             var now = Clock.GetUtcNow().UtcDateTime;
-            var from = context.TimeMapper.ToGlookoTime(
-                ConcreteWindowStart(request, ResumeFamily.Glucose)).AddDays(-1);
+            var start = config.UseSsv2Sync
+                ? WindowStart(request, ResumeFamily.Glucose)
+                : ConcreteWindowStart(request, ResumeFamily.Glucose);
+            DateTime? from = start is { } bound ? context.TimeMapper.ToGlookoTime(bound).AddDays(-1) : null;
             var to = context.TimeMapper.ToGlookoTime(request.To ?? now).AddDays(1);
 
-            var chunks = DateChunker.Chunk(from, to, GlookoConstants.SyncChunkSize).ToList();
+            List<(DateTime From, DateTime To)> chunks = from is { } chunkFrom
+                ? DateChunker.Chunk(chunkFrom, to, GlookoConstants.SyncChunkSize).ToList()
+                : [];
 
             _logger.LogInformation(
-                "[{ConnectorSource}] Syncing {From:yyyy-MM-dd} to {To:yyyy-MM-dd} in {ChunkCount} chunk(s)",
-                ConnectorSource, from, to, chunks.Count);
+                "[{ConnectorSource}] Syncing {From} to {To:yyyy-MM-dd} in {ChunkCount} chunk(s)",
+                ConnectorSource, from?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "the first record",
+                to, chunks.Count);
 
             // Run the sync; if Glooko rejects the cached session (expired: 401 or its HTML sign-in
             // page) or the patient code (403 data_cant_view, e.g. the account was re-linked),
@@ -555,7 +561,7 @@ public class GlookoConnectorService
     /// </summary>
     private async Task RunSyncPassAsync(
         GlookoSyncContext context,
-        DateTime from,
+        DateTime? from,
         bool incremental,
         List<(DateTime From, DateTime To)> chunks,
         HashSet<SyncDataType> activeTypes,
@@ -1077,7 +1083,7 @@ public class GlookoConnectorService
     /// <param name="resource">SSV2 resource path (e.g. <c>/api/v2/cgm/egvs</c>).</param>
     /// <param name="selectRecords">Projects a deserialized page to its record array.</param>
     /// <param name="incremental">When true, resume from <paramref name="stored"/>.</param>
-    /// <param name="startDate">Optional clinical-time floor (fake-UTC). Required by egvs; omitted otherwise.</param>
+    /// <param name="startDate">Optional clinical-time floor (fake-UTC); null reads from the cursor alone.</param>
     /// <param name="stored">The cursor stored for <paramref name="resource"/>; null in explicit-range mode or when none is stored.</param>
     private async Task<List<TRecord>> FetchSsv2Async<TPage, TRecord>(
         GlookoSyncContext context,
@@ -1112,7 +1118,7 @@ public class GlookoConnectorService
                 break;
 
             // Advance to this page's resume watermark *before* the last-page check, so the final page's
-            // cursor is captured too — otherwise the next incremental sync re-fetches that page.
+            // cursor is captured too. Otherwise the next incremental sync re-fetches that page.
             var prevUpdatedAt = lastUpdatedAt;
             var prevGuid = lastGuid;
             lastUpdatedAt = pageData.LastUpdatedAt ?? lastUpdatedAt;
@@ -1169,14 +1175,14 @@ public class GlookoConnectorService
     ///     SSV2 sync pass: glucose from the granular egvs feed, and boluses / carbs / manual BG / state
     ///     spans / temp basals via the same v2 batch mappers but fetched incrementally by cursor. In
     ///     incremental mode each resource omits <c>startDate</c> and relies solely on its stored cursor;
-    ///     a backfill passes the clinical floor and bypasses the cursor.
+    ///     a backfill passes the clinical floor, if it has one, and bypasses the cursor.
     ///     Each resource is fetched in isolation: if one feed fails (network, server error, malformed
     ///     page) its data types are reported as failed fetches in <paramref name="result"/> and the rest
     ///     of the pass still imports.
     /// </summary>
     private async Task FetchAndMapViaSsv2Async(
         GlookoSyncContext context,
-        DateTime from,
+        DateTime? from,
         bool incremental,
         HashSet<SyncDataType> activeTypes,
         SyncResult result,
@@ -1186,8 +1192,8 @@ public class GlookoConnectorService
         context.PendingSsv2Cursors.Clear();
 
         // Incremental syncs resume purely from each resource's stored cursor; an explicit-range backfill
-        // passes the clinical floor. (egvs ignores startDate server-side — its cursor is authoritative —
-        // but it is kept consistent with the other resources rather than special-cased.)
+        // passes the clinical floor when it has one. egvs ignores startDate server-side, since its cursor
+        // is authoritative, but it gets the same floor as the other resources rather than a special case.
         DateTime? batchStart = incremental ? null : from;
 
         if (activeTypes.Contains(SyncDataType.Glucose))
@@ -1255,16 +1261,19 @@ public class GlookoConnectorService
             GlookoConstants.TemporaryBasalsPath, GlookoConstants.SuspendBasalsPath,
             GlookoConstants.MeterReadingsPath, GlookoConstants.FoodsPath);
 
-        // Pump-mode state spans (auto/manual/sleep/exercise/...) — the ONE thing with no SSV2 source
+        // Pump-mode state spans (auto/manual/sleep/exercise/...) are the ONE thing with no SSV2 source
         // (confirmed by reverse-engineering the app: only aggregate mode % is exposed, never per-interval
         // spans). Keep a single slim v3 graph/data call requesting ONLY the pump-mode series, fed into the
         // existing mapper. Windowed to a few recent days on incremental syncs (modes don't change
-        // retroactively; dedup absorbs overlap), full range on backfill. Additional to the basal-derived
-        // state spans from MapAndPublishV2BatchAsync; degrades to none on failure.
+        // retroactively; dedup absorbs overlap). A backfill reads its range, and one from the first
+        // record reads the registration's reach, since the graph needs a start. Additional to the
+        // basal-derived state spans from MapAndPublishV2BatchAsync; degrades to none on failure.
         if (activeTypes.Contains(SyncDataType.StateSpans))
         {
             var modeTo = context.TimeMapper.ToGlookoTime(Clock.GetUtcNow().UtcDateTime).AddDays(1);
-            var modeFrom = incremental ? modeTo.AddDays(-3) : from;
+            var modeFrom = incremental
+                ? modeTo.AddDays(-3)
+                : from ?? context.TimeMapper.ToGlookoTime(FullWalkStart(Clock.GetUtcNow().UtcDateTime));
             var modeData = await FetchV3PumpModeGraphAsync(context, modeFrom, modeTo);
             if (modeData != null)
             {

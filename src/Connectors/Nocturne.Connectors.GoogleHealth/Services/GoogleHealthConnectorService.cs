@@ -40,7 +40,8 @@ public sealed class GoogleHealthConnectorService(
     // Matches GoogleHealthService.ValidateOptions' floor for an explicit ImportFrom.
     private static readonly DateTimeOffset EarliestSupportedDate = new(GoogleHealthState.EarliestSupportedDate);
 
-    protected override DateTime? HistoryStart => GoogleHealthState.EarliestSupportedDate;
+    protected override DateTime? HistoryStart(GoogleHealthConnectorConfiguration config) =>
+        GoogleHealthState.EarliestSupportedDate;
 
     /// <summary>
     ///     Persisted backfill progress: <see cref="CursorDate"/> is the oldest UTC day already

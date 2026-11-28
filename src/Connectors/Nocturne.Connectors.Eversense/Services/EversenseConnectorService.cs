@@ -170,14 +170,15 @@ public class EversenseConnectorService
 
     /// <summary>
     ///     The request windows for a sync from <paramref name="from"/> to <paramref name="to"/>, oldest
-    ///     first. The end runs five minutes past now, as the NOW app asks, so a reading stamped by a
-    ///     transmitter clock slightly ahead is not cut off.
+    ///     first, starting no earlier than <paramref name="historyStart"/>. The end runs five minutes
+    ///     past now, as the NOW app asks, so a reading stamped by a transmitter clock slightly ahead is
+    ///     not cut off.
     /// </summary>
     internal static IReadOnlyList<(DateTime Start, DateTime End)> HistoryWindows(
-        DateTime from, DateTime? to, DateTime now)
+        DateTime from, DateTime? to, DateTime now, DateTime? historyStart)
     {
         var end = to ?? now.AddMinutes(5);
-        var start = Later(from, HistoryStartAt(now));
+        var start = Later(from, historyStart);
 
         var windows = new List<(DateTime, DateTime)>();
         for (var windowStart = start; windowStart < end; windowStart += HistoryChunk)
@@ -227,7 +228,7 @@ public class EversenseConnectorService
         var dataBaseUrl = EversenseConstants.DataBaseUrl(config.Server);
         var records = new List<SensorGlucose>();
         var from = ConcreteWindowStart(request, ResumeFamily.Glucose);
-        foreach (var (start, end) in HistoryWindows(from, request.To, now))
+        foreach (var (start, end) in HistoryWindows(from, request.To, now, HistoryStart(config)))
         {
             var url = $"{dataBaseUrl}{EversenseConstants.Endpoints.GetFollowingUserSensorGlucose}" +
                       $"?UserID={patient.UserId}" +

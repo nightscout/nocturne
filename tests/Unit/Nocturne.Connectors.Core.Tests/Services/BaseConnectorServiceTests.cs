@@ -94,7 +94,7 @@ public class BaseConnectorServiceTests
 
         protected override string ConnectorSource => "test";
         public override string ServiceName => "Test";
-        protected override DateTime? HistoryStart => historyStart;
+        protected override DateTime? HistoryStart(TestConfig config) => historyStart;
 
         protected override Task<SyncResult> PerformSyncInternalAsync(
             SyncRequest request, TestConfig config, CancellationToken cancellationToken)
@@ -204,6 +204,54 @@ public class BaseConnectorServiceTests
         probe.Handed!.From.Should().Be(WindowEnd.AddDays(-3));
     }
 
+    /// <summary>A configuration whose setting reads the source's whole history in place of the declared reach.</summary>
+    [ConnectorRegistration(
+        "Setting", "setting", "SETTING", "Setting", "setting-source",
+        HistoryReachUnit = HistoryReachUnit.Days, HistoryReachAmount = 3)]
+    public class SettingReachConfig : BaseConnectorConfiguration
+    {
+        public bool ReadsWholeHistory { get; set; }
+
+        public override ConnectorHistoryReach HistoryReach() =>
+            ReadsWholeHistory ? ConnectorHistoryReach.Whole : base.HistoryReach();
+    }
+
+    private sealed class SettingReachProbe(TimeProvider clock)
+        : BaseConnectorService<SettingReachConfig>(
+            new HttpClient(),
+            new ConnectorServerResolver<SettingReachConfig>(null, null, null),
+            NullLogger<SettingReachProbe>.Instance,
+            new RecordingRetryDelayStrategy(),
+            timeProvider: clock)
+    {
+        public SyncRequest? Handed { get; private set; }
+
+        public override string ServiceName => "Setting";
+
+        protected override Task<SyncResult> PerformSyncInternalAsync(
+            SyncRequest request, SettingReachConfig config, CancellationToken cancellationToken)
+        {
+            Handed = request;
+            return Task.FromResult(new SyncResult { Success = true });
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SyncDataAsync_AWindowWithNoLowerBound_StartsAtTheReachTheConfigurationAnswers(bool readsWholeHistory)
+    {
+        var now = new DateTimeOffset(WindowEnd, TimeSpan.Zero);
+        var probe = new SettingReachProbe(new FakeTimeProvider(now));
+
+        await probe.SyncDataAsync(
+            new SyncRequest { To = WindowEnd },
+            new SettingReachConfig { ReadsWholeHistory = readsWholeHistory },
+            CancellationToken.None);
+
+        probe.Handed!.From.Should().Be(readsWholeHistory ? null : WindowEnd.AddDays(-3));
+    }
+
     private static readonly DateTime FirstSyncFloorDate = new(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime FirstSyncHistoryStart = new(2026, 7, 31, 0, 0, 0, DateTimeKind.Utc);
 
@@ -220,13 +268,13 @@ public class BaseConnectorServiceTests
     {
         public Dictionary<ResumeFamily, DateTime?> Points { get; } = [];
 
-        public DateTime? FirstStart => FirstSyncStart;
-        public DateTime ConcreteStart => ConcreteFirstSyncStart;
+        public DateTime? FirstStart => FirstSyncStart(new TestConfig());
+        public DateTime ConcreteStart => ConcreteFirstSyncStart(new TestConfig());
 
         protected override string ConnectorSource => "test";
         public override string ServiceName => "Test";
         protected override DateTime? InitialSyncFloor => floor;
-        protected override DateTime? HistoryStart => historyStart;
+        protected override DateTime? HistoryStart(TestConfig config) => historyStart;
 
         protected override IEnumerable<ResumeKey> ResumesFrom(SyncRequest request, TestConfig config) =>
             [ResumeFamily.Glucose, ResumeFamily.Treatments, ResumeFamily.StateSpans,
