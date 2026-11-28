@@ -31,37 +31,44 @@ public sealed record TrackerSeedSpec(
 /// </summary>
 public static class DemoDeviceLifecycle
 {
-    private sealed record DeviceKind(TrackerSeedSpec Tracker, int CycleDays, int Phase, int HourOfDay);
+    private sealed record DeviceKind(TrackerSeedSpec Tracker, int CycleDays, int Phase, int HourOfDay, bool OnPump = false);
 
     private static readonly DeviceKind[] Kinds =
     [
         new(new TrackerSeedSpec("CGM Sensor", TrackerCategory.Sensor, "radio", 240,
             TreatmentTypes.SensorStart, CompletionReason.Completed), CycleDays: 10, Phase: 3, HourOfDay: 9),
         new(new TrackerSeedSpec("Infusion Site", TrackerCategory.Cannula, "syringe", 72,
-            TreatmentTypes.SiteChange, CompletionReason.Completed), CycleDays: 3, Phase: 1, HourOfDay: 20),
+            TreatmentTypes.SiteChange, CompletionReason.Completed), CycleDays: 3, Phase: 1, HourOfDay: 20, OnPump: true),
         new(new TrackerSeedSpec("Reservoir", TrackerCategory.Reservoir, "cylinder", 72,
-            TreatmentTypes.InsulinChange, CompletionReason.Refilled), CycleDays: 3, Phase: 1, HourOfDay: 20),
+            TreatmentTypes.InsulinChange, CompletionReason.Refilled), CycleDays: 3, Phase: 1, HourOfDay: 20, OnPump: true),
         new(new TrackerSeedSpec("Pump Battery", TrackerCategory.Battery, "battery", 504,
-            TreatmentTypes.PumpBatteryChange, CompletionReason.Completed), CycleDays: 21, Phase: 8, HourOfDay: 19),
+            TreatmentTypes.PumpBatteryChange, CompletionReason.Completed), CycleDays: 21, Phase: 8, HourOfDay: 19, OnPump: true),
     ];
 
-    /// <summary>Tracker definitions matching the generated schedule.</summary>
-    public static IReadOnlyList<TrackerSeedSpec> TrackerSpecs { get; } =
-        Kinds.Select(k => k.Tracker).ToList();
+    /// <summary>
+    /// Tracker definitions matching the generated schedule of <paramref name="archetype"/>: those of the host
+    /// when there is none, and without the pump's for a person who has no pump.
+    /// </summary>
+    public static IReadOnlyList<TrackerSeedSpec> TrackerSpecsFor(DemoArchetype? archetype) =>
+        KindsFor(archetype).Select(k => k.Tracker).ToList();
+
+    private static IEnumerable<DeviceKind> KindsFor(DemoArchetype? archetype) =>
+        Kinds.Where(k => !k.OnPump || archetype?.HasPump != false);
 
     /// <summary>
     /// All device changes in the window up to <paramref name="localNow"/>, chronological. One extra
     /// cycle before the window is included per kind so every age has a defined start even on short
     /// backfills. Timestamps are UTC.
     /// </summary>
-    public static List<DeviceChangeEvent> GenerateSchedule(DateTime localNow, int backfillDays, DemoClock clock)
+    public static List<DeviceChangeEvent> GenerateSchedule(
+        DateTime localNow, int backfillDays, DemoClock clock, DemoArchetype? archetype = null)
     {
         var events = new List<DeviceChangeEvent>();
-        foreach (var kind in Kinds)
+        foreach (var kind in KindsFor(archetype))
         {
             for (var d = backfillDays + kind.CycleDays; d >= 0; d--)
             {
-                var local = ChangeTimeOn(localNow.Date.AddDays(-d), kind.Tracker.TriggerEventType);
+                var local = ChangeTimeOn(localNow.Date.AddDays(-d), kind.Tracker.TriggerEventType, archetype);
                 if (local is null || local > localNow)
                     continue;
                 events.Add(new DeviceChangeEvent(kind.Tracker.TriggerEventType, clock.ToUtc(local.Value)));
@@ -78,7 +85,7 @@ public static class DemoDeviceLifecycle
     /// in device status and the calibration schedule agree with the seeded
     /// DeviceEvents.
     /// </summary>
-    public static DateTime? ChangeTimeOn(DateTime localDay, string eventType)
+    public static DateTime? ChangeTimeOn(DateTime localDay, string eventType, DemoArchetype? archetype = null)
     {
         var kind = Kinds.FirstOrDefault(k => k.Tracker.TriggerEventType == eventType);
         if (kind is null)
@@ -89,7 +96,7 @@ public static class DemoDeviceLifecycle
         if ((dayNumber % kind.CycleDays + kind.CycleDays) % kind.CycleDays != kind.Phase)
             return null;
 
-        var jitter = DayScenarios.RngFor(day, $"device:{eventType}");
+        var jitter = DayScenarios.RngFor(day, $"device:{eventType}", archetype);
         return day.AddHours(kind.HourOfDay).AddMinutes(jitter.Next(-90, 90));
     }
 
@@ -97,7 +104,7 @@ public static class DemoDeviceLifecycle
     /// Time since the most recent change of the given kind at or before
     /// <paramref name="localTime"/>.
     /// </summary>
-    public static TimeSpan TimeSinceLastChange(DateTime localTime, string eventType)
+    public static TimeSpan TimeSinceLastChange(DateTime localTime, string eventType, DemoArchetype? archetype = null)
     {
         var kind = Kinds.FirstOrDefault(k => k.Tracker.TriggerEventType == eventType);
         if (kind is null)
@@ -105,7 +112,7 @@ public static class DemoDeviceLifecycle
 
         for (var back = 0; back <= kind.CycleDays * 2; back++)
         {
-            var changeAt = ChangeTimeOn(localTime.Date.AddDays(-back), eventType);
+            var changeAt = ChangeTimeOn(localTime.Date.AddDays(-back), eventType, archetype);
             if (changeAt is not null && changeAt <= localTime)
                 return localTime - changeAt.Value;
         }

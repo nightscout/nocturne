@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Demo;
 using Nocturne.Services.Demo.Configuration;
 
 namespace Nocturne.Services.Demo.Services;
@@ -19,7 +20,8 @@ public enum DemoServiceState
 /// Background service that provisions the demo tenant, regenerates its historical data when
 /// <see cref="ShouldRegenerateOnStartup"/> says so and on the reset schedule, returns the clinic persona's views and
 /// rules to their seeds on the visitor reset schedule, and continuously generates real-time entries at configured
-/// intervals.
+/// intervals. The people of the demo clinic are seeded through the API too, beside the realtime stream, and the API's
+/// live feed carries them on.
 /// All data persistence is performed via HTTP calls to the Nocturne API.
 /// </summary>
 public class DemoDataHostedService : BackgroundService
@@ -33,6 +35,7 @@ public class DemoDataHostedService : BackgroundService
 
     private volatile DemoServiceState _state = DemoServiceState.Stopped;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
+    private Task _peopleSeeding = Task.CompletedTask;
     private TaskCompletionSource _resumeSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private const int StaleAfterMissedReadings = 3;
@@ -101,6 +104,7 @@ public class DemoDataHostedService : BackgroundService
                 await RecordNextVisitorResetAsync(firstVisitorReset, stoppingToken);
 
             await GenerateAndPostEntryAsync(stoppingToken);
+            StartSeedingPeople(stoppingToken);
 
             var generationInterval = TimeSpan.FromMinutes(_config.IntervalMinutes);
             var nextGenerationUtc = UtcNow.Add(generationInterval);
@@ -144,10 +148,12 @@ public class DemoDataHostedService : BackgroundService
                 {
                     now = UtcNow;
 
+                    var reset = false;
                     if (nextResetUtc is { } resetDue && now >= resetDue)
                     {
                         nextResetUtc = NextResetDue(_config, await RegenerateAndRecordResetAsync(stoppingToken));
                         now = UtcNow;
+                        reset = true;
                     }
 
                     if (nextVisitorResetUtc is { } visitorResetDue && now >= visitorResetDue)
@@ -161,6 +167,9 @@ public class DemoDataHostedService : BackgroundService
                         await GenerateAndPostEntryAsync(stoppingToken);
                         nextGenerationUtc = now.Add(generationInterval);
                     }
+
+                    if (reset)
+                        StartSeedingPeople(stoppingToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -175,6 +184,14 @@ public class DemoDataHostedService : BackgroundService
         }
         finally
         {
+            try
+            {
+                await _peopleSeeding;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
             _healthCheck.IsHealthy = false;
             ((DemoDataGenerator)_generator).IsRunning = false;
             _state = DemoServiceState.Stopped;
@@ -362,6 +379,36 @@ public class DemoDataHostedService : BackgroundService
             "Completed demo data regeneration in {Duration}",
             UtcNow - startTime);
         return succeeded;
+    }
+
+    /// <summary>
+    /// Seeds the people beside the realtime stream rather than in it, so the host's chart takes no gap for as long as
+    /// the seeds run. A run still going is left to finish.
+    /// </summary>
+    private void StartSeedingPeople(CancellationToken cancellationToken)
+    {
+        if (_peopleSeeding.IsCompleted)
+            _peopleSeeding = Task.Run(() => SeedPeopleAsync(cancellationToken), CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Seeds each person of the demo clinic who is not yet seeded; the API keeps the live feed running for those it
+    /// seeds. One failing leaves that person empty until the next start or reset, and the rest are still seeded.
+    /// </summary>
+    private async Task SeedPeopleAsync(CancellationToken cancellationToken)
+    {
+        foreach (var person in DemoClinic.People)
+        {
+            try
+            {
+                await _apiClient.SeedPersonAsync(person.Key, DemoClinic.PersonBackfillDays, cancellationToken);
+            }
+            catch (Exception ex) when (
+                ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "Failed to seed demo clinic person {Person}", person.Key);
+            }
+        }
     }
 
     /// <summary>

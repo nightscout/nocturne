@@ -324,6 +324,20 @@ public sealed class DemoApiClient
         _logger.LogInformation("Seeded full demo sample set via API");
     }
 
+    /// <summary>
+    /// Seeds one person of the demo clinic from their archetype, through the same admin endpoint. The API
+    /// leaves a person who is already seeded as they are.
+    /// </summary>
+    /// <param name="person">The <see cref="Nocturne.Core.Models.Demo.DemoClinicPerson.Key"/> of the person.</param>
+    public async Task SeedPersonAsync(string person, int days, CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient("DemoAdmin");
+        var response = await client.PostAsJsonAsync(
+            "api/v4/admin/demo/seed-extras", new { days, includeGlucose = true, person }, SerializerOptions, ct);
+        response.EnsureSuccessStatusCode();
+        _logger.LogInformation("Seeded demo clinic person {Person} via API", person);
+    }
+
     private static string? Serialize<T>(T? value) =>
         value is null ? null : JsonSerializer.Serialize(value, SerializerOptions);
 }

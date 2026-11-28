@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using Nocturne.Core.Models.Demo;
 using Nocturne.Services.Demo.Configuration;
 using Nocturne.Services.Demo.Services;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -167,6 +168,51 @@ public class DemoDataHostedServiceStartupTests
     }
 
     [Fact]
+    public async Task A_start_with_fresh_data_still_seeds_each_person_of_the_clinic_for_the_days_a_person_holds()
+    {
+        var api = new FakeDemoApi { LastResetAt = Now.AddDays(-1) };
+        api.Readings(Now.AddDays(-91), Now.AddMinutes(-2));
+
+        await RunStartupAsync(Config(), api);
+
+        api.PersonSeeds.Should().Equal(DemoClinic.People.Select(p => (p.Key, DemoClinic.PersonBackfillDays)));
+    }
+
+    [Fact]
+    public async Task A_regeneration_seeds_the_host_and_then_each_person_after_the_realtime_stream_has_resumed()
+    {
+        var api = new FakeDemoApi();
+
+        await RunStartupAsync(Config(), api);
+
+        api.Calls.Should().ContainInOrder(
+            [FakeDemoApi.Reset, FakeDemoApi.Seed, FakeDemoApi.Tick, .. DemoClinic.People.Select(p => FakeDemoApi.SeedOf(p.Key))]);
+    }
+
+    [Fact]
+    public async Task A_start_that_keeps_the_data_seeds_the_people_only_after_the_first_tick()
+    {
+        var api = new FakeDemoApi { LastResetAt = Now.AddDays(-1) };
+        api.Readings(Now.AddDays(-91), Now.AddMinutes(-2));
+
+        await RunStartupAsync(Config(), api);
+
+        api.Calls.IndexOf(FakeDemoApi.Tick).Should().BeLessThan(api.Calls.IndexOf(FakeDemoApi.SeedOf(DemoClinic.People[0].Key)));
+    }
+
+    [Fact]
+    public async Task A_person_who_cannot_be_seeded_leaves_the_rest_seeded_and_the_ticks_running()
+    {
+        var api = new FakeDemoApi { LastResetAt = Now.AddDays(-1), PersonSeedFails = DemoClinic.People[1].Key };
+        api.Readings(Now.AddDays(-91), Now.AddMinutes(-2));
+
+        await RunStartupAsync(Config(), api);
+
+        api.PersonSeeds.Select(s => s.Person).Should().Equal(DemoClinic.People.Select(p => p.Key));
+        api.Calls.Should().Contain(FakeDemoApi.Tick);
+    }
+
+    [Fact]
     public async Task A_start_reads_the_reset_schedule_from_the_tenant()
     {
         var api = new FakeDemoApi { LastResetAt = Now.AddMinutes(-40) };
@@ -308,6 +354,14 @@ public class DemoDataHostedServiceStartupTests
                 until ?? (() => api.FirstTick.Task.IsCompleted),
                 step: TimeSpan.FromMilliseconds(5),
                 eachStep: () => clock.Advance(step ?? TimeSpan.FromSeconds(1)));
+            if (until is null)
+            {
+                await Eventually.UntilAsync(
+                    "the service to ask for every person of the clinic",
+                    () => api.PersonSeeds.Count >= DemoClinic.People.Count,
+                    step: TimeSpan.FromMilliseconds(5),
+                    eachStep: () => clock.Advance(TimeSpan.FromSeconds(1)));
+            }
         }
         finally
         {
@@ -316,6 +370,8 @@ public class DemoDataHostedServiceStartupTests
     }
 
     private sealed record StatusPatch(DateTime? NextResetAt, DateTime? LastResetAt, DateTime? NextVisitorResetAt);
+
+    private sealed record SeedRequest(int Days, string? Person);
 
     private sealed class FakeHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
     {
@@ -331,6 +387,9 @@ public class DemoDataHostedServiceStartupTests
     {
         public const string Reset = "POST /api/v4/admin/demo/reset";
         public const string Seed = "POST /api/v4/admin/demo/seed-extras";
+
+        public static string SeedOf(string person) => $"{Seed} {person}";
+
         public const string StatusUpdate = "PATCH /api/v4/admin/demo/status";
         public const string Tick = "POST /api/v4/glucose/sensor/bulk";
         public const string VisitorReset = "POST /api/v4/admin/demo/visitor-reset";
@@ -349,6 +408,8 @@ public class DemoDataHostedServiceStartupTests
         public DateTime? VisitorResetFinishedAt { get; private set; }
         public int FailedReads { get; set; }
         public bool SeedFails { get; set; }
+        public string? PersonSeedFails { get; set; }
+        public List<(string Person, int Days)> PersonSeeds { get; } = [];
         public List<string> Calls { get; } = [];
         public List<StatusPatch> StatusPatches { get; } = [];
 
@@ -358,6 +419,16 @@ public class DemoDataHostedServiceStartupTests
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var call = $"{request.Method} {request.RequestUri!.AbsolutePath}";
+            var person = call == Seed
+                ? (await request.Content!.ReadFromJsonAsync<SeedRequest>(Json, cancellationToken))
+                : null;
+            if (person?.Person is { } key)
+            {
+                call = SeedOf(key);
+                lock (PersonSeeds)
+                    PersonSeeds.Add((key, person.Days));
+            }
+
             lock (Calls)
                 Calls.Add(call);
             var now = Clock.GetUtcNow().UtcDateTime;
@@ -382,6 +453,11 @@ public class DemoDataHostedServiceStartupTests
                     LastResetAt = now;
                     (_oldest, _newest) = (null, null);
                     return Ok(new { tenantId = "demo" });
+
+                case var seeding when seeding.StartsWith(Seed + " ", StringComparison.Ordinal):
+                    return person!.Person == PersonSeedFails
+                        ? new HttpResponseMessage(HttpStatusCode.InternalServerError)
+                        : Ok(new { });
 
                 case Seed when SeedFails:
                     return new HttpResponseMessage(HttpStatusCode.InternalServerError);

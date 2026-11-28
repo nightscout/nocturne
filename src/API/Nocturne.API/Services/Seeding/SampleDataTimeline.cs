@@ -18,12 +18,14 @@ namespace Nocturne.API.Services.Seeding;
 /// <param name="WrittenThrough">Every generated record timestamped before this instant is stored.</param>
 /// <param name="ZoneId">The IANA zone the seed laid its days out in.</param>
 /// <param name="DataSource">The data source the seed stamped on its records.</param>
+/// <param name="ArchetypeKey">The key of the demo person the seed shaped its data for; null for any other seed.</param>
 internal sealed record SampleDataTimeline(
     DateTime FirstDay,
     DateTime SeedEnd,
     DateTime WrittenThrough,
     string ZoneId,
-    string DataSource)
+    string DataSource,
+    string? ArchetypeKey = null)
 {
     public const string SettingsKey = SettingsKeys.SampleDataPrefix + "timeline";
 

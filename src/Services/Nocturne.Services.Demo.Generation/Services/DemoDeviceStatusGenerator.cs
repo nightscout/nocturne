@@ -34,7 +34,8 @@ public static class DemoDeviceStatusGenerator
     /// The loop cycle of one simulation step; null when the loop could not cycle (a site change, a
     /// sensor warm-up, the phone out of range).
     /// </summary>
-    public static DeviceStatus? ForStep(DemoTimeStep step, DemoClock clock, double targetGlucose, double baseBasalRate)
+    public static DeviceStatus? ForStep(
+        DemoTimeStep step, DemoClock clock, double targetGlucose, double baseBasalRate, DemoArchetype? archetype = null)
     {
         if (step.Loop is not (DemoLoopState.Closed or DemoLoopState.Manual))
             return null;
@@ -54,7 +55,8 @@ public static class DemoDeviceStatusGenerator
             step.Scenario,
             step.RequestedBasalRate,
             step.MaxSafeBasalRate,
-            enacted: step.Loop == DemoLoopState.Closed);
+            enacted: step.Loop == DemoLoopState.Closed,
+            archetype: archetype);
     }
 
     /// <summary>
@@ -77,7 +79,8 @@ public static class DemoDeviceStatusGenerator
         DayScenario scenario,
         double? requestedBasalRate = null,
         double? maxSafeBasalRate = null,
-        bool enacted = true)
+        bool enacted = true,
+        DemoArchetype? archetype = null)
     {
         var utc = clock.ToUtc(time);
         var localTime = clock.ToLocal(utc);
@@ -161,8 +164,8 @@ public static class DemoDeviceStatusGenerator
             {
                 Manufacturer = "Insulet",
                 Model = "Omnipod DASH",
-                Reservoir = ReservoirAt(localTime),
-                Battery = new PumpBattery { Percent = PumpBatteryAt(localTime) },
+                Reservoir = ReservoirAt(localTime, archetype),
+                Battery = new PumpBattery { Percent = PumpBatteryAt(localTime, archetype) },
                 Clock = isoTime,
                 Status = new PumpStatusDetails
                 {
@@ -183,17 +186,17 @@ public static class DemoDeviceStatusGenerator
     /// Reservoir level as a function of time since the last Insulin Change in
     /// the lifecycle schedule, draining at the assumed daily rate.
     /// </summary>
-    public static double ReservoirAt(DateTime localTime)
+    public static double ReservoirAt(DateTime localTime, DemoArchetype? archetype = null)
     {
-        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, TreatmentTypes.InsulinChange);
+        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, TreatmentTypes.InsulinChange, archetype);
         var used = AssumedDailyInsulinUnits * sinceChange.TotalDays;
         return ScaledRounding.Round(Math.Max(8, ReservoirCapacityUnits - used), 1);
     }
 
     /// <summary>Pump battery percent, resetting on Pump Battery Change days.</summary>
-    public static int PumpBatteryAt(DateTime localTime)
+    public static int PumpBatteryAt(DateTime localTime, DemoArchetype? archetype = null)
     {
-        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, TreatmentTypes.PumpBatteryChange);
+        var sinceChange = DemoDeviceLifecycle.TimeSinceLastChange(localTime, TreatmentTypes.PumpBatteryChange, archetype);
         var drained = PumpBatteryDrainPerDayPercent * sinceChange.TotalDays;
         return (int)Math.Clamp(100 - drained, 4, 100);
     }

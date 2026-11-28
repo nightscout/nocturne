@@ -518,6 +518,67 @@ public class DemoClinicIntegrationTests(ApiIntegrationTestFixture fixture, ITest
     private static Task<JsonElement> PermissionsAsync(HttpClient client) =>
         client.GetFromJsonAsync<JsonElement>("/api/v4/me/permissions");
 
+    [Fact]
+    public async Task After_provision_and_seed_Lena_Tom_and_Rory_are_flagged_and_Katie_is_stale()
+    {
+        await ProvisionAsync();
+        var originalDemoMode = Fixture.DemoModeService.IsEnabled;
+        Fixture.DemoModeService.IsEnabled = true;
+        try
+        {
+            await AssertSeededPeopleAreFlaggedAsync();
+        }
+        finally
+        {
+            Fixture.DemoModeService.IsEnabled = originalDemoMode;
+        }
+    }
+
+    private async Task AssertSeededPeopleAreFlaggedAsync()
+    {
+        using (var admin = AdminClient())
+        {
+            foreach (var person in DemoClinic.People)
+            {
+                var seed = await admin.PostAsJsonAsync(
+                    "/api/v4/admin/demo/seed-extras",
+                    new { days = DemoClinic.PersonBackfillDays, includeGlucose = true, person = person.Key });
+                seed.StatusCode.Should().Be(HttpStatusCode.OK, await seed.Content.ReadAsStringAsync());
+            }
+        }
+
+        using var persona = await PersonaClientAsync();
+        JsonElement overview = default;
+        await Eventually.UntilAsync(
+            "the persona's flag rules to be judged for every person",
+            async () =>
+            {
+                var response = await persona.PostAsJsonAsync("/api/v4/me/tenants/overview", new { rules = "All" });
+                overview = await response.Content.ReadFromJsonAsync<JsonElement>();
+                return overview.GetProperty("peopleWithRulesPending").GetInt32() == 0;
+            },
+            patience: TimeSpan.FromMinutes(2),
+            step: TimeSpan.FromSeconds(1),
+            lastSeen: () => overview.ToString());
+
+        JsonElement ItemOf(string key) => overview.GetProperty("tenants").EnumerateArray()
+            .Single(t => t.GetProperty("slug").GetString() == DemoClinic.SlugOf(HostSlug, DemoClinic.People.Single(p => p.Key == key)));
+        IEnumerable<string?> ReasonsOf(string key) => ItemOf(key).GetProperty("attention").EnumerateArray()
+            .Select(a => a.GetProperty("kind").GetString());
+
+        foreach (var flagged in new[] { "lena", "tom", "rory" })
+        {
+            ItemOf(flagged).GetProperty("latest").ValueKind.Should().NotBe(JsonValueKind.Null, $"{flagged} has readings: {ItemOf(flagged)}");
+            ReasonsOf(flagged).Should().Contain("FlagRule", $"{flagged} meets a flag rule").And.NotContain("NoRecentReading");
+        }
+
+        ItemOf("katie").GetProperty("latest").ValueKind.Should().NotBe(JsonValueKind.Null, "Katie has readings, but old ones");
+        ItemOf("katie").GetProperty("status").GetString().Should().Be("Stale");
+        var quiet = ItemOf("katie").GetProperty("attention").EnumerateArray()
+            .Single(a => a.GetProperty("kind").GetString() == "NoRecentReading");
+        quiet.GetProperty("minutesSinceReading").GetInt32().Should().BeGreaterThan(120);
+    }
+
     private static Task<long> PersonaCountAsync(NpgsqlConnection conn) =>
         conn.ScalarAsync<long>("SELECT count(*) FROM subjects WHERE is_demo_subject AND name = @name", ("name", DemoClinic.PersonaName));
 

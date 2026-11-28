@@ -20,10 +20,10 @@ public static class DemoHealthDataGenerator
     /// date and shared with the state-span seeding, so Exercise spans cover
     /// exactly the step spike and heart-rate ramp.
     /// </summary>
-    public static (DateTime Start, DateTime End) WorkoutWindowFor(DateTime localDay)
+    public static (DateTime Start, DateTime End) WorkoutWindowFor(DateTime localDay, DemoArchetype? archetype = null)
     {
-        var rng = DayScenarios.RngFor(localDay, "workout-window");
-        var startHour = 16 + DayScenarios.Roll(localDay, "workout", 4); // 16-19
+        var rng = DayScenarios.RngFor(localDay, "workout-window", archetype);
+        var startHour = 16 + DayScenarios.Roll(localDay, "workout", 4, archetype); // 16-19
         var start = localDay.AddHours(startHour).AddMinutes(rng.Next(0, 45));
         return (start, start.AddMinutes(75));
     }
@@ -36,13 +36,13 @@ public static class DemoHealthDataGenerator
     /// updates in place via the (DataSource, SyncIdentifier) dedup key.
     /// </summary>
     public static (List<HeartRate> HeartRates, List<StepCount> StepCounts) GenerateDailyActivity(
-        DateTime localDay, string dataSource, DemoClock clock)
+        DateTime localDay, string dataSource, DemoClock clock, DemoArchetype? archetype = null)
     {
-        var scenario = DayScenarios.For(localDay);
-        var rng = DayScenarios.RngFor(localDay, "activity");
+        var scenario = DayScenarios.For(localDay, archetype);
+        var rng = DayScenarios.RngFor(localDay, "activity", archetype);
 
         // Exercise window: a 75-minute workout starting late afternoon.
-        var (workoutStart, workoutEnd) = WorkoutWindowFor(localDay);
+        var (workoutStart, workoutEnd) = WorkoutWindowFor(localDay, archetype);
         var hasWorkout = scenario == DayScenario.Exercise;
 
         var heartRates = new List<HeartRate>();
@@ -161,10 +161,11 @@ public static class DemoHealthDataGenerator
     /// Exercise deepens it. OriginalId is stable per night so re-seeding
     /// upserts via the (Source, OriginalId) dedup key.
     /// </summary>
-    public static SleepSession GenerateSleepSession(DateTime localMorning, string sourceApp, DemoClock clock)
+    public static SleepSession GenerateSleepSession(
+        DateTime localMorning, string sourceApp, DemoClock clock, DemoArchetype? archetype = null)
     {
-        var scenario = DayScenarios.For(localMorning);
-        var rng = DayScenarios.RngFor(localMorning, "sleep");
+        var scenario = DayScenarios.For(localMorning, archetype);
+        var rng = DayScenarios.RngFor(localMorning, "sleep", archetype);
         var poorNight = scenario == DayScenario.PoorSleep;
         var deepMultiplier = scenario == DayScenario.Exercise ? 1.15 : 1.0;
 

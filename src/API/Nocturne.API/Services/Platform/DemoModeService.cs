@@ -64,20 +64,11 @@ public class DemoModeService : IDemoModeService
     {
         _logger = logger;
 
-        // Read from DemoService section (set by Aspire environment variables)
-        var demoServiceConfig =
-            configuration
-                .GetSection(DemoServiceConfiguration.SectionName)
-                .Get<DemoServiceConfiguration>() ?? new DemoServiceConfiguration();
-
-        // Also check Parameters:DemoMode:Enabled (set in appsettings.json for local dev)
-        var parametersDemoModeEnabled = configuration.GetValue<bool>(
-            "Parameters:DemoMode:Enabled",
-            false
-        );
+        var demoServiceConfig = ServiceConfigurationOf(configuration);
+        var parametersDemoModeEnabled = ParametersEnabledIn(configuration);
 
         // Demo mode is enabled if either source says so
-        _isEnabled = demoServiceConfig.Enabled || parametersDemoModeEnabled;
+        _isEnabled = IsEnabledIn(configuration);
         _serviceUrl = demoServiceConfig.Url;
         _isConfigured = _isEnabled && !string.IsNullOrWhiteSpace(_serviceUrl);
         _allowsTeamWrites = configuration.GetValue("DemoMode:AllowTeamWrites", false);
@@ -90,6 +81,20 @@ public class DemoModeService : IDemoModeService
             _isEnabled
         );
     }
+
+    /// <summary>Whether either configuration source enables demo mode, for a caller that runs before this service exists.</summary>
+    public static bool IsEnabledIn(IConfiguration configuration) =>
+        ServiceConfigurationOf(configuration).Enabled || ParametersEnabledIn(configuration);
+
+    // Read from the DemoService section (set by Aspire environment variables).
+    private static DemoServiceConfiguration ServiceConfigurationOf(IConfiguration configuration) =>
+        configuration
+            .GetSection(DemoServiceConfiguration.SectionName)
+            .Get<DemoServiceConfiguration>() ?? new DemoServiceConfiguration();
+
+    // Parameters:DemoMode:Enabled is set in appsettings.json for local dev.
+    private static bool ParametersEnabledIn(IConfiguration configuration) =>
+        configuration.GetValue<bool>("Parameters:DemoMode:Enabled", false);
 
     /// <inheritdoc />
     public bool IsEnabled => _isEnabled;

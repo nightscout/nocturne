@@ -4,8 +4,8 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Services.Seeding;
 
 /// <summary>
-/// Runs <see cref="SampleDataLiveFeed"/> for every active tenant once a minute, so a reading appears
-/// within a minute of its five-minute step.
+/// Runs <see cref="SampleDataLiveFeed"/> once a minute for every active tenant <paramref name="feedScope"/> admits,
+/// so a reading appears within a minute of its five-minute step.
 /// </summary>
 /// <remarks>
 /// Every failure short of shutdown is logged and retried on the next tick: an exception escaping
@@ -15,6 +15,7 @@ namespace Nocturne.API.Services.Seeding;
 public sealed class SampleDataLiveFeedService(
     IServiceProvider services,
     TimeProvider time,
+    SampleDataFeedScope feedScope,
     ILogger<SampleDataLiveFeedService> logger) : BackgroundService
 {
     private const string AuditEndpoint = "service:sample-data-live-feed";
@@ -46,7 +47,7 @@ public sealed class SampleDataLiveFeedService(
         {
             await using var scope = TenantJobScope.Open(services, tenant: null, AuditEndpoint);
             tenants = (await scope.ServiceProvider.GetRequiredService<ITenantRepository>().ListAsync(activeOnly: true, ct))
-                .Where(t => !t.IsDemo)
+                .Where(feedScope.Admits)
                 .Select(t => new TenantContext(t.Id, t.Slug, t.DisplayName, t.IsActive, t.IsDemo))
                 .ToList();
         }

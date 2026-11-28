@@ -76,6 +76,26 @@ public static class DayScenarios
     }
 
     /// <summary>
+    /// Scenario for a calendar date of <paramref name="archetype"/>, drawn by the weights of its row;
+    /// the host's scenario (<see cref="For(DateTime)"/>) when there is none.
+    /// </summary>
+    public static DayScenario For(DateTime date, DemoArchetype? archetype)
+    {
+        if (archetype is null)
+            return For(date);
+
+        var roll = Roll(date, "scenario", archetype.Scenarios.Sum(w => w.Weight), archetype);
+        foreach (var (scenario, weight) in archetype.Scenarios)
+        {
+            if (roll < weight)
+                return scenario;
+            roll -= weight;
+        }
+
+        return archetype.Scenarios[^1].Scenario;
+    }
+
+    /// <summary>
     /// A <see cref="Random"/> seeded from the date and a stream label, so each
     /// generator gets stable-but-independent noise for the same day.
     /// </summary>
@@ -85,6 +105,20 @@ public static class DayScenarios
     /// <summary>Uniform roll in [0, max) derived from the date and stream label.</summary>
     public static int Roll(DateTime date, string stream, int max) =>
         (int)(Hash(date, stream) % (uint)max);
+
+    /// <summary>
+    /// <see cref="RngFor(DateTime, string)"/> for a day of <paramref name="archetype"/>: the row's seed is folded into
+    /// the stream, so two people get different days from the same date. With no archetype, the host's own stream.
+    /// </summary>
+    public static Random RngFor(DateTime date, string stream, DemoArchetype? archetype) =>
+        RngFor(date, Seeded(stream, archetype));
+
+    /// <summary><see cref="Roll(DateTime, string, int)"/> for a day of <paramref name="archetype"/>; see <see cref="RngFor(DateTime, string, DemoArchetype?)"/>.</summary>
+    public static int Roll(DateTime date, string stream, int max, DemoArchetype? archetype) =>
+        Roll(date, Seeded(stream, archetype), max);
+
+    private static string Seeded(string stream, DemoArchetype? archetype) =>
+        archetype is null ? stream : $"{stream}#{archetype.Seed}";
 
     /// <summary>
     /// FNV-1a over the day number and stream label. string.GetHashCode is

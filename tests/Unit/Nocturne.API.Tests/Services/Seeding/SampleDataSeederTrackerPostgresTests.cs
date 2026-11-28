@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Connectors;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -112,6 +113,7 @@ public class SampleDataSeederTrackerPostgresTests(SampleDataSeederTrackerPostgre
             new TempBasalRepository(
                 contexts, Mock.Of<IDuplicateLinker>(), audit, NullLogger<TempBasalRepository>.Instance),
             new InAppNotificationRepository(contexts),
+            Mock.Of<IDemoDataPurge>(),
             time,
             NullLoggerFactory.Instance,
             NullLogger<SampleDataSeeder>.Instance);
