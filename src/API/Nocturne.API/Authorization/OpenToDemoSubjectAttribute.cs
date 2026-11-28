@@ -8,7 +8,7 @@ public enum DemoSubjectOpening
 
     /// <summary>
     /// A write a staff member makes for themselves: their saved views and their own flag rules. Open to a demo subject
-    /// who is a member of a team, and only while <see cref="Services.Platform.IDemoModeService.AllowsTeamWrites"/> holds.
+    /// who is a member of a team.
     /// </summary>
     StaffWrite,
 }

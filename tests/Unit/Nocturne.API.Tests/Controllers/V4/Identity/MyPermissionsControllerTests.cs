@@ -126,12 +126,11 @@ public class MyPermissionsControllerTests
     }
 
     [Theory]
-    [InlineData(true, false, true, true, true)]
-    [InlineData(true, true, true, true, false)]
-    [InlineData(true, true, false, true, true)]
-    [InlineData(false, false, false, false, false)]
+    [InlineData(true, true, true, false)]
+    [InlineData(true, false, true, true)]
+    [InlineData(false, false, false, false)]
     public void GetMyPermissions_ReportsWhetherTheDemoGateRefusesTheCaller(
-        bool isDemoSubject, bool teamWritesAllowed, bool inATeam, bool refused, bool staffWritesRefused)
+        bool isDemoSubject, bool inATeam, bool refused, bool staffWritesRefused)
     {
         // The demo visitor holds tenant.settings, so its scopes alone would have the web offer
         // connector controls that [DenyDemoSubject] refuses.
@@ -153,8 +152,6 @@ public class MyPermissionsControllerTests
         var factory = new Mock<IDbContextFactory<NocturneDbContext>>();
         factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => db.CreateContext());
-        var demoMode = new Mock<IDemoModeService>();
-        demoMode.Setup(d => d.AllowsTeamWrites).Returns(teamWritesAllowed);
         var teams = new Mock<ITeamRepository>();
         teams.Setup(t => t.GetTeamsOfAsync(subjectId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(inATeam ? [new TeamSummary(Guid.CreateVersion7(), "Clinic", TeamMemberKind.Staff)] : []);
@@ -162,7 +159,6 @@ public class MyPermissionsControllerTests
         httpContext.RequestServices = new ServiceCollection()
             .AddSingleton(factory.Object.AsNocturneFactory())
             .AddSingleton<ISubjectRepository>(new SubjectRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off))
-            .AddSingleton(demoMode.Object)
             .AddSingleton(teams.Object)
             .BuildServiceProvider();
         httpContext.Items["AuthContext"] = new AuthContext

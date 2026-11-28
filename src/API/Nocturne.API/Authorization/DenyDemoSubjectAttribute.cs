@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Nocturne.API.Extensions;
-using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 
@@ -70,9 +69,6 @@ public sealed class DenyDemoSubjectAttribute : Attribute, IAsyncAuthorizationFil
     /// </summary>
     internal static async Task<bool> AdmitsStaffWriteAsync(HttpContext httpContext)
     {
-        if (!httpContext.RequestServices.GetRequiredService<IDemoModeService>().AllowsTeamWrites)
-            return false;
-
         if (httpContext.GetAuthContext() is not { EffectiveSubjectId: { } subjectId })
             return false;
 

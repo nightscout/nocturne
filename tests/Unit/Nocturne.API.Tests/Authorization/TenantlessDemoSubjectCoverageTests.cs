@@ -99,8 +99,8 @@ public class TenantlessDemoSubjectCoverageTests
         + "so it reads that clinic, its own views and its own rules, all synthetic";
 
     private const string DemoClinicStaffWrite =
-        "opened as a staff write (DemoSubjectTeamSurfaceTests): refused unless DemoMode:AllowTeamWrites is set and the "
-        + "demo subject is staff of a team, and then it changes only the caller's own views or rules";
+        "opened as a staff write (DemoSubjectTeamSurfaceTests): refused unless the demo subject is staff of a team, and "
+        + "then it changes only the caller's own views or rules";
 
     private const string DevOnly =
         "lives in the .DevOnly namespace, which DevOnlyExcludingControllerFeatureProvider drops "
