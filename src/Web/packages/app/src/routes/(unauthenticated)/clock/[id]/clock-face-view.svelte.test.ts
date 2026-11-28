@@ -10,6 +10,7 @@ vi.mock("#lib/stores/public-clock-store.svelte.js", () => ({
   PublicClockStore: class {
     demoMode = false;
     watchAlerts() {}
+    watchFace() {}
     start() {}
     stop() {}
   },

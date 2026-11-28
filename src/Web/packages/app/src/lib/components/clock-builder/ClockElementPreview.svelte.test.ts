@@ -1,6 +1,11 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect, afterEach } from "vitest";
-import type { ClockSettings } from "#lib/api/index.js";
+import {
+  NotificationUrgency,
+  TrackerCategory,
+  type ClockFaceData,
+  type ClockSettings,
+} from "#lib/api/index.js";
 import { glucoseUnits, timeFormat } from "#lib/stores/appearance-store.svelte.js";
 import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
 import { resolveChartThresholds } from "@nocturne/charts/core";
@@ -39,14 +44,15 @@ const mmol24: ClockSettings = { glucoseUnits: "mmol", timeFormat: "24" };
 function preview(
   type: ClockElementType,
   settings: ClockSettings = mgdl12,
-  source: ClockGlucoseSource = glucose
+  source: ClockGlucoseSource = glucose,
+  data: ClockFaceData | null = null
 ) {
   const { container } = render(ClockElementPreview, {
-    element: { _id: type, type },
+    element: { _id: type, type, show: ["name", "remaining"] },
     settings,
     glucose: source,
     now,
-    trackerDefinitions: [],
+    data,
   });
   return container.textContent?.trim() ?? "";
 }
@@ -91,9 +97,31 @@ describe("ClockElementPreview", () => {
     }
   );
 
-  it("names the elements the runtime renderer has no value for", () => {
+  it("names an element the API read no value for", () => {
     expect(preview("summary")).toBe("Summary");
     expect(preview("trackers")).toBe("Trackers");
+    expect(preview("iob")).toBe(elementInfo("iob")?.name);
+  });
+
+  it("shows the values the API previewed for the layout", () => {
+    const data: ClockFaceData = {
+      cob: 24,
+      summaries: [{ hours: 3, inRangePercent: 71.2, belowPercent: 0, abovePercent: 28.8, readings: 30 }],
+      trackers: [
+        {
+          definitionId: "0196c3a0-0000-7000-8000-000000000001",
+          name: "Pod",
+          category: TrackerCategory.Pod,
+          urgency: NotificationUrgency.Info,
+          hoursLeft: 30,
+        },
+      ],
+    };
+
+    expect(preview("cob", mgdl12, glucose, data)).toBe("24g");
+    const trackers = preview("trackers", mgdl12, glucose, data);
+    expect(trackers).toContain("Pod");
+    expect(trackers).toContain("1d 6h left");
   });
 
   it("shows the no-reading face, not a fabricated one, with no reading", () => {

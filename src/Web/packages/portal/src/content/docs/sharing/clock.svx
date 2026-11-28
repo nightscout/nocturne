@@ -39,6 +39,33 @@ number and trend.
 When you are happy with it, use the **Copy link** button in the editor's toolbar to
 get its address.
 
+## What a clock can show
+
+| Piece | What it shows |
+| --- | --- |
+| Glucose, change, arrow, age | The latest reading, how much it changed, its trend and how old it is. |
+| Summary | The time in range over the last 1, 3, 6, 12 or 24 hours. |
+| Forecast | The glucose forecast 15, 30, 45 or 60 minutes ahead. |
+| IOB, COB | The insulin and carbs on board now. |
+| Basal | The basal rate now. |
+| Tracker, Trackers | One tracker, or all trackers in the categories you select, with the time left. |
+| Chart | A glucose chart over the last hours, with the tracks you select. |
+| Time, Text | The time of day, and a label you write. |
+
+The editor shows your real values while you build the clock. A piece with no value
+to show is empty on the clock. For example, IOB is empty when no insulin or pump
+data gives a value. If a screen cannot get new values three times in a row, the
+pieces other than glucose go empty until it gets new values again.
+
+To add a piece, you must have access to the data it shows. Every clock shows the
+latest glucose reading, so a clock needs access to glucose. IOB needs access to
+treatments, and trackers need access to alerts. The access must be given
+to you directly on this site. Access that you have only through a team does not
+count, because a clock shows the data to each person who has its link.
+
+A clock shows a piece only while you, its owner, have that access. If your access
+is removed, the piece goes empty on every screen that shows the clock.
+
 ## Alarms on a clock
 
 In the clock's display settings, **Show firing alerts** puts a band across the

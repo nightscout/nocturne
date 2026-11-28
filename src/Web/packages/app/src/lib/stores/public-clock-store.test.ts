@@ -2,9 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const getGlucose = vi.fn();
 const getClockAlerts = vi.fn();
+const getClockFaceData = vi.fn();
+const getClockFaceChart = vi.fn();
 vi.mock("#lib/api/browser-clients.js", () => ({
   clockFacesClient: () => ({ getGlucose }),
   clockFaceAlertsClient: () => ({ getClockAlerts }),
+  clockFaceDataClient: () => ({ getClockFaceData, getClockFaceChart }),
 }));
 
 const { PublicClockStore } = await import("./public-clock-store.svelte");
@@ -23,6 +26,8 @@ beforeEach(() => {
   vi.stubGlobal("window", globalThis);
   getGlucose.mockReset();
   getClockAlerts.mockReset();
+  getClockFaceData.mockReset();
+  getClockFaceChart.mockReset();
 });
 
 describe("PublicClockStore", () => {
@@ -77,6 +82,80 @@ describe("PublicClockStore", () => {
 
     expect(getClockAlerts).toHaveBeenCalledTimes(2);
     expect(store.alerts).toEqual([alert]);
+    store.stop();
+    vi.useRealTimers();
+  });
+
+  it("reads no values and no chart for a face with neither", () => {
+    const store = new PublicClockStore("clock-id");
+    store.watchFace({ rows: [{ elements: [{ type: "sg" }, { type: "time" }] }] });
+    store.stop();
+
+    expect(getClockFaceData).not.toHaveBeenCalled();
+    expect(getClockFaceChart).not.toHaveBeenCalled();
+    expect(store.data).toBeNull();
+    expect(store.chart).toBeNull();
+  });
+
+  it("reads the face's values and chart by its id", async () => {
+    getClockFaceData.mockResolvedValue({ iob: 1.5, trackers: [] });
+    getClockFaceChart.mockResolvedValue({
+      chart: { glucoseData: [{ time: MILLS, sgv: 120 }] },
+      predictions: null,
+    });
+    const store = new PublicClockStore("clock-id");
+
+    store.watchFace({ rows: [{ elements: [{ type: "iob" }, { type: "chart" }] }] });
+    await vi.waitFor(() => expect(store.chart).not.toBeNull());
+    store.stop();
+
+    expect(getClockFaceData).toHaveBeenCalledWith("clock-id");
+    expect(getClockFaceChart).toHaveBeenCalledWith("clock-id");
+    expect(store.data).toEqual({ iob: 1.5, trackers: [] });
+    expect(store.chart?.glucoseData.map((p) => p.sgv)).toEqual([120]);
+    expect(store.predictions).toBeNull();
+  });
+
+  it("keeps the last values when a poll fails", async () => {
+    getClockFaceData
+      .mockResolvedValueOnce({ cob: 12, trackers: [] })
+      .mockRejectedValueOnce(new Error("offline"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers();
+    const store = new PublicClockStore("clock-id");
+
+    store.watchFace({ rows: [{ elements: [{ type: "cob" }] }] });
+    await vi.waitFor(() => expect(store.data).toEqual({ cob: 12, trackers: [] }));
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(getClockFaceData).toHaveBeenCalledTimes(2);
+    expect(store.data).toEqual({ cob: 12, trackers: [] });
+    store.stop();
+    vi.useRealTimers();
+  });
+
+  it("drops the values once the polls have failed for three intervals", async () => {
+    getClockFaceData
+      .mockResolvedValueOnce({ iob: 2.3, trackers: [] })
+      .mockRejectedValue(new Error("offline"));
+    getClockFaceChart
+      .mockResolvedValueOnce({ chart: { glucoseData: [{ time: MILLS, sgv: 120 }] }, predictions: null })
+      .mockRejectedValue(new Error("offline"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers();
+    const store = new PublicClockStore("clock-id");
+
+    store.watchFace({ rows: [{ elements: [{ type: "iob" }, { type: "chart" }] }] });
+    await vi.waitFor(() => expect(store.chart).not.toBeNull());
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(store.data).toEqual({ iob: 2.3, trackers: [] });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(store.data).toBeNull();
+    expect(store.chart).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(12 * 60_000);
+    expect(store.chart).toBeNull();
     store.stop();
     vi.useRealTimers();
   });

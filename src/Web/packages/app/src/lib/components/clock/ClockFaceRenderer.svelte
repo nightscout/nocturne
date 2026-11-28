@@ -1,10 +1,4 @@
 <script lang="ts">
-  import {
-    chartLineColor,
-    chartLineColorMode,
-    predictionDisplayMode,
-    predictionEnabled,
-  } from "#lib/stores/appearance-store.svelte.js";
   import { browser } from "$app/env";
   import { getClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
   import {
@@ -15,18 +9,13 @@
     getElementColor,
     getFontClass,
     getFontWeightClass,
-    getTrackerDefinition,
-    isUnwiredElementType,
   } from "#lib/clock-builder/index.js";
   import { faceUnits, renderClockElementValue } from "#lib/components/clock/element-value.js";
   import TrendArrow from "#lib/components/clock/TrendArrow.svelte";
-  import { createChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js";
-  import GlucoseChartShell from "#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
-  import { GlucoseTrack, BasalTrack, IobCobTrack, ThresholdRules, PredictionTrack, DeviceEventMarkers, TrackerMarkers, ChartTooltip } from "@nocturne/charts";
-  import { openDayInReview } from "#lib/components/dashboard/glucose-chart/day-in-review.js";
-  import { TrackerCategoryIcon } from "@nocturne/charts/icons";
-  import type { ClockFaceConfig, TrackerDefinitionDto } from "#lib/api/index.js";
-  import { getDefinitions } from "#lib/api/generated/trackers.generated.remote.js";
+  import ClockChart from "#lib/components/clock/ClockChart.svelte";
+  import ClockTrackers from "#lib/components/clock/ClockTrackers.svelte";
+  import { getClockFaceDataSource, visibleTrackers } from "#lib/components/clock/clock-face-data.svelte.js";
+  import type { ClockFaceConfig } from "#lib/api/index.js";
   import {
     advance,
     angleToVel,
@@ -47,12 +36,6 @@
     class?: string;
     /** Enable bouncing screensaver mode. Only honour from fullscreen views. */
     screensaver?: boolean;
-    /**
-     * Fetch tracker definitions for tracker elements. Disable on the anonymous
-     * public clock view, where the trackers endpoint requires auth (and would
-     * otherwise redirect the viewer to sign in).
-     */
-    loadTrackerDefinitions?: boolean;
   }
 
   let {
@@ -61,12 +44,13 @@
     showCharts = true,
     class: className = "",
     screensaver = false,
-    loadTrackerDefinitions = true,
   }: Props = $props();
 
   // Live glucose source: the realtime store in authenticated previews, or the
   // polling PublicClockStore on an anonymous public clock link.
   const glucose = getClockGlucoseSource();
+  // Everything else the elements show: IOB, COB, basal, forecast, time in range, trackers, charts.
+  const faceData = getClockFaceDataSource();
 
   const currentBG = $derived(glucose.currentBG);
   const direction = $derived(glucose.direction);
@@ -88,12 +72,6 @@
       lastUpdated,
       currentTime.getTime()
     )
-  );
-
-  // Tracker definitions (skipped on the anonymous public clock — see loadTrackerDefinitions)
-  const definitionsQuery = loadTrackerDefinitions ? getDefinitions({}) : null;
-  const trackerDefinitions = $derived<TrackerDefinitionDto[]>(
-    definitionsQuery?.current ?? [],
   );
 
   // Background chart element
@@ -272,61 +250,15 @@
 
   <!-- Background chart -->
   {#if backgroundChart}
-    {#if showCharts}
-      {@const bgChartEngine = createChartDataEngine({
-        focusHours: backgroundChart.hours || 3,
-        enablePredictions: backgroundChart.chartConfig?.showPredictions ?? false,
-        dataWindow: "display",
-      })}
-      <div class="absolute inset-0 z-0">
-        <GlucoseChartShell
-          engine={bgChartEngine}
-          heightClass="h-full"
+    <div class="absolute inset-0 z-0">
+      {#if showCharts}
+        <ClockChart
+          chartConfig={backgroundChart.chartConfig}
+          hours={backgroundChart.hours}
           glucoseUnits={faceUnits(config?.settings)}
-        >
-          {#snippet tracks()}
-            {#if backgroundChart.chartConfig?.showBasal ?? false}
-              <BasalTrack />
-            {/if}
-            <ThresholdRules />
-            <GlucoseTrack
-              showPoints={false}
-              lineColorMode={chartLineColorMode.current}
-              lineColor={chartLineColor.current}
-            />
-            {#if backgroundChart.chartConfig?.showPredictions ?? false}
-              <PredictionTrack displayMode={predictionDisplayMode.current} enabled={predictionEnabled.current} />
-            {/if}
-            {#if (backgroundChart.chartConfig?.showBolus ?? true) || (backgroundChart.chartConfig?.showCarbs ?? true) || (backgroundChart.chartConfig?.showIob ?? false) || (backgroundChart.chartConfig?.showCob ?? false)}
-              <IobCobTrack />
-            {/if}
-            {#if backgroundChart.chartConfig?.showDeviceEvents ?? false}
-              <DeviceEventMarkers />
-            {/if}
-            {#if backgroundChart.chartConfig?.showTrackers ?? false}
-              <TrackerMarkers />
-            {/if}
-          {/snippet}
-          {#snippet overlays()}
-            <ChartTooltip onTimeClick={openDayInReview} />
-          {/snippet}
-        </GlucoseChartShell>
-      </div>
-    {:else}
-      <!-- Background chart placeholder -->
-      <div class="absolute inset-0 z-0 flex items-center justify-center">
-        <svg class="h-1/2 w-4/5 opacity-30" viewBox="0 0 100 40" preserveAspectRatio="none">
-          <polyline
-            fill="none"
-            stroke="var(--glucose-in-range)"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            points="0,25 10,23 20,20 30,22 40,18 50,15 60,17 70,14 80,16 90,12 100,15"
-          />
-        </svg>
-      </div>
-    {/if}
+        />
+      {/if}
+    </div>
   {/if}
 
   <!-- Rows -->
@@ -338,69 +270,20 @@
     {#each config?.rows ?? [] as row, rowIndex (rowIndex)}
       <div class="flex items-center" style="gap: {2 * scale}px;">
         {#each row.elements ?? [] as element, elementIndex (elementIndex)}
-          {#if !(element.type === "chart" && element.chartConfig?.asBackground) && !isUnwiredElementType(element.type)}
+          {#if !(element.type === "chart" && element.chartConfig?.asBackground)}
             {#if element.type === "chart"}
-              {#if showCharts}
-                {@const inlineEngine = createChartDataEngine({
-                  focusHours: element.hours || 3,
-                  enablePredictions: element.chartConfig?.showPredictions ?? false,
-                  dataWindow: "display",
-                })}
-                <div
-                  class="overflow-hidden rounded"
-                  style="width: {(element.width || 400) * scale}px; height: {(element.height || 200) * scale}px;"
-                >
-                  <GlucoseChartShell
-                    engine={inlineEngine}
-                    heightClass="h-full"
+              <div
+                class="overflow-hidden rounded {showCharts ? '' : 'border border-current/10'}"
+                style="width: {(element.width || 400) * scale}px; height: {(element.height || 200) * scale}px;"
+              >
+                {#if showCharts}
+                  <ClockChart
+                    chartConfig={element.chartConfig}
+                    hours={element.hours}
                     glucoseUnits={faceUnits(config?.settings)}
-                  >
-                    {#snippet tracks()}
-                      {#if element.chartConfig?.showBasal ?? false}
-                        <BasalTrack />
-                      {/if}
-                      <ThresholdRules />
-                      <GlucoseTrack
-                        showPoints={false}
-                        lineColorMode={chartLineColorMode.current}
-                        lineColor={chartLineColor.current}
-                      />
-                      {#if element.chartConfig?.showPredictions ?? false}
-                        <PredictionTrack displayMode={predictionDisplayMode.current} enabled={predictionEnabled.current} />
-                      {/if}
-                      {#if (element.chartConfig?.showBolus ?? true) || (element.chartConfig?.showCarbs ?? true) || (element.chartConfig?.showIob ?? false) || (element.chartConfig?.showCob ?? false)}
-                        <IobCobTrack />
-                      {/if}
-                      {#if element.chartConfig?.showDeviceEvents ?? false}
-                        <DeviceEventMarkers />
-                      {/if}
-                      {#if element.chartConfig?.showTrackers ?? false}
-                        <TrackerMarkers />
-                      {/if}
-                    {/snippet}
-                    {#snippet overlays()}
-                      <ChartTooltip onTimeClick={openDayInReview} />
-                    {/snippet}
-                  </GlucoseChartShell>
-                </div>
-              {:else}
-                <!-- Inline chart placeholder -->
-                <div
-                  class="flex items-center justify-center overflow-hidden rounded border border-white/10 bg-white/5"
-                  style="width: {(element.width || 400) * scale}px; height: {(element.height || 200) * scale}px;"
-                >
-                  <svg class="h-3/4 w-4/5 opacity-40" viewBox="0 0 100 40" preserveAspectRatio="none">
-                    <polyline
-                      fill="none"
-                      stroke="var(--glucose-in-range)"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      points="0,25 10,23 20,20 30,22 40,18 50,15 60,17 70,14 80,16 90,12 100,15"
-                    />
-                  </svg>
-                </div>
-              {/if}
+                  />
+                {/if}
+              </div>
             {:else if element.type === "arrow"}
               {@const size = elementSize(element) * scale}
               {@const customCss = buildCustomCssString(element)}
@@ -410,32 +293,21 @@
               >
                 <TrendArrow {direction} {size} />
               </div>
-            {:else if element.type === "tracker"}
-              {@const def = getTrackerDefinition(element.definitionId, trackerDefinitions)}
-              {@const size = elementSize(element) * scale}
-              {@const showOptions = element.show ?? ["name"]}
+            {:else if element.type === "tracker" || element.type === "trackers"}
               {@const customCss = buildCustomCssString(element)}
-              <div
-                class="flex items-center gap-1 {getFontClass(element.style?.font)} {getFontWeightClass(element.style?.fontWeight)}"
-                style="color: {getElementColor(element, currentBG, glucose.thresholds)}; opacity: {element.style?.opacity ?? 1.0}; font-size: {size}px;{customCss ? ` ${customCss}` : ''}"
-              >
-                {#if showOptions.includes("icon") && def?.category}
-                  <TrackerCategoryIcon
-                    category={def.category}
-                    class="shrink-0"
-                    style="width: {size * 1.2}px; height: {size * 1.2}px;"
-                  />
-                {/if}
-                {#if showOptions.includes("name")}
-                  <span class="leading-none">{def?.name ?? "Tracker"}</span>
-                {/if}
-              </div>
+              <ClockTrackers
+                trackers={visibleTrackers(element, faceData.data)}
+                show={element.show}
+                size={elementSize(element) * scale}
+                class="{getFontClass(element.style?.font)} {getFontWeightClass(element.style?.fontWeight)}"
+                style="color: {getElementColor(element, currentBG, glucose.thresholds)}; opacity: {element.style?.opacity ?? 1.0};{customCss ? ` ${customCss}` : ''}"
+              />
             {:else if element.type !== "chart"}
               <span
                 class="leading-none tabular-nums {getFontClass(element.style?.font)} {getFontWeightClass(element.style?.fontWeight)} {isStale && element.type === 'sg' ? 'line-through opacity-60' : ''}"
                 style={buildStyleString(element, currentBG, scale, glucose.thresholds)}
               >
-                {renderClockElementValue(element, config.settings, glucose, currentTime)}
+                {renderClockElementValue(element, config.settings, glucose, currentTime, faceData.data)}
               </span>
             {/if}
           {/if}

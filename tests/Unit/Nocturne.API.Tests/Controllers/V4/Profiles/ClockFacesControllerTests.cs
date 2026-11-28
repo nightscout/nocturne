@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Authorization;
@@ -8,11 +9,13 @@ using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Extensions;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Profiles;
@@ -23,16 +26,35 @@ public class ClockFacesControllerTests
     private readonly Mock<IClockFaceService> _clockFaceServiceMock = new();
     private readonly Mock<ISensorGlucoseRepository> _sensorGlucoseRepositoryMock = new();
     private readonly Mock<ILogger<ClockFacesController>> _loggerMock = new();
+    private readonly Mock<ITenantMemberService> _members = new();
+    private readonly Guid _owner = Guid.NewGuid();
+    private readonly Guid _tenant = Guid.NewGuid();
+
+    public ClockFacesControllerTests() => OwnerHolds(Scope.GlucoseRead);
+
+    private void OwnerHolds(params string[] permissions)
+    {
+        var access = new TenantMemberAccess(new HashSet<string>(permissions), false, null);
+        _members.Setup(m => m.GetMembershipFactsAsync(_owner, _tenant, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantMembershipFacts(Guid.NewGuid(), access, access, null));
+    }
 
     private ClockFacesController CreateController(AuthContext? auth = null)
     {
         var controller = new ClockFacesController(
             _clockFaceServiceMock.Object,
             _sensorGlucoseRepositoryMock.Object,
+            _members.Object,
+            SettableTenantAccessor.Resolved(_tenant),
             _loggerMock.Object);
 
-        var httpContext = new DefaultHttpContext();
-        httpContext.SetAuthContext(auth ?? new AuthContext { IsAuthenticated = true, SubjectId = Guid.NewGuid() });
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = new ServiceCollection()
+                .AddSingleton(Mock.Of<ICategoryReadContext>()).BuildServiceProvider(),
+        };
+        httpContext.SetAuthContext(auth ?? new AuthContext { IsAuthenticated = true, SubjectId = _owner });
+        httpContext.SetGrantedScopes(new HashSet<string> { Scope.SharingManage, Scope.GlucoseRead });
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = httpContext
@@ -109,12 +131,33 @@ public class ClockFacesControllerTests
     {
         var id = Guid.NewGuid();
         _clockFaceServiceMock
+            .Setup(s => s.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClockFace { Id = id, UserId = _owner.ToString() });
+        _clockFaceServiceMock
             .Setup(s => s.UpdateAsync(id, It.IsAny<string>(), It.IsAny<UpdateClockFaceRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ClockFace { Id = id });
 
         var result = await CreateController().Update(id, new UpdateClockFaceRequest { Name = "Kitchen" });
 
         result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task Update_OfAnotherMembersFace_IsNotFound_BeforeItsPartsAreJudged()
+    {
+        var id = Guid.NewGuid();
+        _clockFaceServiceMock
+            .Setup(s => s.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClockFace { Id = id, UserId = Guid.NewGuid().ToString(), Config = new ClockFaceConfig() });
+
+        // The caller lacks treatments.read: judging the parts first would answer 403 and tell them
+        // the face has no IOB yet.
+        var result = await CreateController().Update(id, new UpdateClockFaceRequest
+        {
+            Config = new ClockFaceConfig { Rows = [new ClockRow { Elements = [new ClockElement { Type = "iob" }] }] },
+        });
+
+        result.Result.Should().BeOfType<NotFoundResult>();
     }
 
     [Fact]
@@ -275,7 +318,7 @@ public class ClockFacesControllerTests
         var id = Guid.NewGuid();
         _clockFaceServiceMock
             .Setup(s => s.GetByIdAsync(id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ClockFace { Id = id, Config = new ClockFaceConfig() });
+            .ReturnsAsync(new ClockFace { Id = id, UserId = _owner.ToString(), Config = new ClockFaceConfig() });
 
         var newest = new SensorGlucose
         {
@@ -321,7 +364,7 @@ public class ClockFacesControllerTests
         var id = Guid.NewGuid();
         _clockFaceServiceMock
             .Setup(s => s.GetByIdAsync(id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ClockFace { Id = id, Config = new ClockFaceConfig() });
+            .ReturnsAsync(new ClockFace { Id = id, UserId = _owner.ToString(), Config = new ClockFaceConfig() });
         _sensorGlucoseRepositoryMock
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
@@ -337,5 +380,47 @@ public class ClockFacesControllerTests
                 2, 0, true,
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    public static TheoryData<string, string[]> OwnersWhoMayNotGiveGlucose => new()
+    {
+        { "an owner whose glucose access is gone", [Scope.TreatmentsRead] },
+        { "an owner who left", [] },
+    };
+
+    [Theory]
+    [MemberData(nameof(OwnersWhoMayNotGiveGlucose))]
+    public async Task GetGlucose_ReadsNothing_WhenTheOwnerMayNotGiveGlucose(string _, string[] ownerPermissions)
+    {
+        var id = Guid.NewGuid();
+        var owner = ownerPermissions.Length == 0 ? Guid.NewGuid() : _owner;
+        OwnerHolds(ownerPermissions);
+        _clockFaceServiceMock
+            .Setup(s => s.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClockFace { Id = id, UserId = owner.ToString(), Config = new ClockFaceConfig() });
+
+        var result = await CreateController().GetGlucose(id);
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeAssignableTo<ClockGlucoseDto[]>().Which.Should().BeEmpty();
+        _sensorGlucoseRepositoryMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task GetGlucose_ReadsNothing_WhenTheOwnerReadsGlucoseOnlyThroughATeam()
+    {
+        var id = Guid.NewGuid();
+        var sum = new TenantMemberAccess(new HashSet<string> { Scope.GlucoseRead }, false, null);
+        _members.Setup(m => m.GetMembershipFactsAsync(_owner, _tenant, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantMembershipFacts(Guid.NewGuid(), sum, null, null));
+        _clockFaceServiceMock
+            .Setup(s => s.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ClockFace { Id = id, UserId = _owner.ToString(), Config = new ClockFaceConfig() });
+
+        var result = await CreateController().GetGlucose(id);
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeAssignableTo<ClockGlucoseDto[]>().Which.Should().BeEmpty();
+        _sensorGlucoseRepositoryMock.VerifyNoOtherCalls();
     }
 }

@@ -5,7 +5,9 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { getById as getClockFaceById } from "#lib/api/generated/clockFaces.generated.remote.js";
+  import { getClockFaceData } from "#lib/api/generated/clockFaceDatas.generated.remote.js";
   import ClockFaceRenderer from "#lib/components/clock/ClockFaceRenderer.svelte";
+  import { faceReadsData, setClockFaceDataSource } from "#lib/components/clock/clock-face-data.svelte.js";
 
   interface Props {
     /** Absent on a face the list returned without one, which has nothing to fetch. */
@@ -16,6 +18,18 @@
 
   // One query per card, owned by the component that renders it; see RuleBuilderLeafEditor.
   const preview = untrack(() => (faceId ? getClockFaceById(faceId) : null));
+
+  // The face's other values, read once for the thumbnail; its charts draw as outlines only.
+  const values = $derived(
+    faceId && faceReadsData(preview?.current?.config) ? getClockFaceData(faceId) : null
+  );
+  setClockFaceDataSource({
+    get data() {
+      return values?.current ?? null;
+    },
+    chart: null,
+    predictions: null,
+  });
 </script>
 
 {#if preview?.current?.config}

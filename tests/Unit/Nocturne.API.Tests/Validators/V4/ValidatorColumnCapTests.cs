@@ -108,6 +108,7 @@ public class ValidatorColumnCapTests
         ["AlertReplayController.Replay"] = ComputedResult,
         ["AlertReplayController.ReplayDryRun"] = ComputedResult,
         ["AlertRulesController.TestFireDryRun"] = ComputedResult,
+        ["ClockFaceDataController.PreviewClockFaceData"] = ComputedResult,
         ["CompatibilityController.TestApiComparison"] = ComputedResult,
         ["MigrationController.TestConnection"] = ComputedResult,
         ["OidcProviderAdminController.TestUnsaved"] = ComputedResult,

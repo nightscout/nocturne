@@ -34,10 +34,11 @@ export function createDefaultElement(type: ClockElementType): ClockElement {
   if (info.hasHoursOption) element.hours = 3;
   if (info.hasMinutesAheadOption) element.minutesAhead = 30;
   if (type === "tracker") {
-    element.show = ["name"];
+    element.show = ["name", "remaining"];
     element.visibilityThreshold = "always";
   }
   if (type === "trackers") {
+    element.show = ["icon", "name", "remaining"];
     element.visibilityThreshold = "always";
     element.categories = [];
   }

@@ -89,6 +89,7 @@ public class GrantCeilingSumReaderGuardTests
         ["src/API/Nocturne.API/Controllers/V4/Monitoring/AlertRulesController.cs"] = (Reads.LivesWithSum, "stamps the caller's own alert channels with their end"),
         ["src/API/Nocturne.API/Controllers/V4/Platform/ServicesController.cs"] = (Reads.LivesWithSum, "a saved secret stops with the credential maker's end; who may adopt one reads the ceiling"),
         ["src/API/Nocturne.API/Controllers/V4/PlatformAdmin/AccessRequestController.cs"] = (Reads.Operator, "a platform admin approves on the instance's behalf"),
+        ["src/API/Nocturne.API/Controllers/V4/Profiles/ClockFaceDataController.cs"] = (Reads.AccessCheck, "previews the values the caller may read; the save the face goes through reads the ceiling"),
         ["src/API/Nocturne.API/Controllers/V4/Profiles/ProfileHistoryController.cs"] = (Reads.AccessCheck, "redacts what the caller may not read"),
         ["src/API/Nocturne.API/Controllers/V4/Profiles/UISettingsController.cs"] = (Reads.AccessCheck, "gates a settings section on its read scope"),
         ["src/API/Nocturne.API/Controllers/V4/TenantAdmin/RejectedUploadsController.cs"] = (Reads.AccessCheck, "refuses a clamped caller a history read"),

@@ -1,14 +1,56 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect, vi } from "vitest";
-import type { ClockFaceConfig } from "#lib/api/index.js";
+import {
+  NotificationUrgency,
+  TrackerCategory,
+  type ClockFaceConfig,
+  type ClockFaceData,
+} from "#lib/api/index.js";
 import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
-import { TRACKER_SHOW_OPTIONS } from "#lib/clock-builder/index.js";
 import { chartLineColorMode, glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { formatLocale } from "#lib/utils/formatting.js";
-import { resolveChartThresholds } from "@nocturne/charts/core";
+import { resolveChartThresholds, transformChartData } from "@nocturne/charts/core";
+import type { ClockFaceDataSource } from "./clock-face-data.svelte";
 import Harness from "./ClockFaceRendererHarness.test.svelte";
 
 const WHITE = "rgb(255, 255, 255)";
+
+const SITE = "0196c3a0-0000-7000-8000-000000000001";
+const SENSOR = "0196c3a0-0000-7000-8000-000000000002";
+
+const values: ClockFaceData = {
+  iob: 1.2,
+  trackers: [
+    {
+      definitionId: SITE,
+      name: "Site",
+      category: TrackerCategory.Cannula,
+      urgency: NotificationUrgency.Info,
+      hoursLeft: 52,
+    },
+    {
+      definitionId: SENSOR,
+      name: "Sensor",
+      category: TrackerCategory.Sensor,
+      urgency: NotificationUrgency.Warn,
+      hoursLeft: -3,
+    },
+  ],
+};
+
+const withValues: ClockFaceDataSource = { data: values, chart: null, predictions: null };
+
+/** A chart window with the last hour of readings, as the chart endpoint serves it. */
+const withChart: ClockFaceDataSource = {
+  data: null,
+  chart: transformChartData({
+    glucoseData: Array.from({ length: 12 }, (_, i) => ({
+      time: Date.now() - (12 - i) * 5 * 60_000,
+      sgv: 100 + i * 5,
+    })),
+  }),
+  predictions: null,
+};
 
 const sevenMinutesAgo = new Intl.RelativeTimeFormat(formatLocale(), {
   style: "narrow",
@@ -21,7 +63,7 @@ const config: ClockFaceConfig = {
       elements: [
         { type: "sg", size: 40, style: { color: "dynamic" } },
         { type: "age", size: 14 },
-        { type: "tracker", size: 14, show: ["name", "remaining", "urgency"] },
+        { type: "tracker", size: 14, definitionId: SITE, show: ["name", "remaining"] },
       ],
     },
   ],
@@ -58,9 +100,10 @@ function cssColor(variable: string) {
 
 function face(
   glucose: ClockGlucoseSource,
-  faceConfig: ClockFaceConfig = config
+  faceConfig: ClockFaceConfig = config,
+  faceData?: ClockFaceDataSource
 ) {
-  const { container } = render(Harness, { config: faceConfig, glucose });
+  const { container } = render(Harness, { config: faceConfig, glucose, faceData });
   const rows = container.querySelector("[data-testid='clock-face-rows']");
   const spans = [...(rows?.querySelectorAll("span") ?? [])];
   return {
@@ -121,6 +164,7 @@ describe("ClockFaceRenderer", () => {
     const { container } = render(Harness, {
       config: chartFace,
       glucose: reading,
+      faceData: withChart,
       showCharts: true,
     });
 
@@ -149,6 +193,7 @@ describe("ClockFaceRenderer", () => {
     const { container } = render(Harness, {
       config: backgroundFace,
       glucose: reading,
+      faceData: withChart,
       showCharts: true,
     });
 
@@ -170,6 +215,7 @@ describe("ClockFaceRenderer", () => {
       const { container } = render(Harness, {
         config: { rows: [{ elements: [element, { type: "sg", size: 40 }] }] },
         glucose: reading,
+        faceData: withChart,
         showCharts: true,
       });
 
@@ -203,13 +249,52 @@ describe("ClockFaceRenderer", () => {
     expect(face(noReading, glucoseColored).background).not.toBe(low);
   });
 
-  it("renders nothing for tracker parts no data source backs", () => {
-    const offered = TRACKER_SHOW_OPTIONS.map((option) => option.value);
-    expect(offered).not.toContain("remaining");
-    expect(offered).not.toContain("urgency");
+  it("shows the tracker the element names, with its time left", () => {
+    const text = face(reading, config, withValues).text;
 
-    // The face above still asks for both; only the name may reach the screen.
-    expect(face(reading).text).not.toContain("2d 4h");
-    expect(face(noReading).text.replace(/\s+/g, " ")).toBe("-- Tracker");
+    expect(text).toContain("Site");
+    expect(text).toContain("2d 4h left");
+    expect(text).not.toContain("Sensor");
+  });
+
+  it("shows nothing for a tracker the API did not read, not a stand-in name", () => {
+    expect(face(noReading).text.replace(/\s+/g, " ")).toBe("--");
+  });
+
+  it("shows only the trackers at or above a trackers element's threshold", () => {
+    const trackersFace: ClockFaceConfig = {
+      rows: [
+        {
+          elements: [
+            { type: "trackers", size: 14, show: ["name", "remaining"], visibilityThreshold: "warn" },
+          ],
+        },
+      ],
+    };
+    const text = face(reading, trackersFace, withValues).text;
+
+    expect(text).toContain("Sensor");
+    expect(text).toContain("3h late");
+    expect(text).not.toContain("Site");
+  });
+
+  it("shows insulin on board from the face's values", () => {
+    const iobFace: ClockFaceConfig = { rows: [{ elements: [{ type: "iob", size: 20 }] }] };
+
+    expect(face(reading, iobFace, withValues).text).toBe("1.2U");
+    expect(face(reading, iobFace).text).toBe("");
+  });
+
+  it("draws a chart from the face's chart window, without the realtime store", async () => {
+    const { container } = render(Harness, {
+      config: { rows: [{ elements: [{ type: "chart", hours: 3, width: 400, height: 200 }] }] },
+      glucose: reading,
+      faceData: withChart,
+      showCharts: true,
+    });
+
+    await vi.waitFor(() => {
+      expect(container.querySelector("[data-testid='clock-face-rows'] svg path")).not.toBeNull();
+    });
   });
 });

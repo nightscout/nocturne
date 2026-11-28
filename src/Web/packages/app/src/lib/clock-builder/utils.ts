@@ -5,7 +5,8 @@
  * and other utilities used by the clock face builder.
  */
 
-import type { ClockElement, ClockSettings, TrackerDefinitionDto } from "#lib/api/index.js";
+import type { ClockElement, ClockFaceData, ClockSettings, TrackerDefinitionDto } from "#lib/api/index.js";
+import { visibleTrackers } from "#lib/components/clock/clock-face-data.svelte.js";
 import {
   TEXT_ELEMENT_TYPES,
   elementInfo,
@@ -172,21 +173,15 @@ export function isTextElement(type: string): boolean {
 }
 
 /**
- * Check if a tracker/trackers element would be hidden based on visibility threshold
- * In the builder we show a dashed border to indicate it wouldn't normally be visible
+ * Whether a tracker element shows nothing now: no running tracker it names, or none at or above
+ * its visibility threshold. The builder marks such an element with a dashed outline.
  */
-export function isTrackerBelowThreshold(element: InternalElement): boolean {
+export function isTrackerHiddenNow(
+  element: InternalElement,
+  data: ClockFaceData | null
+): boolean {
   if (element.type !== "tracker" && element.type !== "trackers") return false;
-  const threshold = element.visibilityThreshold;
-  // "always" means always visible, so not below threshold
-  if (!threshold || threshold === "always") return false;
-  // For demo purposes in the builder, we simulate that trackers are at "info" level
-  // So anything requiring warn/hazard/urgent would be hidden
-  const thresholdOrder = ["always", "info", "warn", "hazard", "urgent"];
-  const currentLevel = "info"; // Simulated current urgency level
-  const thresholdIndex = thresholdOrder.indexOf(threshold);
-  const currentIndex = thresholdOrder.indexOf(currentLevel);
-  return thresholdIndex > currentIndex;
+  return visibleTrackers(element, data).length === 0;
 }
 
 /**

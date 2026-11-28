@@ -49,7 +49,17 @@ public class ClockFaceConfig
     /// Returns a "field: message" description of the first invalid setting, or null when the
     /// config can be saved.
     /// </summary>
-    public string? Validate() => Settings is null ? "settings: must be an object" : Settings.Validate();
+    public string? Validate()
+    {
+        if (Settings is null)
+            return "settings: must be an object";
+        if (Rows is null || Rows.Any(r => r?.Elements is null))
+            return "rows: each row must be an object with an elements list";
+        if (Rows.Any(r => r.Elements.Any(e => e is null)))
+            return "rows: each element must be an object";
+        return Settings.Validate()
+            ?? Rows.SelectMany(r => r.Elements).Select(e => e.Validate()).FirstOrDefault(error => error is not null);
+    }
 
     /// <summary>
     /// The layout every new face starts from: glucose and trend arrow, then delta, then reading
@@ -102,6 +112,31 @@ public class ClockRow
 /// </summary>
 public class ClockElement
 {
+    /// <summary>The hours a summary or chart element may read.</summary>
+    public static readonly IReadOnlyList<int> OfferedHours = [1, 3, 6, 12, 24];
+
+    /// <summary>The minutes ahead a forecast element may read.</summary>
+    public static readonly IReadOnlyList<int> OfferedMinutesAhead = [15, 30, 45, 60];
+
+    /// <summary>The hours a summary or chart element reads when it names none.</summary>
+    public const int DefaultHours = 3;
+
+    /// <summary>The minutes ahead a forecast element reads when it names none.</summary>
+    public const int DefaultMinutesAhead = 30;
+
+    /// <summary>
+    /// A "field: message" description of an hours or minutes-ahead value the element's type reads
+    /// but the editor does not offer, or null.
+    /// </summary>
+    public string? Validate() => Type switch
+    {
+        "summary" or "chart" when Hours is { } hours && !OfferedHours.Contains(hours) =>
+            $"hours: must be one of {string.Join(", ", OfferedHours)}",
+        "forecast" when MinutesAhead is { } minutes && !OfferedMinutesAhead.Contains(minutes) =>
+            $"minutesAhead: must be one of {string.Join(", ", OfferedMinutesAhead)}",
+        _ => null,
+    };
+
     /// <summary>
     /// Element type: sg, delta, arrow, age, time, sparkline, forecast, iob, cob, basal, tracker, trackers, summary, text, chart
     /// </summary>
@@ -415,6 +450,105 @@ public class ClockGlucoseDto
 
     /// <summary>Origin data source identifier (used to surface demo data), or null.</summary>
     public string? DataSource { get; set; }
+}
+
+/// <summary>
+/// Whether the caller may add a part of a clock face, so the editor can say why before the save
+/// refuses it.
+/// </summary>
+public class ClockPartAccessDto
+{
+    /// <summary>The element type.</summary>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>For a chart, the <see cref="ClockChartConfig"/> flag, as the face's JSON names it; else null.</summary>
+    public string? Feature { get; set; }
+
+    /// <summary>The scope the caller lacks to add the part, or null when the caller may add it.</summary>
+    public string? MissingScope { get; set; }
+}
+
+/// <summary>
+/// What a clock face shows beyond the latest reading, read for the elements its layout holds and
+/// nothing else. A part the layout has no element for, or that its reader may not read, is null or
+/// empty.
+/// </summary>
+public class ClockFaceData
+{
+    /// <summary>Insulin on board in units, or null when nothing stands behind a total.</summary>
+    public double? Iob { get; set; }
+
+    /// <summary>Carbs on board in grams, or null when nothing stands behind a total.</summary>
+    public double? Cob { get; set; }
+
+    /// <summary>The basal rate delivered now, or null when none is known.</summary>
+    public ClockBasalDto? Basal { get; set; }
+
+    /// <summary>One predicted value for each distinct <see cref="ClockElement.MinutesAhead"/> on the face.</summary>
+    public List<ClockForecastDto> Forecasts { get; set; } = [];
+
+    /// <summary>Time in range for each distinct summary <see cref="ClockElement.Hours"/> on the face.</summary>
+    public List<ClockSummaryDto> Summaries { get; set; } = [];
+
+    /// <summary>
+    /// The running trackers the face's tracker elements can show: every one for a face with an
+    /// all-trackers element, else those of the definitions its single-tracker elements name.
+    /// </summary>
+    public List<ClockTrackerDto> Trackers { get; set; } = [];
+}
+
+/// <summary>The basal rate delivered now.</summary>
+public class ClockBasalDto
+{
+    /// <summary>Units per hour.</summary>
+    public double Rate { get; set; }
+
+    /// <summary>The scheduled rate at this time, when known; it differs from <see cref="Rate"/> under a temp basal.</summary>
+    public double? ScheduledRate { get; set; }
+
+    public BasalDeliveryOrigin Origin { get; set; }
+}
+
+/// <summary>A predicted glucose value some minutes from now.</summary>
+public class ClockForecastDto
+{
+    public int MinutesAhead { get; set; }
+
+    /// <summary>Predicted glucose in mg/dL.</summary>
+    public double Mgdl { get; set; }
+}
+
+/// <summary>Time in range over the hours before now.</summary>
+public class ClockSummaryDto
+{
+    public int Hours { get; set; }
+
+    /// <summary>Percent of the covered time in the target range.</summary>
+    public double InRangePercent { get; set; }
+
+    /// <summary>Percent of the covered time below the target range.</summary>
+    public double BelowPercent { get; set; }
+
+    /// <summary>Percent of the covered time above the target range.</summary>
+    public double AbovePercent { get; set; }
+
+    /// <summary>Readings the percentages are measured over; zero means there is no figure to show.</summary>
+    public int Readings { get; set; }
+}
+
+/// <summary>A running tracker as a clock face shows it.</summary>
+public class ClockTrackerDto
+{
+    public Guid DefinitionId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public TrackerCategory Category { get; set; }
+
+    public NotificationUrgency Urgency { get; set; }
+
+    /// <summary>Hours until the tracker's expected end, negative once past it; null for one with no end.</summary>
+    public double? HoursLeft { get; set; }
 }
 
 /// <summary>

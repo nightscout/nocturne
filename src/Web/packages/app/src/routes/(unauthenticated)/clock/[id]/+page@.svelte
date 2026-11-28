@@ -16,6 +16,7 @@
   import RevealableOverlay from "#lib/components/shared/RevealableOverlay.svelte";
   import { createOverlayReveal } from "#lib/utils/overlay-reveal.svelte.js";
   import ClockFaceRenderer from "#lib/components/clock/ClockFaceRenderer.svelte";
+  import { setClockFaceDataSource } from "#lib/components/clock/clock-face-data.svelte.js";
   import ClockAlertBand from "#lib/components/clock/ClockAlertBand.svelte";
   import { formatClockTime } from "#lib/components/clock/clock-time.js";
   import {
@@ -41,6 +42,7 @@
   // ClockFaceRenderer via the shared ClockGlucoseSource context.
   const clockStore = new PublicClockStore(id);
   setClockGlucoseSource(clockStore);
+  setClockFaceDataSource(clockStore);
 
   onMount(() => {
     clockStore.start();
@@ -105,6 +107,10 @@
   const showAlerts = $derived(clockConfig?.settings?.showAlerts ?? false);
   $effect(() => {
     clockStore.watchAlerts(showAlerts);
+  });
+
+  $effect(() => {
+    clockStore.watchFace(clockConfig);
   });
 </script>
 
@@ -173,8 +179,6 @@
   <ClockFaceRenderer
     config={clockConfig}
     screensaver={clockConfig.settings?.screensaverMode ?? false}
-    showCharts={false}
-    loadTrackerDefinitions={false}
     class="fixed inset-0 h-screen w-screen transition-colors duration-500"
   />
 

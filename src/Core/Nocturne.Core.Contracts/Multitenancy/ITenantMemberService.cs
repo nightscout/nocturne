@@ -47,6 +47,13 @@ public interface ITenantMemberService
     /// <param name="subjectId">The subject (user) identifier.</param>
     Task<TenantMemberAccess?> GetMemberAccessAsync(
         Guid subjectId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// What the subject's membership grants on the tenant and what its direct reason grants, which
+    /// bounds what the member may give anyone else; null when the subject is inactive or is not a
+    /// member of the tenant.
+    /// </summary>
+    Task<TenantMembershipFacts?> GetMembershipFactsAsync(Guid subjectId, Guid tenantId, CancellationToken ct);
 }
 
 /// <summary>
