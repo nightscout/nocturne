@@ -3,7 +3,8 @@ import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const reducedMotion = vi.hoisted(() => ({ value: false }));
-vi.mock("water-ui", async () => ({
+vi.mock("water-ui", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("water-ui")>()),
   Artwork: (await import("#lib/test-stubs/Artwork.test-stub.svelte")).default,
   hostSurface: () => "light",
   watchSurface: () => () => {},
