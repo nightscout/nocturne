@@ -8,7 +8,7 @@ namespace Nocturne.API.Services.Demo;
 
 /// <summary>
 /// The saved views and personal flag rules the demo clinic's persona holds, each chosen to pick out one of the archetypes
-/// in <see cref="Nocturne.Core.Models.Demo.DemoClinic.People"/>, and the one write that gives the persona them.
+/// in <see cref="Nocturne.Core.Models.Demo.DemoClinic.People"/>, and the writes that give the persona them.
 /// </summary>
 internal static class DemoClinicSeeds
 {
@@ -51,6 +51,21 @@ internal static class DemoClinicSeeds
         var heldRules = await rules.GetOfSubjectAsync(subjectId, ct);
         foreach (var rule in Rules.Where(r => !heldRules.Any(h => Same(h, r))))
             await rules.CreateAsync(subjectId, rule, ct);
+    }
+
+    /// <summary>
+    /// Deletes every view and personal rule <paramref name="subjectId"/> holds, then gives them the seeded ones
+    /// (<see cref="SeedAsync"/>), so an edited seed goes back to how it was seeded.
+    /// </summary>
+    public static async Task ReplaceAsync(
+        IPeopleViewRepository views, IFlagRuleRepository rules, Guid subjectId, CancellationToken ct)
+    {
+        foreach (var view in await views.GetOfSubjectAsync(subjectId, ct))
+            await views.DeleteAsync(subjectId, view.Id, ct);
+        foreach (var rule in await rules.GetOfSubjectAsync(subjectId, ct))
+            await rules.DeleteAsync(subjectId, rule.Id, ct);
+
+        await SeedAsync(views, rules, subjectId, ct);
     }
 
     private static bool Same(FlagRule held, FlagRuleDraft seed) =>

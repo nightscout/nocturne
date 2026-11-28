@@ -23,6 +23,12 @@ public class DemoModeConfiguration
     public int ResetIntervalMinutes { get; set; } = 0;
 
     /// <summary>
+    /// Interval in minutes between visitor resets, which return the clinic persona's saved views and flag rules to
+    /// their seeds. Set to 0 to disable.
+    /// </summary>
+    public int VisitorResetIntervalMinutes { get; set; } = 60;
+
+    /// <summary>
     /// Initial glucose value in mg/dL.
     /// </summary>
     public int InitialGlucose { get; set; } = 120;

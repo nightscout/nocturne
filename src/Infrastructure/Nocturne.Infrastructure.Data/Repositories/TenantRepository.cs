@@ -79,6 +79,7 @@ public class TenantRepository : ITenantRepository
                 ResetIntervalMinutes = demo.ResetIntervalMinutes,
                 Kind = demo.Kind,
                 ClinicTeamId = demo.ClinicTeamId,
+                NextVisitorResetAt = demo.NextVisitorResetAt,
             });
         }
 
@@ -241,6 +242,8 @@ public class TenantRepository : ITenantRepository
                 config.Kind = demoEdit.Kind;
             if (demoEdit.ClinicTeamId is { } clinicTeam)
                 config.ClinicTeamId = clinicTeam;
+            if (demoEdit.NextVisitorResetAt is { } nextVisitorReset)
+                config.NextVisitorResetAt = nextVisitorReset;
         }
 
         await SaveAsync(lease.Context, ct);
@@ -317,6 +320,7 @@ public class TenantRepository : ITenantRepository
                 tenant.DemoConfig.IntervalMinutes,
                 tenant.DemoConfig.ResetIntervalMinutes,
                 tenant.DemoConfig.Kind,
-                tenant.DemoConfig.ClinicTeamId),
+                tenant.DemoConfig.ClinicTeamId,
+                tenant.DemoConfig.NextVisitorResetAt),
             tenant.SlugChangedAt);
 }

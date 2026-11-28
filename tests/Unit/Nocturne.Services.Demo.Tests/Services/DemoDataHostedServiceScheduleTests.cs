@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Time.Testing;
+using Nocturne.Services.Demo.Configuration;
 using Nocturne.Services.Demo.Services;
 using Xunit;
 
@@ -15,7 +16,8 @@ public class DemoDataHostedServiceScheduleTests
         var delay = DemoDataHostedService.DelayUntilNextWake(
             Start.UtcDateTime,
             Start.UtcDateTime.AddMinutes(5),
-            nextResetUtc: null);
+            nextResetUtc: null,
+            nextVisitorResetUtc: null);
 
         delay.Should().Be(TimeSpan.FromMinutes(5));
     }
@@ -26,7 +28,8 @@ public class DemoDataHostedServiceScheduleTests
         var delay = DemoDataHostedService.DelayUntilNextWake(
             Start.UtcDateTime,
             Start.UtcDateTime.AddMinutes(5),
-            Start.UtcDateTime.AddMinutes(2));
+            Start.UtcDateTime.AddMinutes(2),
+            nextVisitorResetUtc: null);
 
         delay.Should().Be(TimeSpan.FromMinutes(2));
     }
@@ -37,7 +40,8 @@ public class DemoDataHostedServiceScheduleTests
         var delay = DemoDataHostedService.DelayUntilNextWake(
             Start.UtcDateTime.AddMinutes(10),
             Start.UtcDateTime.AddMinutes(5),
-            nextResetUtc: null);
+            nextResetUtc: null,
+            nextVisitorResetUtc: null);
 
         delay.Should().Be(TimeSpan.Zero);
     }
@@ -51,7 +55,45 @@ public class DemoDataHostedServiceScheduleTests
         clock.Advance(TimeSpan.FromMinutes(3));
 
         DemoDataHostedService
-            .DelayUntilNextWake(clock.GetUtcNow().UtcDateTime, nextGeneration, nextResetUtc: null)
+            .DelayUntilNextWake(clock.GetUtcNow().UtcDateTime, nextGeneration, nextResetUtc: null, nextVisitorResetUtc: null)
             .Should().Be(TimeSpan.FromMinutes(2));
+    }
+
+    [Fact]
+    public void Wakes_for_a_visitor_reset_that_falls_before_the_next_generation_and_reset()
+    {
+        var delay = DemoDataHostedService.DelayUntilNextWake(
+            Start.UtcDateTime,
+            Start.UtcDateTime.AddMinutes(5),
+            Start.UtcDateTime.AddMinutes(4),
+            Start.UtcDateTime.AddMinutes(1));
+
+        delay.Should().Be(TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public void A_recorded_visitor_reset_is_kept_across_a_restart()
+    {
+        var recorded = Start.UtcDateTime.AddMinutes(-10);
+
+        DemoDataHostedService
+            .NextVisitorResetDue(new DemoModeConfiguration { VisitorResetIntervalMinutes = 60 }, recorded, Start.UtcDateTime)
+            .Should().Be(recorded);
+    }
+
+    [Fact]
+    public void With_no_recorded_visitor_reset_the_first_is_one_interval_away()
+    {
+        DemoDataHostedService
+            .NextVisitorResetDue(new DemoModeConfiguration { VisitorResetIntervalMinutes = 60 }, null, Start.UtcDateTime)
+            .Should().Be(Start.UtcDateTime.AddMinutes(60));
+    }
+
+    [Fact]
+    public void Visitor_resets_are_off_at_a_zero_interval()
+    {
+        DemoDataHostedService
+            .NextVisitorResetDue(new DemoModeConfiguration { VisitorResetIntervalMinutes = 0 }, Start.UtcDateTime, Start.UtcDateTime)
+            .Should().BeNull();
     }
 }

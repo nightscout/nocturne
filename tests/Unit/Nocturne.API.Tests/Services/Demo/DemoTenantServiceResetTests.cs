@@ -11,6 +11,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Demo;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -32,6 +33,7 @@ public class DemoTenantServiceResetTests : IDisposable
 {
     private const string DemoSlug = "demo";
     private const string ShareToken = "sharetoken123";
+    private static readonly DateTime NextVisitorReset = new(2031, 5, 6, 8, 0, 0, DateTimeKind.Utc);
 
     private readonly SqliteTestDatabase _db;
     private readonly Mock<ITenantService> _tenantService = new();
@@ -53,6 +55,18 @@ public class DemoTenantServiceResetTests : IDisposable
             .Setup(t => t.SeedAfterResetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Returns((Guid tenantId, CancellationToken _) => SeedRolesAndPublicMemberAsync(tenantId));
 
+        // Every reset provisions the clinic, which makes each person's tenant through this.
+        _tenantService
+            .Setup(t => t.CreateWithoutOwnerAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns((string slug, string name, CancellationToken _) => CreateTenantAsync(slug, name));
+
+        var views = new Mock<Nocturne.Core.Contracts.Identity.IPeopleViewRepository>();
+        views.Setup(v => v.GetOfSubjectAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Nocturne.Core.Models.Identity.PeopleView>());
+        var rules = new Mock<Nocturne.Core.Contracts.Identity.IFlagRuleRepository>();
+        rules.Setup(r => r.GetOfSubjectAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Nocturne.Core.Models.Identity.FlagRule>());
+
         var contexts = dbFactory.Object.AsNocturneFactory();
         var members = new TenantMembershipRepository(contexts, AccountLinkRoutes.Off);
         var subjects = new SubjectRepository(contexts, AccountLinkRoutes.Off);
@@ -70,8 +84,8 @@ public class DemoTenantServiceResetTests : IDisposable
             _logger.Object, AccountLinkRoutes.Off,
             new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))),
             new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
-            Mock.Of<Nocturne.Core.Contracts.Identity.IPeopleViewRepository>(),
-            Mock.Of<Nocturne.Core.Contracts.Identity.IFlagRuleRepository>());
+            views.Object,
+            rules.Object);
     }
 
     [Fact]
@@ -130,6 +144,7 @@ public class DemoTenantServiceResetTests : IDisposable
         await using var db = _db.CreateContext();
         var config = await db.Set<TenantDemoConfigEntity>().SingleAsync(c => c.TenantId == tenantId);
         config.ResetIntervalMinutes.Should().Be(1440);
+        config.NextVisitorResetAt.Should().Be(NextVisitorReset);
         config.BackfillDays.Should().Be(90);
         config.LastResetAt.Should().NotBeNull();
     }
@@ -171,7 +186,9 @@ public class DemoTenantServiceResetTests : IDisposable
             .Where(m => m.TenantId == tenantId)
             .ToListAsync();
 
-        members.Should().HaveCount(2, "only the Public subject and the demo member remain");
+        members.Select(m => m.Subject!.Name).Should().BeEquivalentTo(
+            [PublicSubjectFilter.PublicSubjectName, DemoTenantService.DemoMemberName, DemoClinic.PersonaName],
+            "only the Public subject, the demo member and the rebuilt clinic persona remain");
 
         var publicMember = members.Single(m => m.Subject!.IsSystemSubject);
         publicMember.LimitTo24Hours.Should().BeFalse();
@@ -181,7 +198,7 @@ public class DemoTenantServiceResetTests : IDisposable
         publicMember.MemberRoles.Should().BeEmpty(
             "the Public subject must not hold the demo member's write and administration atoms");
 
-        var demoMember = members.Single(m => !m.Subject!.IsSystemSubject);
+        var demoMember = members.Single(m => m.Username == DemoTenantService.DemoMemberUsername);
         demoMember.Username.Should().Be(DemoTenantService.DemoMemberUsername);
         demoMember.MemberRoles.Should().HaveCount(1);
     }
@@ -560,6 +577,7 @@ public class DemoTenantServiceResetTests : IDisposable
         {
             TenantId = tenant.Id,
             ResetIntervalMinutes = 1440,
+            NextVisitorResetAt = NextVisitorReset,
             BackfillDays = 90,
             IntervalMinutes = 5,
         });
@@ -620,6 +638,19 @@ public class DemoTenantServiceResetTests : IDisposable
         });
 
         db.SaveChanges();
+    }
+
+    private async Task<TenantCreatedDto> CreateTenantAsync(string slug, string name)
+    {
+        var tenant = new TenantEntity { Id = Guid.CreateVersion7(), Slug = slug, DisplayName = name, IsActive = true };
+        await using (var db = _db.CreateContext())
+        {
+            db.Add(tenant);
+            await db.SaveChangesAsync();
+        }
+
+        await SeedRolesAndPublicMemberAsync(tenant.Id);
+        return new TenantCreatedDto(tenant.Id, slug, name, true, DateTime.UtcNow);
     }
 
     /// <summary>

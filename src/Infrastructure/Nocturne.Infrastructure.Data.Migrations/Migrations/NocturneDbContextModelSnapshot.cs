@@ -6673,6 +6673,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("next_reset_at");
 
+                    b.Property<DateTime?>("NextVisitorResetAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_visitor_reset_at");
+
                     b.Property<int>("ResetIntervalMinutes")
                         .HasColumnType("integer")
                         .HasColumnName("reset_interval_minutes");

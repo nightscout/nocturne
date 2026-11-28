@@ -57,6 +57,11 @@ public class DemoServiceOptions
     /// Whether the clinic demo persona may change its own saved views and flag rules. Default is true.
     /// </summary>
     public bool AllowTeamWrites { get; set; } = true;
+
+    /// <summary>
+    /// Interval in minutes between visitor resets of the clinic persona's views and rules. Set to 0 to disable.
+    /// </summary>
+    public int VisitorResetIntervalMinutes { get; set; } = 60;
 }
 
 /// <summary>
@@ -111,6 +116,10 @@ public static class DemoServiceExtensions
             options.ResetIntervalMinutes
         );
         options.AllowTeamWrites = configSection.GetValue("AllowTeamWrites", options.AllowTeamWrites);
+        options.VisitorResetIntervalMinutes = configSection.GetValue(
+            "VisitorResetIntervalMinutes",
+            options.VisitorResetIntervalMinutes
+        );
 
         // Apply user configuration overrides
         configure?.Invoke(options);
@@ -137,7 +146,8 @@ public static class DemoServiceExtensions
             .WithEnvironment("DemoMode__RegenerateOnStartup", options.RegenerateOnStartup.ToString().ToLowerInvariant())
             .WithEnvironment("DemoMode__BackfillDays", options.BackfillDays.ToString())
             .WithEnvironment("DemoMode__IntervalMinutes", options.IntervalMinutes.ToString())
-            .WithEnvironment("DemoMode__ResetIntervalMinutes", options.ResetIntervalMinutes.ToString());
+            .WithEnvironment("DemoMode__ResetIntervalMinutes", options.ResetIntervalMinutes.ToString())
+            .WithEnvironment("DemoMode__VisitorResetIntervalMinutes", options.VisitorResetIntervalMinutes.ToString());
 
         // API should reference demo service for health monitoring
         apiEnvironment.WithEnvironment("DemoService__Url", demoService.GetEndpoint("http"))

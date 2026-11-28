@@ -80,6 +80,27 @@ public partial class TeamRepository
     }
 
     /// <summary>
+    /// Locks and reads what removing a team the instance keeps itself ends, on <paramref name="unit"/>, which must not be
+    /// pinned to a tenant: the team, whose members, groups, rules and access go with it by cascade, and the team reasons
+    /// that stand on its access. Unlike <see cref="LockTeamDeletionAsync"/>, no manager is asked, since the instance
+    /// made it, and no site owner is sent a staff notice. Null when there is no such team.
+    /// </summary>
+    /// <remarks>
+    /// It removes any team it is given, so its callers are pinned by <c>ProvisionedTeamRemovalAllowlistTests</c>.
+    /// </remarks>
+    public static async Task<TeamReasonChanges?> LockProvisionedRemovalAsync(DbUnitOfWork unit, Guid teamId, CancellationToken ct)
+    {
+        var db = unit.Context;
+        await db.LockTeamManagersAsync(teamId, ct);
+
+        var team = await db.Teams.FirstOrDefaultAsync(t => t.Id == teamId, ct);
+        if (team is null)
+            return null;
+
+        return (await LockedRemovalAsync(unit, team, ct)).Changes;
+    }
+
+    /// <summary>
     /// The demo subject on the team as staff, the first to join; null when it has none. Reads every team's rows, so the
     /// context must not be pinned to a subject.
     /// </summary>

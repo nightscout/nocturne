@@ -23,6 +23,10 @@ public class TenantDemoConfigEntity
     [Column("next_reset_at")]
     public DateTime? NextResetAt { get; set; }
 
+    /// <summary>When the clinic persona's views and rules will next go back to their seeds (null if those resets are off).</summary>
+    [Column("next_visitor_reset_at")]
+    public DateTime? NextVisitorResetAt { get; set; }
+
     /// <summary>When the demo data was last reset.</summary>
     [Column("last_reset_at")]
     public DateTime? LastResetAt { get; set; }

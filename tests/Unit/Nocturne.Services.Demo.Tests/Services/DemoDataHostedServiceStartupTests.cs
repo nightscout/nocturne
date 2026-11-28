@@ -19,10 +19,12 @@ public class DemoDataHostedServiceStartupTests
     private static DemoModeConfiguration Config(
         int resetIntervalMinutes = 0,
         bool clearOnStartup = false,
-        bool regenerateOnStartup = false) => new()
+        bool regenerateOnStartup = false,
+        int visitorResetIntervalMinutes = 0) => new()
     {
         IntervalMinutes = 5,
         ResetIntervalMinutes = resetIntervalMinutes,
+        VisitorResetIntervalMinutes = visitorResetIntervalMinutes,
         ClearOnStartup = clearOnStartup,
         RegenerateOnStartup = regenerateOnStartup,
     };
@@ -206,7 +208,53 @@ public class DemoDataHostedServiceStartupTests
 
         api.Calls.Should().ContainInOrder(FakeDemoApi.Reset, FakeDemoApi.Seed, FakeDemoApi.StatusUpdate);
         api.StatusPatches.Should().ContainSingle().Which.Should().BeEquivalentTo(
-            new StatusPatch(api.LastResetAt!.Value.AddMinutes(60), null));
+            new StatusPatch(api.LastResetAt!.Value.AddMinutes(60), null, null));
+    }
+
+    [Fact]
+    public async Task A_start_with_no_recorded_visitor_reset_records_one_an_interval_away()
+    {
+        var api = new FakeDemoApi();
+        api.Readings(Now.AddDays(-90), Now);
+
+        await RunStartupAsync(Config(visitorResetIntervalMinutes: 60), api);
+
+        api.Calls.Should().NotContain(FakeDemoApi.Reset);
+        var patch = api.StatusPatches.Should().ContainSingle().Which;
+        patch.NextResetAt.Should().BeNull();
+        patch.NextVisitorResetAt.Should().BeCloseTo(Now.AddMinutes(60), TimeSpan.FromMinutes(1));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NoContent)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task The_loop_runs_a_due_visitor_reset_and_records_the_next_one_an_interval_later(HttpStatusCode answer)
+    {
+        var due = Now.AddMinutes(12);
+        var api = new FakeDemoApi { NextVisitorResetAt = due, VisitorResetAnswer = answer };
+        api.Readings(Now.AddDays(-90), Now);
+
+        await RunStartupAsync(
+            Config(visitorResetIntervalMinutes: 60), api,
+            until: () => api.StatusPatches.Count > 0, step: TimeSpan.FromSeconds(30));
+
+        api.Calls.Should().ContainInOrder(FakeDemoApi.VisitorReset, FakeDemoApi.StatusUpdate);
+        api.VisitorResetCalledAt.Should().BeOnOrAfter(due).And.BeCloseTo(due, TimeSpan.FromMinutes(1));
+        var patch = api.StatusPatches.Should().ContainSingle().Which;
+        patch.NextResetAt.Should().BeNull();
+        patch.NextVisitorResetAt.Should().BeOnOrAfter(api.VisitorResetFinishedAt!.Value.AddMinutes(60))
+            .And.BeCloseTo(api.VisitorResetFinishedAt.Value.AddMinutes(60), TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public async Task A_start_keeps_the_recorded_visitor_reset()
+    {
+        var api = new FakeDemoApi { NextVisitorResetAt = Now.AddMinutes(30) };
+        api.Readings(Now.AddDays(-90), Now);
+
+        await RunStartupAsync(Config(visitorResetIntervalMinutes: 60), api);
+
+        api.Calls.Should().NotContain(FakeDemoApi.StatusUpdate);
     }
 
     [Fact]
@@ -233,7 +281,8 @@ public class DemoDataHostedServiceStartupTests
         api.Calls.Should().ContainInOrder(FakeDemoApi.Reset, FakeDemoApi.Seed);
     }
 
-    private static async Task RunStartupAsync(DemoModeConfiguration config, FakeDemoApi api)
+    private static async Task RunStartupAsync(
+        DemoModeConfiguration config, FakeDemoApi api, Func<bool>? until = null, TimeSpan? step = null)
     {
         var clock = new FakeTimeProvider(new DateTimeOffset(Now));
         api.Clock = clock;
@@ -255,10 +304,10 @@ public class DemoDataHostedServiceStartupTests
         try
         {
             await Eventually.UntilAsync(
-                "the service to reach its first realtime tick",
-                () => api.FirstTick.Task.IsCompleted,
+                until is null ? "the service to reach its first realtime tick" : "the service to reach the awaited state",
+                until ?? (() => api.FirstTick.Task.IsCompleted),
                 step: TimeSpan.FromMilliseconds(5),
-                eachStep: () => clock.Advance(TimeSpan.FromSeconds(1)));
+                eachStep: () => clock.Advance(step ?? TimeSpan.FromSeconds(1)));
         }
         finally
         {
@@ -266,7 +315,7 @@ public class DemoDataHostedServiceStartupTests
         }
     }
 
-    private sealed record StatusPatch(DateTime? NextResetAt, DateTime? LastResetAt);
+    private sealed record StatusPatch(DateTime? NextResetAt, DateTime? LastResetAt, DateTime? NextVisitorResetAt);
 
     private sealed class FakeHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
     {
@@ -284,6 +333,7 @@ public class DemoDataHostedServiceStartupTests
         public const string Seed = "POST /api/v4/admin/demo/seed-extras";
         public const string StatusUpdate = "PATCH /api/v4/admin/demo/status";
         public const string Tick = "POST /api/v4/glucose/sensor/bulk";
+        public const string VisitorReset = "POST /api/v4/admin/demo/visitor-reset";
 
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -293,6 +343,10 @@ public class DemoDataHostedServiceStartupTests
         public FakeTimeProvider Clock { get; set; } = null!;
         public TaskCompletionSource FirstTick { get; set; } = new();
         public DateTime? LastResetAt { get; set; }
+        public DateTime? NextVisitorResetAt { get; set; }
+        public HttpStatusCode VisitorResetAnswer { get; set; } = HttpStatusCode.NoContent;
+        public DateTime? VisitorResetCalledAt { get; private set; }
+        public DateTime? VisitorResetFinishedAt { get; private set; }
         public int FailedReads { get; set; }
         public bool SeedFails { get; set; }
         public List<string> Calls { get; } = [];
@@ -312,7 +366,7 @@ public class DemoDataHostedServiceStartupTests
             {
                 case "POST /api/v4/admin/demo/provision":
                 case "GET /api/v4/admin/demo/status":
-                    return Ok(new { tenantId = "demo", isActive = true, lastResetAt = LastResetAt });
+                    return Ok(new { tenantId = "demo", isActive = true, lastResetAt = LastResetAt, nextVisitorResetAt = NextVisitorResetAt });
 
                 case "GET /api/v4/glucose/sensor":
                     if (FailedReads > 0)
@@ -335,6 +389,13 @@ public class DemoDataHostedServiceStartupTests
                 case Seed:
                     (_oldest, _newest) = (now.AddDays(-90), now);
                     return Ok(new { });
+
+                case VisitorReset:
+                    VisitorResetCalledAt = now;
+                    // A visitor reset can wait on the clinic lock behind a world reset.
+                    Clock.Advance(TimeSpan.FromMinutes(5));
+                    VisitorResetFinishedAt = Clock.GetUtcNow().UtcDateTime;
+                    return new HttpResponseMessage(VisitorResetAnswer);
 
                 case StatusUpdate:
                     var patch = await request.Content!.ReadFromJsonAsync<StatusPatch>(Json, cancellationToken);

@@ -143,6 +143,38 @@ public class StatusServiceTests
         result.NextResetAt.Should().Be(nextResetAt);
     }
 
+    [Theory]
+    [InlineData(30, true)]
+    [InlineData(-30, false)]
+    public async Task GetSystemStatusAsync_OnADemoTenant_ReportsTheNextVisitorResetOnlyWhileItIsAhead(int minutesAhead, bool reported)
+    {
+        var now = new DateTimeOffset(2026, 8, 5, 3, 0, 0, TimeSpan.Zero);
+        var nextVisitorResetAt = now.UtcDateTime.AddMinutes(minutesAhead);
+        var dbName = $"nocturne_status_demo_{Guid.NewGuid()}";
+        var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
+        var tenantId = SettableTenantAccessor.DefaultTenantId;
+
+        ctx.Tenants.Add(new TenantEntity
+        {
+            Id = tenantId,
+            Slug = "demo",
+            DisplayName = "Nocturne Demo",
+            IsActive = true,
+            IsDemo = true,
+            DemoConfig = new TenantDemoConfigEntity { TenantId = tenantId, NextVisitorResetAt = nextVisitorResetAt },
+        });
+        await ctx.SaveChangesAsync();
+
+        var service = CreateStatusService(
+            _configuration, ctx, dbName,
+            SettableTenantAccessor.Resolved(tenantId: tenantId, slug: "demo", isDemo: true),
+            time: new FakeTimeProvider(now));
+
+        var result = await service.GetSystemStatusAsync();
+
+        result.NextVisitorResetAt.Should().Be(reported ? nextVisitorResetAt : null);
+    }
+
     [Fact]
     public async Task GetSystemStatusAsync_OnAnOrdinaryTenant_LeavesTheDemoFieldsUnset()
     {

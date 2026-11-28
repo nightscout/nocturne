@@ -41,6 +41,7 @@ public sealed record TenantRecord(
 /// <summary>A demo tenant's operational state, which survives its resets.</summary>
 /// <param name="Kind">A <see cref="Demo.DemoTenantKind"/>.</param>
 /// <param name="ClinicTeamId">On the host, the demo clinic's team; null on a person and before the clinic is provisioned.</param>
+/// <param name="NextVisitorResetAt">On the host, when the clinic persona's views and rules next go back to their seeds.</param>
 public sealed record DemoTenantConfig(
     DateTime? NextResetAt,
     DateTime? LastResetAt,
@@ -49,7 +50,8 @@ public sealed record DemoTenantConfig(
     int IntervalMinutes,
     int ResetIntervalMinutes,
     string Kind,
-    Guid? ClinicTeamId = null);
+    Guid? ClinicTeamId = null,
+    DateTime? NextVisitorResetAt = null);
 
 /// <summary>
 /// A tenant to store. <paramref name="Id"/> is given when a reset re-inserts a tenant under its old id;
@@ -94,7 +96,8 @@ public sealed record DemoConfigEdit(
     DateTime? NextResetAt = null,
     DateTime? LastResetAt = null,
     string? Kind = null,
-    Guid? ClinicTeamId = null);
+    Guid? ClinicTeamId = null,
+    DateTime? NextVisitorResetAt = null);
 
 /// <summary>The public share token's three columns, written together; all null switches the link off.</summary>
 public sealed record ShareTokenState(string? Hash, string? Encrypted, DateTime? SetAt)

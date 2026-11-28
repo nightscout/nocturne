@@ -86,6 +86,32 @@ public class DemoClinicSeedsTests
         rules.Verify(r => r.DeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task A_replace_deletes_everything_the_persona_holds_and_gives_every_seed_afresh()
+    {
+        var visitorView = Held(DemoClinicSeeds.Views[0] with { Name = "Visitor view" });
+        var editedSeed = Held(DemoClinicSeeds.Views[1] with { ReviewDays = 30 });
+        var editedRule = Held(DemoClinicSeeds.Rules[0] with { Value = 5 });
+        var views = new Mock<IPeopleViewRepository>();
+        views.SetupSequence(v => v.GetOfSubjectAsync(Persona, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([visitorView, editedSeed])
+            .ReturnsAsync([]);
+        var rules = new Mock<IFlagRuleRepository>();
+        rules.SetupSequence(r => r.GetOfSubjectAsync(Persona, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([editedRule])
+            .ReturnsAsync([]);
+
+        await DemoClinicSeeds.ReplaceAsync(views.Object, rules.Object, Persona, CancellationToken.None);
+
+        views.Verify(v => v.DeleteAsync(Persona, visitorView.Id, It.IsAny<CancellationToken>()), Times.Once);
+        views.Verify(v => v.DeleteAsync(Persona, editedSeed.Id, It.IsAny<CancellationToken>()), Times.Once);
+        rules.Verify(r => r.DeleteAsync(Persona, editedRule.Id, It.IsAny<CancellationToken>()), Times.Once);
+        foreach (var view in DemoClinicSeeds.Views)
+            views.Verify(v => v.CreateAsync(Persona, view, It.IsAny<CancellationToken>()), Times.Once);
+        foreach (var rule in DemoClinicSeeds.Rules)
+            rules.Verify(r => r.CreateAsync(Persona, rule, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private static (Mock<IPeopleViewRepository> Views, Mock<IFlagRuleRepository> Rules) Repositories(
         IReadOnlyList<PeopleView> heldViews, IReadOnlyList<FlagRule> heldRules)
     {
