@@ -65,11 +65,23 @@ public partial class TeamRepository
         if (!await CanDeleteAsync(db, teamId, callerSubjectId, ct))
             return (TeamDeletion.Refused, null);
 
-        var accesses = await AccessOfTeamAcrossSitesAsync(db, teamId, ct);
+        var (changes, sites) = await LockedRemovalAsync(unit, team, ct);
+        return (TeamDeletion.Deleted, changes.WithStaffNotices(teamId, sites));
+    }
+
+    /// <summary>
+    /// Reads the team reasons that stand on <paramref name="team"/>'s access and stages its removal after them
+    /// (<see cref="RemoveAsync"/>), for a caller that holds the team's manager lock. Returns the sites it had access to
+    /// with them.
+    /// </summary>
+    private static async Task<(TeamReasonChanges Changes, IReadOnlyList<Guid> Sites)> LockedRemovalAsync(
+        DbUnitOfWork unit, TeamEntity team, CancellationToken ct)
+    {
+        var accesses = await AccessOfTeamAcrossSitesAsync(unit.Context, team.Id, ct);
         var changes = await TeamReasonChanges.ReadAsync(
             unit, accesses.Select(a => a.Access.Id).ToList(), subjectId: null,
             (context, token) => RemoveAsync(context, team, token), ct);
-        return (TeamDeletion.Deleted, changes.WithStaffNotices(teamId, accesses.Select(a => a.Access.TenantId)));
+        return (changes, [.. accesses.Select(a => a.Access.TenantId)]);
     }
 
     /// <summary>

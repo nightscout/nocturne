@@ -50,6 +50,8 @@ spec:
               value: {{ .Values.demo.intervalMinutes | quote }}
             - name: DemoMode__ResetIntervalMinutes
               value: {{ .Values.demo.resetIntervalMinutes | quote }}
+            - name: DemoMode__VisitorResetIntervalMinutes
+              value: {{ .Values.demo.visitorResetIntervalMinutes | quote }}
             - name: DemoService__ApiUrl
               value: {{ include "nocturne.api.internalUrl" . | quote }}
             - name: DemoService__AccessMode

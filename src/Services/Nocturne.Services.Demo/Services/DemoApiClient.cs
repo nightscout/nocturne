@@ -283,12 +283,29 @@ public sealed class DemoApiClient
     }
 
     /// <summary>
-    /// Updates the demo tenant status (next reset time, last reset time, active state).
+    /// Returns the clinic persona's saved views and flag rules to their seeds via the admin endpoint. The persona's
+    /// sessions keep working.
     /// </summary>
-    public async Task UpdateStatusAsync(DateTime? nextResetAt = null, DateTime? lastResetAt = null, bool? isActive = null, CancellationToken ct = default)
+    public async Task ResetVisitorStateAsync(CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient("DemoAdmin");
-        var payload = new { nextResetAt, lastResetAt, isActive };
+        var response = await client.PostAsync("api/v4/admin/demo/visitor-reset", null, ct);
+        response.EnsureSuccessStatusCode();
+        _logger.LogInformation("Reset the clinic persona's views and rules via API");
+    }
+
+    /// <summary>
+    /// Updates the demo tenant status (next reset time, last reset time, active state, next visitor reset time).
+    /// </summary>
+    public async Task UpdateStatusAsync(
+        DateTime? nextResetAt = null,
+        DateTime? lastResetAt = null,
+        bool? isActive = null,
+        DateTime? nextVisitorResetAt = null,
+        CancellationToken ct = default)
+    {
+        var client = _httpClientFactory.CreateClient("DemoAdmin");
+        var payload = new { nextResetAt, lastResetAt, isActive, nextVisitorResetAt };
         var response = await client.PatchAsJsonAsync("api/v4/admin/demo/status", payload, ct);
         response.EnsureSuccessStatusCode();
     }
@@ -344,4 +361,5 @@ public sealed class DemoTenantState
     public bool IsActive { get; set; }
     public DateTime? NextResetAt { get; set; }
     public DateTime? LastResetAt { get; set; }
+    public DateTime? NextVisitorResetAt { get; set; }
 }

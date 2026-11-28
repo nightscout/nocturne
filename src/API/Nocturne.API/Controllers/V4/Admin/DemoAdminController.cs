@@ -50,8 +50,8 @@ public class DemoAdminController : ControllerBase
     }
 
     /// <summary>
-    /// Idempotent provisioning: creates the demo host if it doesn't exist, then the demo clinic beside it
-    /// (<see cref="DemoTenantService.ProvisionClinicAsync"/>), and returns the host's state.
+    /// Idempotent provisioning: creates the demo host if it doesn't exist, then provisions its access and the demo clinic
+    /// beside it (<see cref="DemoTenantService.ProvisionAsync"/>), and returns the host's state.
     /// </summary>
     [HttpPost("provision")]
     [ProducesResponseType(typeof(DemoStateDto), StatusCodes.Status200OK)]
@@ -63,12 +63,9 @@ public class DemoAdminController : ControllerBase
 
         if (existing is not null)
         {
-            // Re-apply the tenant defaults and the access grants: this runs on every demo
-            // service start, so it repairs a tenant left without roles or a demo member by a
-            // reset that failed between wiping and re-seeding.
-            await _tenants.UpdateAsync(existing.Id, _demoTenantService.TenantDefaults(existing), ct);
-            await _demoTenantService.ConfigureAccessAsync(existing.Id, ct);
-            await _demoTenantService.ProvisionClinicAsync(existing, ct);
+            // Runs on every demo service start, so it repairs a demo left without roles, members or its
+            // clinic by a reset that failed between wiping and re-seeding.
+            await _demoTenantService.ProvisionAsync(existing.Id, ct);
             TenantCacheEviction.Evict(cache, existing.Slug, existing.ShareTokenHash);
             return Ok(ToDto((await _tenants.GetAsync(existing.Id, ct))!, alreadyExisted: true));
         }
@@ -86,17 +83,15 @@ public class DemoAdminController : ControllerBase
             },
             ct);
 
-        // Open the Public subject's share grant and create the demo member visitors are
-        // signed in as.
-        await _demoTenantService.ConfigureAccessAsync(created.Id, ct);
+        // Open the Public subject's share grant, create the demo member visitors are signed in
+        // as, and provision the clinic.
+        await _demoTenantService.ProvisionAsync(created.Id, ct);
 
         // TenantResolutionMiddleware caches the resolved context, IsDemo included, and
         // CreateWithoutOwnerAsync may already have populated it. IsDemo gates the demo sign-in
         // endpoint and the status field the login page keys off, so without this the tenant is
         // non-demo for the cache lifetime: a login page with no passkey and no way in.
         TenantCacheEviction.Evict(cache, created.Slug);
-
-        await _demoTenantService.ProvisionClinicAsync((await _tenants.GetAsync(created.Id, ct))!, ct);
 
         return Ok(ToDto((await _tenants.GetAsync(created.Id, ct))!, alreadyExisted: false));
     }
@@ -121,7 +116,9 @@ public class DemoAdminController : ControllerBase
 
         await _tenants.UpdateAsync(
             tenant.Id,
-            new TenantEdit(IsActive: patch.IsActive, DemoConfig: new DemoConfigEdit(patch.NextResetAt, patch.LastResetAt)),
+            new TenantEdit(
+                IsActive: patch.IsActive,
+                DemoConfig: new DemoConfigEdit(patch.NextResetAt, patch.LastResetAt, NextVisitorResetAt: patch.NextVisitorResetAt)),
             ct);
 
         tenant = (await _tenants.GetAsync(tenant.Id, ct))!;
@@ -183,11 +180,8 @@ public class DemoAdminController : ControllerBase
     }
 
     /// <summary>
-    /// Resets the demo tenant to a freshly provisioned state, discarding both the
-    /// generated data and every configuration change a visitor made — settings, roles,
-    /// members, connectors, alert rules, trackers and audit history. The tenant keeps
-    /// its id, slug and share token. Called by the demo background service before each
-    /// regenerate.
+    /// Resets the whole demo to a freshly provisioned state (<see cref="DemoTenantService.ResetAsync"/>). Called by the
+    /// demo background service before each regenerate.
     /// </summary>
     [HttpPost("reset")]
     [ProducesResponseType(typeof(DemoResetResultDto), StatusCodes.Status200OK)]
@@ -200,6 +194,17 @@ public class DemoAdminController : ControllerBase
 
         return Ok(new DemoResetResultDto(tenantId.Value));
     }
+
+    /// <summary>
+    /// Returns the clinic persona's saved views and flag rules to their seeds
+    /// (<see cref="DemoTenantService.ResetVisitorStateAsync"/>). Called by the demo background service on its visitor
+    /// reset schedule.
+    /// </summary>
+    [HttpPost("visitor-reset")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ResetVisitorState(CancellationToken ct) =>
+        await _demoTenantService.ResetVisitorStateAsync(ct) ? NoContent() : NotFound();
 
     /// <summary>
     /// Seeds the demo tenant with the full sample set — glucose, treatments,
@@ -252,6 +257,7 @@ public class DemoAdminController : ControllerBase
         BackfillDays: tenant.DemoConfig?.BackfillDays ?? 90,
         IntervalMinutes: tenant.DemoConfig?.IntervalMinutes ?? 5,
         ResetIntervalMinutes: tenant.DemoConfig?.ResetIntervalMinutes ?? 0,
+        NextVisitorResetAt: tenant.DemoConfig?.NextVisitorResetAt,
         AlreadyExisted: alreadyExisted);
 }
 
@@ -265,12 +271,14 @@ public record DemoStateDto(
     int BackfillDays,
     int IntervalMinutes,
     int ResetIntervalMinutes,
+    DateTime? NextVisitorResetAt,
     bool AlreadyExisted);
 
 public record DemoStatusPatchDto(
     DateTime? NextResetAt = null,
     DateTime? LastResetAt = null,
-    bool? IsActive = null);
+    bool? IsActive = null,
+    DateTime? NextVisitorResetAt = null);
 
 public record DemoDeleteResultDto(long DeletedCount);
 

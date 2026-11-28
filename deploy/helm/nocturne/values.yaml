@@ -233,7 +233,8 @@ demo:
   containerPort: 8080
   backfillDays: 90
   intervalMinutes: 5
-  resetIntervalMinutes: 0
+  resetIntervalMinutes: 1440
+  visitorResetIntervalMinutes: 60
   accessMode: open
   # Lets the clinic demo persona change its own saved views and flag rules. Set false to make
   # the demo read-only for it. Sets the API's DemoMode__AllowTeamWrites.
