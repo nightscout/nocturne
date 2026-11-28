@@ -22,9 +22,6 @@ namespace Nocturne.API.Services.Identity;
 /// </summary>
 public class MembershipRequestService : IMembershipRequestService
 {
-    public const string ApprovedNotificationType = "membership.approved";
-    public const string DeniedNotificationType = "membership.denied";
-
     private static readonly DecideMembershipRequestResult AlreadyAMember =
         new(false, "The subject is already a member.");
 
@@ -252,7 +249,7 @@ public class MembershipRequestService : IMembershipRequestService
 
         await _notificationService.CreateNotificationAsync(
             request.SubjectId.ToString(),
-            ApprovedNotificationType,
+            InAppNotificationType.MembershipApproved.ToWireString(),
             "Your membership request has been approved",
             sourceId: requestId.ToString(),
             cancellationToken: ct);
@@ -311,7 +308,7 @@ public class MembershipRequestService : IMembershipRequestService
 
         await _notificationService.CreateNotificationAsync(
             request.SubjectId.ToString(),
-            DeniedNotificationType,
+            InAppNotificationType.MembershipDenied.ToWireString(),
             "Your membership request has been denied",
             sourceId: requestId.ToString(),
             cancellationToken: ct);
@@ -356,7 +353,7 @@ public class MembershipRequestService : IMembershipRequestService
             {
                 await _notificationService.CreateNotificationAsync(
                     recipientSubjectId.ToString(),
-                    NotificationSubjectNaming.MembershipRequested,
+                    InAppNotificationType.MembershipRequested.ToWireString(),
                     $"Membership request from {subjectName}",
                     subtitle: message,
                     sourceId: requestId.ToString(),
