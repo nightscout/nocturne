@@ -395,7 +395,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
         {
             var bolus = ctx.Boluses.Single();
             bolus.LegacyId.Should().Be(syncIdentifier);
-            bolus.AdditionalPropertiesJson.Should().BeNull();
+            bolus.AdditionalPropertiesJson.Should().Be("""{"enteredBy":"Loop"}""");
         }
 
         var projected = (await _service.GetTreatmentsAsync(count: 10)).Should().ContainSingle().Subject;
@@ -408,6 +408,6 @@ public class TreatmentClientIdRoundTripTests : IDisposable
         await UploadAsync("""{"id":null,"enteredBy":"Trio","eventType":"Carb Correction","carbs":30,"created_at":"2026-01-01T12:00:00.000Z"}""");
 
         await using var ctx = _db.CreateContext();
-        ctx.CarbIntakes.Single().AdditionalPropertiesJson.Should().BeNull();
+        ctx.CarbIntakes.Single().AdditionalPropertiesJson.Should().Be("""{"enteredBy":"Trio"}""");
     }
 }

@@ -66,8 +66,6 @@ public static class TempBasalToTreatmentMapper
             TempBasalOriginProvenance.EvidenceOf(tempBasal).ToString();
         if (tempBasal.ScheduledRate.HasValue)
             treatment.AdditionalProperties["scheduledRate"] = tempBasal.ScheduledRate.Value;
-        if (!string.IsNullOrEmpty(tempBasal.Device))
-            treatment.AdditionalProperties["device"] = tempBasal.Device;
 
         return treatment;
     }

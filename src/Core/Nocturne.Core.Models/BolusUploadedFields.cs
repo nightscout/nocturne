@@ -15,6 +15,7 @@ public static class BolusUploadedFields
     {
         record = UploadedPumpFields.Keep(record, treatment);
         record = UploadedAppFields.Keep(record, treatment);
+        record = UploadedAppFields.KeepUploader(record, treatment);
         return KeptField.Add(record, IsBasalInsulin, treatment.IsBasalInsulin);
     }
 
@@ -22,6 +23,7 @@ public static class BolusUploadedFields
     {
         UploadedPumpFields.Restore(treatment, bolus.AdditionalProperties, bolus.PumpRecordId);
         UploadedAppFields.Restore(treatment, bolus.AdditionalProperties, bolus.App);
+        UploadedAppFields.RestoreUploader(treatment, bolus.AdditionalProperties, bolus.Device);
         treatment.IsBasalInsulin = KeptField.Bool(bolus.AdditionalProperties, IsBasalInsulin);
     }
 }

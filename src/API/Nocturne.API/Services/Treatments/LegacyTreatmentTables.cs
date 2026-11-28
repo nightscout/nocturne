@@ -1334,7 +1334,6 @@ internal static class LegacyTreatmentTables
             Protein = DeriveTotalProtein(foods),
             AbsorptionTime = carb.AbsorptionTime,
             CarbTime = carb.CarbTime.HasValue ? (int?)((int)carb.CarbTime.Value) : null,
-            EnteredBy = bolus.Device,
             DataSource = bolus.DataSource,
             SyncIdentifier = bolus.SyncIdentifier,
             InsulinType = bolus.InsulinType,
@@ -1358,7 +1357,6 @@ internal static class LegacyTreatmentTables
             Mills = bolus.Mills,
             Insulin = bolus.Insulin,
             PreBolus = TreatmentUploadedPreBolus.Of(bolus.AdditionalProperties),
-            EnteredBy = bolus.Device,
             DataSource = bolus.DataSource,
             SyncIdentifier = bolus.SyncIdentifier,
             InsulinType = bolus.InsulinType,
@@ -1373,8 +1371,9 @@ internal static class LegacyTreatmentTables
         return treatment;
     }
 
-    private static Treatment ProjectCarbCorrection(CarbIntake carb, List<TreatmentFood> foods) =>
-        new()
+    private static Treatment ProjectCarbCorrection(CarbIntake carb, List<TreatmentFood> foods)
+    {
+        var treatment = new Treatment
         {
             Id = carb.Id.ToString(),
             LegacyId = carb.LegacyId,
@@ -1390,11 +1389,13 @@ internal static class LegacyTreatmentTables
             Protein = DeriveTotalProtein(foods),
             AbsorptionTime = carb.AbsorptionTime,
             CarbTime = carb.CarbTime.HasValue ? (int?)((int)carb.CarbTime.Value) : null,
-            EnteredBy = carb.Device,
             DataSource = carb.DataSource,
             SyncIdentifier = carb.SyncIdentifier,
             UtcOffset = carb.UtcOffset,
         };
+        UploadedAppFields.RestoreUploader(treatment, carb.AdditionalProperties, carb.Device);
+        return treatment;
+    }
 
     private static double? DeriveTotalFat(List<TreatmentFood> foods)
     {
@@ -1412,8 +1413,9 @@ internal static class LegacyTreatmentTables
         return sum > 0 ? sum : null;
     }
 
-    private static Treatment ProjectBgCheck(BGCheck bgCheck) =>
-        new()
+    private static Treatment ProjectBgCheck(BGCheck bgCheck)
+    {
+        var treatment = new Treatment
         {
             Id = bgCheck.Id.ToString(),
             LegacyId = bgCheck.LegacyId,
@@ -1427,14 +1429,17 @@ internal static class LegacyTreatmentTables
             Mmol = bgCheck.Mmol,
             GlucoseType = bgCheck.GlucoseType?.ToString(),
             Units = bgCheck.Units == GlucoseUnit.Mmol ? "mmol" : "mg/dl",
-            EnteredBy = bgCheck.Device,
             DataSource = bgCheck.DataSource,
             SyncIdentifier = bgCheck.SyncIdentifier,
             UtcOffset = bgCheck.UtcOffset,
         };
+        UploadedAppFields.RestoreUploader(treatment, bgCheck.AdditionalProperties, bgCheck.Device);
+        return treatment;
+    }
 
-    private static Treatment ProjectNote(Note note) =>
-        new()
+    private static Treatment ProjectNote(Note note)
+    {
+        var treatment = new Treatment
         {
             Id = note.Id.ToString(),
             LegacyId = note.LegacyId,
@@ -1445,16 +1450,18 @@ internal static class LegacyTreatmentTables
             Mills = note.Mills,
             Notes = note.Text,
             IsAnnouncement = note.IsAnnouncement,
-            EnteredBy = note.Device,
             DataSource = note.DataSource,
             SyncIdentifier = note.SyncIdentifier,
             UtcOffset = note.UtcOffset,
         };
+        UploadedAppFields.RestoreUploader(treatment, note.AdditionalProperties, note.Device);
+        return treatment;
+    }
 
     private static Treatment ProjectDeviceEvent(DeviceEvent deviceEvent)
     {
         DeviceEventTypeToString.TryGetValue(deviceEvent.EventType, out var eventTypeString);
-        return new Treatment
+        var treatment = new Treatment
         {
             Id = deviceEvent.Id.ToString(),
             LegacyId = deviceEvent.LegacyId,
@@ -1464,15 +1471,17 @@ internal static class LegacyTreatmentTables
             EventType = eventTypeString ?? deviceEvent.EventType.ToString(),
             Mills = deviceEvent.Mills,
             Notes = deviceEvent.Notes,
-            EnteredBy = deviceEvent.Device,
             DataSource = deviceEvent.DataSource,
             SyncIdentifier = deviceEvent.SyncIdentifier,
             UtcOffset = deviceEvent.UtcOffset,
         };
+        UploadedAppFields.RestoreUploader(treatment, deviceEvent.AdditionalProperties, deviceEvent.Device);
+        return treatment;
     }
 
-    private static Treatment ProjectBolusCalculation(BolusCalculation bc) =>
-        new()
+    private static Treatment ProjectBolusCalculation(BolusCalculation bc)
+    {
+        var treatment = new Treatment
         {
             Id = bc.Id.ToString(),
             LegacyId = bc.LegacyId,
@@ -1496,8 +1505,10 @@ internal static class LegacyTreatmentTables
             SplitNow = bc.SplitNow,
             SplitExt = bc.SplitExt,
             PreBolus = bc.PreBolus,
-            EnteredBy = bc.Device,
             DataSource = bc.DataSource,
             UtcOffset = bc.UtcOffset,
         };
+        UploadedAppFields.RestoreUploader(treatment, bc.AdditionalProperties, bc.Device);
+        return treatment;
+    }
 }
