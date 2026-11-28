@@ -15,6 +15,7 @@ vi.mock("water-ui", async (importOriginal) => ({
   Artwork: (await import("#lib/test-stubs/Artwork.test-stub.svelte")).default,
   hostSurface: () => "light",
   watchSurface: () => () => {},
+  getEngineHost: () => ({ ready: true, booting: null }),
 }));
 const migrationHistory = vi.hoisted(() => ({ jobs: [] as { id: string; state: MigrationJobState }[] }));
 vi.mock("#lib/api/generated/migrations.generated.remote.js", () => ({

@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import type { SetupHubStatus } from "#lib/api/index.js";
 
-vi.mock("water-ui", async () => ({
+vi.mock("water-ui", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("water-ui")>()),
   Artwork: (await import("#lib/test-stubs/Artwork.test-stub.svelte")).default,
   DropSurface: (await import("#lib/test-stubs/DropSurface.test-stub.svelte")).default,
   DropGroup: (await import("#lib/test-stubs/Passthrough.test-stub.svelte")).default,
@@ -12,6 +13,9 @@ vi.mock("water-ui", async () => ({
   hostSurface: () => "light",
   watchSurface: () => () => {},
   prefersReducedMotion: () => false,
+  getPresentation: () => "animated",
+  WARM_IDLE_TIMEOUT_MS: 0,
+  getEngineHost: () => ({ ready: true, booting: null }),
 }));
 
 const hub = $state({ status: undefined as unknown });

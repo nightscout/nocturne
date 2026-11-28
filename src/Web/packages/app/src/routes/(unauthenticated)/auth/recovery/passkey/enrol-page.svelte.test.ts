@@ -66,6 +66,7 @@ vi.mock("#routes/(unauthenticated)/auth/auth.remote.js", async () => ({
 vi.mock("water-ui", async (importOriginal) => ({
   ...(await importOriginal<typeof import("water-ui")>()),
   Artwork: (await import("#lib/test-stubs/Empty.test-stub.svelte")).default,
+  getEngineHost: () => ({ ready: true, booting: null }),
 }));
 
 import EnrolPage from "./+page.svelte";

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import RevealArtwork from "#lib/components/shared/RevealArtwork.svelte";
   import {
-    Artwork,
     hostSurface,
     prefersReducedMotion,
     watchSurface,
@@ -90,7 +90,7 @@
   });
 </script>
 
-<Artwork
+<RevealArtwork
   artwork="hub-dawn-ridges"
   palette="dusk"
   {surface}

@@ -5,7 +5,7 @@
   import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import UserPlus from "@lucide/svelte/icons/user-plus";
-  import { Artwork } from "water-ui";
+  import RevealArtwork from "#lib/components/shared/RevealArtwork.svelte";
   import { fingerprintArtwork } from "#lib/watercolour-icons.js";
   import {
     startRegistration,
@@ -286,7 +286,7 @@
     {:else}
       <!-- Not authenticated — show OIDC + passkey options -->
       <Card.Header class="space-y-1 text-center">
-        <Artwork
+        <RevealArtwork
           icon={fingerprintArtwork}
           palette="water"
           motion="auto"

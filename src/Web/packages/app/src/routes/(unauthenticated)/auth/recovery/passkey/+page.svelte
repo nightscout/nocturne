@@ -8,7 +8,7 @@
   import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Check from "@lucide/svelte/icons/check";
-  import { Artwork } from "water-ui";
+  import RevealArtwork from "#lib/components/shared/RevealArtwork.svelte";
   import { fingerprintArtwork } from "#lib/watercolour-icons.js";
   import {
     startRegistration,
@@ -193,7 +193,7 @@
 <div class="flex min-h-screen items-center justify-center p-4">
   <Card.Root class="w-full max-w-md">
     <Card.Header class="text-center">
-      <Artwork
+      <RevealArtwork
         icon={fingerprintArtwork}
         palette="water"
         motion="auto"

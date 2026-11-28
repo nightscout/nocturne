@@ -5,13 +5,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const surfaceWatch = vi.hoisted(() => ({
   onchange: undefined as ((surface: "light" | "dark") => void) | undefined,
 }));
-vi.mock("water-ui", async () => ({
+vi.mock("water-ui", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("water-ui")>()),
   Artwork: (await import("#lib/test-stubs/Artwork.test-stub.svelte")).default,
   hostSurface: () => "light",
   watchSurface: (onchange: (surface: "light" | "dark") => void) => {
     surfaceWatch.onchange = onchange;
     return () => {};
   },
+  getPresentation: () => "animated",
+  WARM_IDLE_TIMEOUT_MS: 0,
+  prefersReducedMotion: () => false,
+  getEngineHost: () => ({ ready: true, booting: null }),
 }));
 
 import { fakePlayer } from "#lib/test-stubs/Artwork.test-stub.svelte";

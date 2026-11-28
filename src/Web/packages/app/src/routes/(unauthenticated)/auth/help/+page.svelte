@@ -6,7 +6,7 @@
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Globe from "@lucide/svelte/icons/globe";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
-  import { Artwork } from "water-ui";
+  import RevealArtwork from "#lib/components/shared/RevealArtwork.svelte";
   import { fingerprintArtwork } from "#lib/watercolour-icons.js";
   // Quote the sign-in controls by name — this is the page a locked-out person
   // reaches, so the names have to match what they're looking at.
@@ -36,7 +36,7 @@
     <Card.Root>
       <Card.Header>
         <div class="flex items-center gap-3">
-          <Artwork
+          <RevealArtwork
             icon={fingerprintArtwork}
             palette="water"
             motion="auto"
