@@ -30,6 +30,12 @@ public class ClassifyParityTests
         { "glucose_bucket", """{ "schema_version": 2, "buckets": ["high", "very_high"] }""", "high" },
         { "glucose_bucket", """{ "schema_version": 2, "buckets": ["very_low", "very_high"] }""", "composite" },
         { "glucose_bucket", """{ "schema_version": 2, "buckets": ["tight_range", "in_range"] }""", "undirected" },
+        { "glucose_extreme", """{ "schema_version": 2, "of": "min", "operator": "<", "value": 70, "window_minutes": 30 }""", "low" },
+        { "glucose_extreme", """{ "schema_version": 2, "of": "max", "operator": ">=", "value": 250, "window_minutes": 30 }""", "high" },
+        { "glucose_extreme", """{ "schema_version": 2, "of": "min", "operator": ">", "value": 70, "window_minutes": 30 }""", "undirected" },
+        { "glucose_count", """{ "schema_version": 2, "reading": { "operator": "<", "value": 70 }, "window_minutes": 30, "count": { "operator": ">=", "value": 3 } }""", "low" },
+        { "glucose_count", """{ "schema_version": 2, "reading": { "operator": ">", "value": 250 }, "window_minutes": 30, "percent": { "operator": ">=", "value": 50 } }""", "high" },
+        { "glucose_change", """{ "schema_version": 2, "operator": "<=", "value": -30, "window_minutes": 15 }""", "undirected" },
         { "signal_loss", """{ "schema_version": 2, "timeout_minutes": 20 }""", "undirected" },
         // Composite of full child nodes — the stored shape.
         {

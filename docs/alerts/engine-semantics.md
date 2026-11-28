@@ -652,6 +652,15 @@ state that is not ok by `sensor_state`. Then:
 A windowed leaf reports no met point (above, met by). Its truth holds since `LatestTimestamp`, as
 `threshold`'s does (`sustained`, below).
 
+**Scope class of a windowed leaf.** The scope class of a rule (`low`, `high`, `composite` or
+`undirected`, which a scoped Do Not Disturb of lows or highs reads) takes a side from each leaf that
+points one way, and `threshold`'s `<` `<=` and `>` `>=` are the model. A `glucose_extreme` is a low
+for `of: min` with `<` or `<=`, and a high for `of: max` with `>` or `>=`. Every other pairing, such
+as `min` with `>` or `max` with `<`, says the window stayed in range and has no side, as `==` has
+none. A `glucose_count` takes the side of its `reading` operator, whether it tallies a `count` or a
+`percent`. A `glucose_change` has no side: a fast fall is not a low, and a mute that silenced it
+would fail unsafe. A leaf with a side under a `not` makes the rule `undirected`, as for every other kind.
+
 **Clear margin.** `threshold`, `rate_of_change`, `predicted`, `iob`, `cob`, `reservoir`,
 `pump_battery`, `uploader_battery`, `transmitter_battery`, `temp_basal`, `sensitivity_ratio`,
 `eventual_glucose`, `carbs_required`, `glucose_change` and `glucose_extreme` take an optional

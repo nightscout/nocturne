@@ -9,6 +9,9 @@
 //!   `<` `<=` → low, `>` `>=` → high (`==` → none)
 //! - `glucose_bucket.buckets`   very_low/low → low,  high/very_high → high
 //!   (in_range/tight_range → neither; a set leaf can span both)
+//! - `glucose_extreme` by its `operator` where it agrees with `of`: `min` with
+//!   `<` `<=` → low, `max` with `>` `>=` → high; every other pairing → none
+//! - `glucose_count` by the `operator` of its `reading`, as a `threshold`'s
 //!
 //! Containers are unwrapped; everything else is non-directional. A
 //! directional leaf under a `not` makes the whole rule `undirected`, since
@@ -16,7 +19,7 @@
 
 use serde_json::Value;
 
-use crate::enums::{CmpOp, GlucoseBucket};
+use crate::enums::{CmpOp, GlucoseBucket, WindowExtreme};
 use crate::model::{ConditionKind, Container, Node, Payload, parse_payload};
 
 /// A rule's low/high classification.
@@ -105,7 +108,21 @@ fn walk(node: &Node, under_not: bool, acc: &mut Acc) {
                 acc.mark(bucket_side(bucket), under_not);
             }
         }
+        Payload::GlucoseExtreme(p) => acc.mark(extreme_side(p.of, p.operator), under_not),
+        Payload::GlucoseCount(p) => acc.mark(operator_side(p.reading.operator), under_not),
+        // `glucose_change` is left undirected: a fast fall is not a low, and a mute that silenced
+        // it would fail unsafe.
         _ => {}
+    }
+}
+
+/// A window's lowest reading is a low only when it is compared downward, and its highest a high
+/// only when compared upward: `min > 70` and `max < 250` say the window stayed in range.
+fn extreme_side(of: WindowExtreme, operator: CmpOp) -> Option<Side> {
+    match (of, operator_side(operator)) {
+        (WindowExtreme::Min, Some(Side::Low)) => Some(Side::Low),
+        (WindowExtreme::Max, Some(Side::High)) => Some(Side::High),
+        _ => None,
     }
 }
 
@@ -209,6 +226,104 @@ mod tests {
             };
             assert_eq!(beside_a_low, expected, "low and not {operator}");
         }
+    }
+
+    fn extreme(of: &str, operator: &str) -> Value {
+        json!({ "of": of, "operator": operator, "value": 70, "window_minutes": 30 })
+    }
+
+    fn extreme_leaf(of: &str, operator: &str) -> Value {
+        json!({ "type": "glucose_extreme", "glucose_extreme": extreme(of, operator) })
+    }
+
+    fn count(operator: &str) -> Value {
+        json!({
+            "reading": { "operator": operator, "value": 70 },
+            "window_minutes": 30,
+            "count": { "operator": ">=", "value": 3 }
+        })
+    }
+
+    #[test]
+    fn a_glucose_extreme_is_directed_only_where_its_end_and_operator_point_the_same_way() {
+        let cases = [
+            ("min", "<", ScopeClass::Low),
+            ("min", "<=", ScopeClass::Low),
+            ("max", ">", ScopeClass::High),
+            ("max", ">=", ScopeClass::High),
+            ("min", ">", ScopeClass::Undirected),
+            ("min", ">=", ScopeClass::Undirected),
+            ("max", "<", ScopeClass::Undirected),
+            ("max", "<=", ScopeClass::Undirected),
+            ("min", "==", ScopeClass::Undirected),
+            ("max", "==", ScopeClass::Undirected),
+        ];
+        for (of, operator, side) in cases {
+            assert_eq!(
+                class("glucose_extreme", extreme(of, operator)),
+                side,
+                "{of} {operator}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_glucose_count_takes_its_side_from_its_reading_whatever_it_tallies() {
+        for (operator, side) in SIDES {
+            assert_eq!(class("glucose_count", count(operator)), side, "{operator}");
+            let by_percent = json!({
+                "reading": { "operator": operator, "value": 70 },
+                "window_minutes": 30,
+                "percent": { "operator": ">=", "value": 50 }
+            });
+            assert_eq!(
+                class("glucose_count", by_percent),
+                side,
+                "percent of {operator}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_glucose_change_is_undirected_whatever_its_sign_and_operator() {
+        for (operator, _) in SIDES {
+            for value in [-30, 0, 30] {
+                let params = json!({ "operator": operator, "value": value, "window_minutes": 15 });
+                assert_eq!(
+                    class("glucose_change", params),
+                    ScopeClass::Undirected,
+                    "{operator} {value}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_directed_windowed_leaf_under_not_is_undirected() {
+        assert_eq!(
+            class("not", json!({ "child": extreme_leaf("min", "<") })),
+            ScopeClass::Undirected
+        );
+        let negated_count = json!({ "type": "glucose_count", "glucose_count": count(">") });
+        assert_eq!(
+            class("not", json!({ "child": negated_count })),
+            ScopeClass::Undirected
+        );
+    }
+
+    #[test]
+    fn a_windowed_leaf_keeps_the_side_of_a_threshold_beside_it_and_makes_a_composite_of_the_other()
+    {
+        let same = json!({
+            "operator": "and",
+            "conditions": [threshold("<"), extreme_leaf("min", "<")]
+        });
+        assert_eq!(class("composite", same), ScopeClass::Low);
+        let opposite = json!({
+            "operator": "or",
+            "conditions": [threshold("<"), extreme_leaf("max", ">")]
+        });
+        assert_eq!(class("composite", opposite), ScopeClass::Composite);
     }
 
     #[test]

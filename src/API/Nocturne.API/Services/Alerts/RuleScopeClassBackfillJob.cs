@@ -5,20 +5,22 @@ using Nocturne.Core.Contracts.Jobs;
 namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
-/// Stamps <c>scope_class</c> on each of a tenant's alert rules, once, for scoped Do Not Disturb
-/// (ADR 0004). Rules created before classification existed default to <c>undirected</c> (all-only)
-/// from the D2 migration; this recomputes each one through <see cref="IRuleScopeClassifier"/> so
-/// scoped <c>lows</c>/<c>highs</c> windows can narrow-match them. The controller computes
-/// <c>scope_class</c> on every create and update, so a tenant's rules stay classified after it.
+/// Recomputes the <c>scope_class</c> of each of a tenant's stored alert rules through
+/// <see cref="IRuleScopeClassifier"/>, for scoped Do Not Disturb (ADR 0004). The controller computes
+/// <c>scope_class</c> on every create and update, so only rules stored before the classifier last
+/// changed differ.
 /// </summary>
 /// <remarks>
+/// A job that returns <see cref="JobOutcome.Done"/> never comes due again for its row, so a change to
+/// what <see cref="IRuleScopeClassifier"/> answers is applied to stored rules by a new
+/// <see cref="JobName"/>, which enrols every tenant afresh.
 /// Only rows whose recomputed class differs from the stored one are written, each distinct class in
 /// one statement through <see cref="IAlertRuleRepository.SetScopeClassAsync"/>.
 /// </remarks>
 /// <seealso cref="RuleScopeClassifier"/>
 internal sealed class RuleScopeClassBackfillJob(ILogger<RuleScopeClassBackfillJob> logger) : IScheduledJob
 {
-    internal const string JobName = "alert-rule-scope-class-backfill";
+    internal const string JobName = "alert-rule-scope-class-backfill-v2";
 
     public string Name => JobName;
 

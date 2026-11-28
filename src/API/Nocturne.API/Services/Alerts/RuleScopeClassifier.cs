@@ -9,8 +9,8 @@ namespace Nocturne.API.Services.Alerts;
 /// Derives a rule's <see cref="RuleScopeClass"/> for scoped Do Not Disturb (ADR 0004)
 /// from its condition type + params, by delegating to the shared Rust engine's
 /// <c>classify</c> (the crate owns the directional-leaf tree walk so the rule never
-/// drifts from how it is evaluated). Computed on rule create/update and backfilled
-/// once for pre-existing rules.
+/// drifts from how it is evaluated). Computed on rule create/update and recomputed
+/// for stored rules by <see cref="RuleScopeClassBackfillJob"/>.
 /// </summary>
 public interface IRuleScopeClassifier
 {

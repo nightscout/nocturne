@@ -531,9 +531,9 @@ can be keyed under for that tree.
 Derives a rule's **scope class** for scoped Do Not Disturb (ADR 0004) from its
 root `condition_type` + payload-only `condition_params` (exactly the
 `alert_rules.condition_params` shape). The .NET host computes and stores this on
-rule create/update (`RuleScopeClassifier`) and backfills existing rules once at
-startup; a scoped `lows`/`highs` mute then silences a rule only when its class
-matches.
+rule create/update (`RuleScopeClassifier`) and reclassifies existing rules
+through a per-tenant ledger job (`RuleScopeClassBackfillJob`); a scoped
+`lows`/`highs` mute then silences a rule only when its class matches.
 
 Request:
 
