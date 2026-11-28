@@ -68,7 +68,10 @@ public class DemoTenantServiceResetTests : IDisposable
             Mock.Of<ITenantCache>(),
             _time,
             _logger.Object, AccountLinkRoutes.Off,
-            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
+            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))),
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            Mock.Of<Nocturne.Core.Contracts.Identity.IPeopleViewRepository>(),
+            Mock.Of<Nocturne.Core.Contracts.Identity.IFlagRuleRepository>());
     }
 
     [Fact]

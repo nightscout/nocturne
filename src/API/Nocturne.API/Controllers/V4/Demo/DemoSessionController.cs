@@ -8,11 +8,12 @@ using Nocturne.API.Services.Demo;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.Demo;
 
 namespace Nocturne.API.Controllers.V4.Demo;
 
 /// <summary>
-/// Signs an anonymous visitor in to the demo tenant as its shared demo member.
+/// Signs an anonymous visitor in to the demo host as its shared demo member, or as the demo clinic's persona.
 /// </summary>
 /// <remarks>
 /// The public share host (<c>{token}.share.{baseDomain}</c>) can only ever serve a
@@ -22,8 +23,8 @@ namespace Nocturne.API.Controllers.V4.Demo;
 /// the visitor is an ordinary authenticated member, and every authorization, RLS and
 /// UI path behaves exactly as it does for a real user, with no demo special cases.
 /// <para>
-/// Only reachable on a tenant whose <c>IsDemo</c> flag is set, which is set solely by
-/// the demo provisioning endpoint. Every other tenant returns 404.
+/// Only reachable on the demo host (<see cref="Nocturne.Core.Models.Demo.DemoTenantKind.Host"/>), which only the demo
+/// provisioning endpoint makes. Every other tenant, the clinic's people included, returns 404.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -55,7 +56,8 @@ public class DemoSessionController : ControllerBase
 
     /// <summary>
     /// Issues a demo session and redirects into the app. Navigating a browser here on
-    /// the demo tenant's host leaves it signed in as the demo member.
+    /// the demo host leaves it signed in as the demo member, or with <paramref name="persona"/>
+    /// <c>clinic</c> as the demo clinic's persona. Any other <paramref name="persona"/> returns 404.
     /// </summary>
     /// <remarks>
     /// A state-changing GET is deliberate: browser navigation from the login page is
@@ -69,9 +71,12 @@ public class DemoSessionController : ControllerBase
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CreateSession(
-        [FromQuery] string? redirect, [FromQuery] string? format, CancellationToken ct)
+        [FromQuery] string? redirect,
+        [FromQuery] string? format,
+        [FromQuery(Name = "as")] string? persona,
+        CancellationToken ct)
     {
-        var subjectId = await ResolveDemoSubjectAsync(ct);
+        var subjectId = await ResolveDemoSubjectAsync(persona, ct);
         if (subjectId is null)
             return NotFound();
 
@@ -99,10 +104,10 @@ public class DemoSessionController : ControllerBase
     }
 
     /// <summary>
-    /// Resolves the demo member subject for the request's tenant, or
+    /// Resolves the subject <paramref name="persona"/> names on the request's tenant, or
     /// <see langword="null"/> when the request is not eligible for a demo session.
     /// </summary>
-    private async Task<Guid?> ResolveDemoSubjectAsync(CancellationToken ct)
+    private async Task<Guid?> ResolveDemoSubjectAsync(string? persona, CancellationToken ct)
     {
         // The share host serves the anonymous read-only view and never honors
         // credentials; minting a session there would hand out more than the link grants.
@@ -116,11 +121,24 @@ public class DemoSessionController : ControllerBase
             return null;
         }
 
-        var subjectId = await _demoTenantService.FindDemoMemberSubjectIdAsync(tenant.TenantId, ct);
-        if (subjectId is null)
+        var host = await _demoTenantService.FindDemoTenantAsync(ct);
+        if (host?.Id != tenant.TenantId)
+        {
+            _logger.LogDebug("Demo session requested on a demo tenant that is not the host");
+            return null;
+        }
+
+        var subjectId = persona switch
+        {
+            null => await _demoTenantService.FindDemoMemberSubjectIdAsync(host.Id, ct),
+            DemoClinic.SessionPersona => await _demoTenantService.FindClinicPersonaAsync(host, ct),
+            _ => null,
+        };
+        if (subjectId is null && persona is null or DemoClinic.SessionPersona)
         {
             _logger.LogWarning(
-                "Demo tenant {TenantId} has no demo member — cannot issue a demo session", tenant.TenantId);
+                "Demo host {TenantId} has no subject for persona {Persona}, so no demo session is issued",
+                tenant.TenantId, persona ?? "member");
         }
 
         return subjectId;

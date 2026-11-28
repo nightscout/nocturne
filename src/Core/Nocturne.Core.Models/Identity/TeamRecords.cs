@@ -529,3 +529,14 @@ public sealed record TeamAccessApprover(Guid TenantId, Guid SubjectId, string Te
 /// </summary>
 public sealed record TeamAccessApproverCredential(
     Guid SubjectId, Authorization.AuthType AuthType, IReadOnlySet<string> Scopes, bool LimitTo24Hours);
+
+/// <summary>
+/// A team the instance keeps itself, with no manager: its groups, one staff member, and the sites it follows. Nobody
+/// approves it, so it is only ever for synthetic sites.
+/// </summary>
+/// <param name="TeamId">The team as provisioned before; null, or one that no longer exists, for a new team.</param>
+public sealed record TeamProvision(
+    Guid? TeamId, string Name, IReadOnlyList<string> Groups, Guid StaffSubjectId, IReadOnlyList<TeamProvisionSite> Sites);
+
+/// <summary>A site a <see cref="TeamProvision"/> follows: the seed role its access gives, and the team's groups the site is in.</summary>
+public sealed record TeamProvisionSite(Guid TenantId, string RoleSlug, bool LimitTo24Hours, IReadOnlyList<string> Groups);

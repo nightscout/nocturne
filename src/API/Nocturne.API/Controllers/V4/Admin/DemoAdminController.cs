@@ -7,6 +7,7 @@ using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Demo;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Repositories;
 
@@ -49,7 +50,8 @@ public class DemoAdminController : ControllerBase
     }
 
     /// <summary>
-    /// Idempotent provisioning: creates the demo tenant if it doesn't exist, otherwise returns current state.
+    /// Idempotent provisioning: creates the demo host if it doesn't exist, then the demo clinic beside it
+    /// (<see cref="DemoTenantService.ProvisionClinicAsync"/>), and returns the host's state.
     /// </summary>
     [HttpPost("provision")]
     [ProducesResponseType(typeof(DemoStateDto), StatusCodes.Status200OK)]
@@ -66,6 +68,7 @@ public class DemoAdminController : ControllerBase
             // reset that failed between wiping and re-seeding.
             await _tenants.UpdateAsync(existing.Id, _demoTenantService.TenantDefaults(existing), ct);
             await _demoTenantService.ConfigureAccessAsync(existing.Id, ct);
+            await _demoTenantService.ProvisionClinicAsync(existing, ct);
             TenantCacheEviction.Evict(cache, existing.Slug, existing.ShareTokenHash);
             return Ok(ToDto((await _tenants.GetAsync(existing.Id, ct))!, alreadyExisted: true));
         }
@@ -76,7 +79,11 @@ public class DemoAdminController : ControllerBase
         var createdTenant = (await _tenants.GetAsync(created.Id, ct))!;
         await _tenants.UpdateAsync(
             created.Id,
-            _demoTenantService.TenantDefaults(createdTenant) with { IsDemo = true, DemoConfig = new DemoConfigEdit() },
+            _demoTenantService.TenantDefaults(createdTenant) with
+            {
+                IsDemo = true,
+                DemoConfig = new DemoConfigEdit(Kind: DemoTenantKind.Host),
+            },
             ct);
 
         // Open the Public subject's share grant and create the demo member visitors are
@@ -88,6 +95,8 @@ public class DemoAdminController : ControllerBase
         // endpoint and the status field the login page keys off, so without this the tenant is
         // non-demo for the cache lifetime: a login page with no passkey and no way in.
         TenantCacheEviction.Evict(cache, created.Slug);
+
+        await _demoTenantService.ProvisionClinicAsync((await _tenants.GetAsync(created.Id, ct))!, ct);
 
         return Ok(ToDto((await _tenants.GetAsync(created.Id, ct))!, alreadyExisted: false));
     }

@@ -1,35 +1,47 @@
+using Microsoft.Extensions.Caching.Memory;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Demo;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Demo;
 
 /// <summary>
-/// Lifecycle operations for the demo tenant: provisioning its access grants and
-/// resetting it back to a freshly provisioned state.
+/// Lifecycle operations for the demo: provisioning the host tenant's access grants and the demo clinic beside it, and
+/// resetting the host back to a freshly provisioned state.
 /// </summary>
 /// <remarks>
-/// The demo tenant carries two access paths. The Public system subject holds every scope in
+/// The demo is a host tenant (<see cref="DemoTenantKind.Host"/>) and the demo clinic (<see cref="DemoClinic"/>): a person
+/// tenant for each archetype (<see cref="DemoTenantKind.Person"/>) and a team that follows the host and each of them, whose
+/// one staff member is the clinic persona. Every visitor session is on the host tenant's own address, as its demo member or, with
+/// <c>as=clinic</c>, as the persona.
+/// <para>
+/// The host carries two access paths. The Public system subject holds every scope in
 /// <see cref="Scope.PublicShareScopes"/> with no history limit, so the tenant's
 /// share link shows the full history of every shareable category. Separately, one non-system
 /// member holds the tenant's own <c>demo-visitor</c> role
 /// (<see cref="Scope.DemoVisitorPermissions"/>, not a seed role) so an anonymous
 /// visitor can be signed in as a real member (see <c>DemoSessionController</c>) and reach the
 /// write and settings surfaces the read-only share host cannot serve.
+/// </para>
 /// <para>
 /// The demo member is identified by its <em>membership</em> row
 /// (<c>tenant_members.username</c>, unique per tenant), never by the subject's global
 /// username: <c>subjects.username</c> carries no unique index and any operator or
 /// invitee can choose one, so a global lookup could bind the demo to an unrelated
-/// account and hand its session to anonymous callers.
+/// account and hand its session to anonymous callers. The clinic persona is found the same way, by what only the demo
+/// wrote: the host's demo config names the clinic's team, and the persona is that team's demo subject on it as staff.
 /// </para>
 /// </remarks>
 public sealed class DemoTenantService
@@ -41,6 +53,9 @@ public sealed class DemoTenantService
     /// view and its edits.
     /// </summary>
     public const string DemoMemberUsername = "demo";
+
+    /// <summary>The advisory lock class a clinic provision holds per host (<see cref="ProvisionClinicAsync"/>).</summary>
+    internal const int ClinicLockClass = 0x4E44_434C;
 
     /// <summary>Display name of the demo member, shown in the app's account menu.</summary>
     public const string DemoMemberName = "Demo Visitor";
@@ -64,6 +79,9 @@ public sealed class DemoTenantService
     private readonly ILogger<DemoTenantService> _logger;
     private readonly IAccountLinkRoute _linkRoute;
     private readonly GrantRevocationService _grantRevocation;
+    private readonly IMemoryCache _tenantRows;
+    private readonly IPeopleViewRepository _views;
+    private readonly IFlagRuleRepository _rules;
 
     /// <param name="factory">For the units of work a reset and a provision run in.</param>
     /// <param name="tenants">Finds the demo tenant and reads its row.</param>
@@ -78,6 +96,9 @@ public sealed class DemoTenantService
     /// <param name="logger">Logs each reset and what provisioning or retiring the demo member found amiss.</param>
     /// <param name="linkRoute">Where an account-link sign-in is routed, for the repositories a provision opens.</param>
     /// <param name="grantRevocation">Evicts the sessions a rewrite of the demo role caps.</param>
+    /// <param name="tenantRows">The cached tenant rows (<see cref="TenantCacheEviction"/>) evicted when a person tenant is made a demo tenant.</param>
+    /// <param name="views">The clinic persona's saved views, seeded at provisioning.</param>
+    /// <param name="rules">The clinic persona's flag rules, seeded at provisioning.</param>
     public DemoTenantService(
         INocturneDbContextFactory factory,
         ITenantRepository tenants,
@@ -91,7 +112,10 @@ public sealed class DemoTenantService
         TimeProvider time,
         ILogger<DemoTenantService> logger,
         IAccountLinkRoute linkRoute,
-        GrantRevocationService grantRevocation)
+        GrantRevocationService grantRevocation,
+        IMemoryCache tenantRows,
+        IPeopleViewRepository views,
+        IFlagRuleRepository rules)
     {
         _factory = factory;
         _tenants = tenants;
@@ -106,10 +130,13 @@ public sealed class DemoTenantService
         _logger = logger;
         _linkRoute = linkRoute;
         _grantRevocation = grantRevocation;
+        _tenantRows = tenantRows;
+        _views = views;
+        _rules = rules;
     }
 
     /// <summary>
-    /// Returns the demo tenant, or <see langword="null"/> when none is provisioned.
+    /// Returns the demo host, or <see langword="null"/> when none is provisioned.
     /// </summary>
     public Task<TenantRecord?> FindDemoTenantAsync(CancellationToken ct = default) =>
         _tenants.FindDemoTenantAsync(ct);
@@ -131,6 +158,132 @@ public sealed class DemoTenantService
     {
         var member = await _members.FindMemberByUsernameAsync(tenantId, DemoMemberUsername, ct);
         return member is { IsDemoSubject: true } ? member.SubjectId : null;
+    }
+
+    /// <summary>
+    /// Resolves the clinic persona behind the host's clinic team, or <see langword="null"/> when the clinic is not
+    /// provisioned. Only ever a demo subject (<see cref="TeamRepository.FindDemoStaffAsync"/>), for the reason
+    /// <see cref="FindDemoMemberSubjectIdAsync"/> gives.
+    /// </summary>
+    public async Task<Guid?> FindClinicPersonaAsync(TenantRecord host, CancellationToken ct = default)
+    {
+        if (host.DemoConfig?.ClinicTeamId is not { } teamId)
+            return null;
+
+        await using var db = await _factory.CreatePlatformAsync(ct);
+        return await TeamRepository.FindDemoStaffAsync(db, teamId, ct);
+    }
+
+    /// <summary>
+    /// Provisions the demo clinic beside <paramref name="host"/>: a person tenant for each archetype, the clinic's team
+    /// following the host and each person, the persona as its staff, and the persona's seeded views and rules
+    /// (<see cref="DemoClinicSeeds"/>). Adds only what is missing, so a second call writes nothing and a call after a
+    /// failed one or a reset of the host repairs what they left.
+    /// </summary>
+    /// <remarks>
+    /// A person's slug held by a tenant that is not a demo person is never adopted: that person is left out and logged.
+    /// The persona joins as staff, never as a manager, and holds no membership but what the team's access gives at the
+    /// demo's own tenants.
+    /// <para>
+    /// Holds the host's <see cref="ClinicLockClass"/> lock throughout. Two first provisions would otherwise each find no
+    /// team, so each would make a team and a persona of its own, and the loser's would keep their access for good; two
+    /// would also each seed the persona's rules, which nothing keeps unique.
+    /// </para>
+    /// </remarks>
+    public async Task ProvisionClinicAsync(TenantRecord host, CancellationToken ct = default)
+    {
+        await using var guard = await _factory.CreatePlatformAsync(ct);
+        await guard.HoldWhileAsync(ClinicLockClass, host.Id, token => ProvisionClinicHeldAsync(host, token), ct);
+    }
+
+    private async Task ProvisionClinicHeldAsync(TenantRecord host, CancellationToken ct)
+    {
+        var people = await EnsurePeopleAsync(host, ct);
+        IReadOnlyList<TeamProvisionSite> sites =
+        [
+            new(host.Id, RoleSeeds.Clinician, LimitTo24Hours: false, DemoClinic.HostGroups),
+            .. people.Select(p => new TeamProvisionSite(p.Tenant.Id, RoleSeeds.Clinician, p.Person.LimitTo24Hours, p.Person.Groups)),
+        ];
+
+        var personaId = await TeamReasonWrites.RunAsync<Guid>(
+            "demo clinic provision",
+            token => DbUnitOfWork.OpenPlatformAsync(_factory, token),
+            async (unit, token) =>
+            {
+                var tenants = new TenantRepository(unit);
+                var clinicTeamId = (await tenants.GetAsync(host.Id, token))?.DemoConfig?.ClinicTeamId;
+                var persona = clinicTeamId is { } existing
+                    ? await TeamRepository.FindDemoStaffAsync(unit.Context, existing, token)
+                    : null;
+                if (persona is null)
+                {
+                    // Anyone can obtain a session for the persona, so it is a demo subject, as the demo member is.
+                    persona = await new SubjectRepository(unit, _linkRoute, _time)
+                        .CreateAsync(new NewSubject(DemoClinic.PersonaName, IsDemoSubject: true), token);
+                    await unit.Context.SaveChangesAsync(token);
+                }
+
+                var (provisioned, changes) = await TeamRepository.LockProvisionAsync(
+                    unit,
+                    new TeamProvision(clinicTeamId, DemoClinic.TeamName, DemoClinic.Groups, persona.Value, sites),
+                    _time.GetUtcNow().UtcDateTime,
+                    token);
+                if (provisioned != clinicTeamId)
+                {
+                    await tenants.UpdateAsync(host.Id, new TenantEdit(DemoConfig: new DemoConfigEdit(ClinicTeamId: provisioned)), token);
+                    await unit.Context.SaveChangesAsync(token);
+                }
+
+                return (persona.Value, changes);
+            },
+            _grantRevocation,
+            _time.GetUtcNow().UtcDateTime,
+            ct);
+
+        await DemoClinicSeeds.SeedAsync(_views, _rules, personaId, ct);
+    }
+
+    /// <summary>
+    /// The person tenant of each archetype, made when its slug is free; one whose slug a tenant other than a demo person
+    /// holds is left out.
+    /// </summary>
+    private async Task<IReadOnlyList<(TenantRecord Tenant, DemoClinicPerson Person)>> EnsurePeopleAsync(
+        TenantRecord host, CancellationToken ct)
+    {
+        var people = new List<(TenantRecord, DemoClinicPerson)>();
+        foreach (var person in DemoClinic.People)
+        {
+            var slug = DemoClinic.SlugOf(host.Slug, person);
+            var tenant = await _tenants.FindBySlugAsync(slug, ct);
+            if (tenant is null)
+            {
+                var created = await _tenantService.CreateWithoutOwnerAsync(slug, person.DisplayName, ct);
+                var createdTenant = (await _tenants.GetAsync(created.Id, ct))!;
+                await _tenants.UpdateAsync(
+                    created.Id,
+                    TenantDefaults(createdTenant) with
+                    {
+                        AllowPublicDocs = null,
+                        IsDemo = true,
+                        DemoConfig = new DemoConfigEdit(Kind: DemoTenantKind.Person),
+                    },
+                    ct);
+                // The resolved tenant context carries IsDemo, which lets a site with no owner past setup.
+                TenantCacheEviction.Evict(_tenantRows, created.Slug);
+                tenant = (await _tenants.GetAsync(created.Id, ct))!;
+            }
+            else if (tenant is not { IsDemo: true, DemoConfig.Kind: DemoTenantKind.Person })
+            {
+                _logger.LogWarning(
+                    "Slug {Slug} of demo clinic person {Person} belongs to a tenant that is not a demo person; leaving that person out",
+                    slug, person.DisplayName);
+                continue;
+            }
+
+            people.Add((tenant, person));
+        }
+
+        return people;
     }
 
     /// <summary>
@@ -247,6 +400,10 @@ public sealed class DemoTenantService
         await _tenantService.SeedAfterResetAsync(tenant.Id, ct);
         await ConfigureAccessAsync(tenant.Id, ct);
 
+        // The wipe took the clinic's access to the host with it, and the persona's membership there.
+        if (tenant.DemoConfig?.ClinicTeamId is not null)
+            await ProvisionClinicAsync((await _tenants.GetAsync(tenant.Id, ct))!, ct);
+
         _logger.LogInformation("Demo tenant {TenantId} reset: data and configuration cleared", tenant.Id);
         return tenant.Id;
     }
@@ -270,7 +427,9 @@ public sealed class DemoTenantService
             tenant.DemoConfig?.AccessMode ?? "open",
             tenant.DemoConfig?.BackfillDays ?? 90,
             tenant.DemoConfig?.IntervalMinutes ?? 5,
-            tenant.DemoConfig?.ResetIntervalMinutes ?? 0));
+            tenant.DemoConfig?.ResetIntervalMinutes ?? 0,
+            DemoTenantKind.Host,
+            tenant.DemoConfig?.ClinicTeamId));
 
     /// <summary>
     /// The tenant-row state a demo tenant is expected to hold. Applied at provisioning and

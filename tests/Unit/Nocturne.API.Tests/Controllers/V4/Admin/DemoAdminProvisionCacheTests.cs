@@ -11,6 +11,7 @@ using Nocturne.API.Services.Demo;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -154,18 +155,27 @@ public class DemoAdminProvisionCacheTests : IDisposable
 
         var tenantService = new Mock<ITenantService>();
         tenantService
-            .Setup(t => t.CreateWithoutOwnerAsync(DemoSlug, It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() =>
+            .Setup(t => t.CreateWithoutOwnerAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string slug, string displayName, CancellationToken _) =>
             {
                 using var db = _db.CreateContext();
                 var tenant = new TenantEntity
                 {
                     Id = Guid.CreateVersion7(),
-                    Slug = DemoSlug,
-                    DisplayName = "Nocturne Demo",
+                    Slug = slug,
+                    DisplayName = displayName,
                     IsActive = true,
                 };
                 db.Add(tenant);
+                db.TenantRoles.Add(new TenantRoleEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = tenant.Id,
+                    Name = "Clinician",
+                    Slug = RoleSeeds.Clinician,
+                    Permissions = [.. RoleSeeds.Permissions[RoleSeeds.Clinician]],
+                    IsSystem = true,
+                });
                 db.SaveChanges();
                 return new TenantCreatedDto(
                     tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, DateTime.UtcNow);
@@ -180,7 +190,10 @@ public class DemoAdminProvisionCacheTests : IDisposable
             Mock.Of<ITenantCache>(),
             TimeProvider.System,
             new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off,
-            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
+            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))),
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            new PeopleViewRepository(dbFactory.Object.AsNocturneFactory()),
+            new FlagRuleRepository(dbFactory.Object.AsNocturneFactory()));
 
         return new DemoAdminController(
             tenantService.Object, demoTenantService,

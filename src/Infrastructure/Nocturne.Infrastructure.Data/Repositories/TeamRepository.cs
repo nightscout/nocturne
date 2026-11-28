@@ -126,13 +126,7 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
     public virtual async Task<TeamSummary> CreateAsync(Guid creatorSubjectId, string name, CancellationToken ct)
     {
         await using var db = await contexts.CreatePlatformAsync(ct);
-        var team = new TeamEntity
-        {
-            Id = Guid.CreateVersion7(),
-            Name = name,
-            CreatedBySubjectId = creatorSubjectId,
-        };
-        db.Teams.Add(team);
+        var team = StageTeam(db, name, creatorSubjectId);
         db.TeamMembers.Add(new TeamMemberEntity
         {
             Id = Guid.CreateVersion7(),
@@ -140,10 +134,21 @@ public partial class TeamRepository(INocturneDbContextFactory contexts) : ITeamR
             SubjectId = creatorSubjectId,
             Kind = TeamMemberKind.Manager,
         });
-        TeamAudit.StageCreated(db, team.Id, name);
         TeamAudit.StageManagerAdded(db, team.Id, creatorSubjectId, inviteId: null);
         await db.SaveChangesAsync(ct);
         return new TeamSummary(team.Id, team.Name, TeamMemberKind.Manager);
+    }
+
+    /// <summary>
+    /// Stages a new team with no member, and its row in the team's history naming who made it, or no one for a team the
+    /// instance provisioned. The caller saves.
+    /// </summary>
+    private static TeamEntity StageTeam(NocturneDbContext db, string name, Guid? creatorSubjectId)
+    {
+        var team = new TeamEntity { Id = Guid.CreateVersion7(), Name = name, CreatedBySubjectId = creatorSubjectId };
+        db.Teams.Add(team);
+        TeamAudit.StageCreated(db, team.Id, name);
+        return team;
     }
 
     /// <inheritdoc/>

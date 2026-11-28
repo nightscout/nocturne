@@ -51,7 +51,11 @@ public interface ITenantRepository
     /// <summary>Whether any tenant other than the demo exists.</summary>
     Task<bool> AnyNonDemoAsync(CancellationToken ct);
 
-    /// <summary>The demo tenant, with its demo configuration; null when none is provisioned.</summary>
+    /// <summary>
+    /// The demo host (<see cref="Nocturne.Core.Models.Demo.DemoTenantKind.Host"/>), with its demo configuration; null when
+    /// none is provisioned. A demo tenant with no configuration counts as the host. Never one of the
+    /// clinic's people.
+    /// </summary>
     Task<TenantRecord?> FindDemoTenantAsync(CancellationToken ct);
 
     /// <summary>Every tenant, or with <paramref name="activeOnly"/> the active ones, oldest first.</summary>

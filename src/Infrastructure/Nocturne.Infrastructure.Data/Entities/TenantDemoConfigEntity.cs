@@ -43,4 +43,16 @@ public class TenantDemoConfigEntity
     /// <summary>Interval between periodic resets (minutes, 0 = disabled).</summary>
     [Column("reset_interval_minutes")]
     public int ResetIntervalMinutes { get; set; }
+
+    /// <summary>A <see cref="Nocturne.Core.Models.Demo.DemoTenantKind"/>.</summary>
+    [Required]
+    [MaxLength(16)]
+    [Column("kind")]
+    public string Kind { get; set; } = Nocturne.Core.Models.Demo.DemoTenantKind.Host;
+
+    /// <summary>On the host, the demo clinic's team, by which provisioning finds the clinic and its persona again.</summary>
+    [Column("clinic_team_id")]
+    public Guid? ClinicTeamId { get; set; }
+
+    public TeamEntity? ClinicTeam { get; set; }
 }
