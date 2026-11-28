@@ -65,25 +65,7 @@ public sealed class TimezoneTimeline
     /// value is the local clock reading dressed up as UTC.
     /// </param>
     /// <returns>The true UTC instant (<see cref="DateTimeKind.Utc"/>).</returns>
-    public DateTime ToUtc(DateTime fakeUtc)
-    {
-        var wall = DateTime.SpecifyKind(fakeUtc, DateTimeKind.Unspecified);
-
-        var entry = ResolveEntry(wall);
-        if (DerivedSegmentForWall(wall, entry) is { } segment)
-            return DateTime.SpecifyKind(wall.AddMinutes(-segment.OffsetMinutes), DateTimeKind.Utc);
-
-        if (entry is null)
-        {
-            if (_fallbackOffsetHours is { } offset)
-                return DateTime.SpecifyKind(wall.AddHours(-offset), DateTimeKind.Utc);
-
-            return DateTime.SpecifyKind(wall, DateTimeKind.Utc);
-        }
-
-        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(entry.Timezone);
-        return TimeZoneHelper.LocalToUtc(wall, tz);
-    }
+    public DateTime ToUtc(DateTime fakeUtc) => Resolve(fakeUtc).Utc;
 
     /// <summary>
     /// Returns the IANA/Windows timezone id in effect at the given local wall-clock instant, or null
@@ -130,16 +112,47 @@ public sealed class TimezoneTimeline
     /// <remarks>
     /// Entry lookup happens in wall-clock space (same approximation as <see cref="ToLocal"/>): the
     /// result can be off within hours of a relocation entry's boundary, which is acceptable for
-    /// deviation gating at half-hour granularity.
+    /// deviation gating at half-hour granularity. A record's own offset comes from
+    /// <see cref="Resolve"/>, never from here.
     /// </remarks>
     public int OffsetMinutesAtUtc(DateTime utc)
     {
         var entry = ResolveEntry(DateTime.SpecifyKind(utc, DateTimeKind.Unspecified));
         if (entry is null)
-            return _fallbackOffsetHours is { } fallback ? (int)Math.Round(fallback * 60) : 0;
+            return FallbackOffsetMinutes;
 
         var tz = TimeZoneHelper.GetTimeZoneInfoFromId(entry.Timezone);
         return (int)tz.GetUtcOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).TotalMinutes;
+    }
+
+    private int FallbackOffsetMinutes => _fallbackOffsetHours is { } fallback ? (int)Math.Round(fallback * 60) : 0;
+
+    /// <summary>
+    /// Converts a fake-UTC timestamp to true UTC and returns the offset it was converted at, from
+    /// the one resolution <see cref="ToUtc"/> uses, so a record's <c>UtcOffset</c> is the offset its
+    /// time was read with.
+    /// </summary>
+    /// <remarks>
+    /// Where the zone skips a time clocks never showed, the offset is that of the instant returned,
+    /// so adding it to that instant gives a time the zone did show.
+    /// </remarks>
+    public TimelineInstant Resolve(DateTime fakeUtc)
+    {
+        var wall = DateTime.SpecifyKind(fakeUtc, DateTimeKind.Unspecified);
+
+        var entry = ResolveEntry(wall);
+        if (DerivedSegmentForWall(wall, entry) is { } segment)
+            return new TimelineInstant(DateTime.SpecifyKind(wall.AddMinutes(-segment.OffsetMinutes), DateTimeKind.Utc), segment.OffsetMinutes);
+
+        if (entry is null)
+        {
+            var utc = _fallbackOffsetHours is { } offset ? wall.AddHours(-offset) : wall;
+            return new TimelineInstant(DateTime.SpecifyKind(utc, DateTimeKind.Utc), FallbackOffsetMinutes);
+        }
+
+        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(entry.Timezone);
+        var zoned = TimeZoneHelper.LocalToUtc(wall, tz);
+        return new TimelineInstant(zoned, (int)tz.GetUtcOffset(zoned).TotalMinutes);
     }
 
     /// <summary>

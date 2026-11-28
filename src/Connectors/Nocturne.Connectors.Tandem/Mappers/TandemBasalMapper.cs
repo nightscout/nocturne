@@ -39,8 +39,8 @@ public sealed class TandemBasalMapper(ILogger logger, TandemTimeResolver time)
         IEnumerable<TandemPumpEvent> events, DateTime? fetchedThroughUtc, bool ignoreZeroUnitBasal)
     {
         var ordered = events
-            .Select(ev => (Event: ev, Start: _time.ToUtc(ev.RawTimestampSeconds)))
-            .OrderBy(x => x.Start)
+            .Select(ev => (Event: ev, At: _time.Resolve(ev.RawTimestampSeconds)))
+            .OrderBy(x => x.At.Utc)
             .ToList();
 
         var records = new List<TempBasal>();
@@ -48,13 +48,13 @@ public sealed class TandemBasalMapper(ILogger logger, TandemTimeResolver time)
 
         for (var i = 0; i < ordered.Count; i++)
         {
-            var (ev, start) = ordered[i];
+            var (ev, (start, utcOffset)) = ordered[i];
 
             var rate = TandemMapHelpers.MilliunitsToUnits(ev.Num("Commanded Rate") ?? 0);
             if (ignoreZeroUnitBasal && rate < 0.01)
                 continue;
 
-            var end = i < ordered.Count - 1 ? ordered[i + 1].Start : fetchedThroughUtc;
+            var end = i < ordered.Count - 1 ? ordered[i + 1].At.Utc : fetchedThroughUtc;
             if (end is null)
             {
                 unclosedFrom = start;
@@ -65,7 +65,7 @@ public sealed class TandemBasalMapper(ILogger logger, TandemTimeResolver time)
             {
                 StartTimestamp = start,
                 EndTimestamp = end > start ? end : null,
-                UtcOffset = _time.OffsetMinutesAt(start),
+                UtcOffset = utcOffset,
                 Device = TandemMapHelpers.Source,
                 LegacyId = LegacyIds.Of("basal", ev.SeqNum),
                 PumpRecordId = ev.SeqNum.ToString(),

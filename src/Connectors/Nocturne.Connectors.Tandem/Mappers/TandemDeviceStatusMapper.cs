@@ -25,7 +25,7 @@ public sealed class TandemDeviceStatusMapper(ILogger logger, TandemTimeResolver 
         if (latest == null)
             return [];
 
-        var utc = _time.ToUtc(latest.RawTimestampSeconds);
+        var (utc, utcOffset) = _time.Resolve(latest.RawTimestampSeconds);
         var batteryPercent = BatteryChargePercent(latest);
         var voltage = (latest.Num("batteryLipoMilliVolts") ?? 0) / 1000.0;
 
@@ -34,7 +34,7 @@ public sealed class TandemDeviceStatusMapper(ILogger logger, TandemTimeResolver 
             Device = TandemMapHelpers.Source,
             Mills = utc.ToMills(),
             CreatedAt = utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
-            UtcOffset = _time.OffsetMinutesAt(utc),
+            UtcOffset = utcOffset,
             Pump = new PumpStatus
             {
                 Manufacturer = "Tandem",

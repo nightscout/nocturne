@@ -55,7 +55,7 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
             group.TryGetValue("LID_BOLUS_REQUESTED_MSG3", out var msg3);
             group.TryGetValue("LID_BOLEX_COMPLETED", out var bolex);
 
-            var timestamp = _time.ToUtc(completed.RawTimestampSeconds);
+            var (timestamp, utcOffset) = _time.Resolve(completed.RawTimestampSeconds);
             var correlationId = Guid.CreateVersion7();
 
             // The extended (BOLEX) completion carries the extended portion's own delivered and
@@ -84,7 +84,7 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
             var bolus = new Bolus
             {
                 Timestamp = timestamp,
-                UtcOffset = _time.OffsetMinutesAt(timestamp),
+                UtcOffset = utcOffset,
                 Device = TandemMapHelpers.Source,
                 CorrelationId = correlationId,
                 SyncIdentifier = LegacyIds.Of("bolus", bolusId),
@@ -106,7 +106,7 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
                 result.CarbIntakes.Add(new CarbIntake
                 {
                     Timestamp = timestamp,
-                    UtcOffset = _time.OffsetMinutesAt(timestamp),
+                    UtcOffset = utcOffset,
                     Device = TandemMapHelpers.Source,
                     CorrelationId = correlationId,
                     SyncIdentifier = LegacyIds.Of("carb", bolusId),
@@ -120,7 +120,7 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
                 result.BolusCalculations.Add(new BolusCalculation
                 {
                     Timestamp = timestamp,
-                    UtcOffset = _time.OffsetMinutesAt(timestamp),
+                    UtcOffset = utcOffset,
                     Device = TandemMapHelpers.Source,
                     CorrelationId = correlationId,
                     LegacyId = LegacyIds.Of("boluscalc", bolusId),
