@@ -63,6 +63,9 @@ public class TenantRepositoryTests : IDisposable
     {
         (await Tenants().FindSoleTenantAsync(CancellationToken.None))!.Id.Should().Be(_tenant);
 
+        var person = await CreateAsync(new NewTenant("demo-john", "John", IsDemo: true,
+            DemoConfig: new DemoTenantConfig(null, null, "open", 30, 5, 0, Nocturne.Core.Models.Demo.DemoTenantKind.Person)));
+        (await Tenants().FindDemoTenantAsync(CancellationToken.None)).Should().BeNull("a person of the clinic is not the demo host");
         var demo = await CreateAsync(new NewTenant("demo", "Demo", IsDemo: true));
         var inactive = await CreateAsync(new NewTenant("old", "Old", IsActive: false));
         (await Tenants().FindSoleTenantAsync(CancellationToken.None))!.Id.Should().Be(_tenant, "a demo and an inactive tenant are not counted");
@@ -72,8 +75,8 @@ public class TenantRepositoryTests : IDisposable
         await CreateAsync(new NewTenant("second", "Second"));
         (await Tenants().FindSoleTenantAsync(CancellationToken.None)).Should().BeNull("two active tenants are ambiguous");
         (await Tenants().ListNonDemoAsync(2, CancellationToken.None)).Select(t => t.Slug).Should().Equal("first", "old");
-        (await Tenants().ListAsync(activeOnly: true, CancellationToken.None)).Select(t => t.Slug).Should().Equal("first", "demo", "second");
-        (await Tenants().ListIdsAsync(activeOnly: false, CancellationToken.None)).Should().Equal(_tenant, demo, inactive, (await Tenants().FindBySlugAsync("second", CancellationToken.None))!.Id);
+        (await Tenants().ListAsync(activeOnly: true, CancellationToken.None)).Select(t => t.Slug).Should().Equal("first", "demo-john", "demo", "second");
+        (await Tenants().ListIdsAsync(activeOnly: false, CancellationToken.None)).Should().Equal(_tenant, person, demo, inactive, (await Tenants().FindBySlugAsync("second", CancellationToken.None))!.Id);
     }
 
     [Fact]
@@ -94,7 +97,7 @@ public class TenantRepositoryTests : IDisposable
     [Fact]
     public async Task TheDemoConfigurationIsStoredWithANewTenantAndCreatedOrEditedByAnEdit()
     {
-        var reset = new DemoTenantConfig(Now, Now, "readonly", 7, 9, 30);
+        var reset = new DemoTenantConfig(Now, Now, "readonly", 7, 9, 30, Nocturne.Core.Models.Demo.DemoTenantKind.Host);
         var created = await CreateAsync(new NewTenant("demo", "Demo", IsDemo: true, DemoConfig: reset));
         (await Tenants().GetAsync(created, CancellationToken.None))!.DemoConfig.Should().BeEquivalentTo(reset);
 

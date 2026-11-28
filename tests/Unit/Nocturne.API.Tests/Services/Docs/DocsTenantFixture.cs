@@ -134,7 +134,10 @@ internal sealed class DocsTenantFixture : IDisposable
             Mock.Of<ITenantCache>(),
             TimeProvider.System,
             new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off,
-            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
+            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))),
+            new MemoryCache(new MemoryCacheOptions()),
+            Mock.Of<Nocturne.Core.Contracts.Identity.IPeopleViewRepository>(),
+            Mock.Of<Nocturne.Core.Contracts.Identity.IFlagRuleRepository>());
 
         return new ScalarAuthProvider(
             clients ?? new OAuthClientRepository(dbFactory.Object.AsNocturneFactory()),

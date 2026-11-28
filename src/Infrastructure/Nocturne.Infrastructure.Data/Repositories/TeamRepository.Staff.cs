@@ -116,30 +116,43 @@ public partial class TeamRepository
             return (new TeamInviteAcceptance(id, TeamInviteRefusal.AlreadyMember), null);
 
         invite.UseCount++;
+        var sites = await StageStaffAsync(db, id, subjectId, NarrowingOf(invite), invite.Id, ct);
+        await db.SaveChangesAsync(ct);
+        return (new TeamInviteAcceptance(id, null), (await TeamReasonChanges.SyncAsync(
+            unit, sites.Select(site => (site, subjectId)), now, ct)).WithStaffNotices(id, sites));
+    }
+
+    /// <summary>
+    /// Stages <paramref name="subjectId"/> as staff of the team, narrowed by <paramref name="narrowing"/>, with a
+    /// <c>team_site_staff</c> row for each site the team has access to, and their row in the team's history with the
+    /// staff invite they joined by, or none for staff the instance provisioned. The caller saves, and syncs the
+    /// subject's team reasons at the sites returned.
+    /// </summary>
+    private static async Task<IReadOnlyList<Guid>> StageStaffAsync(
+        NocturneDbContext db, Guid teamId, Guid subjectId, TeamStaffNarrowing narrowing, Guid? inviteId, CancellationToken ct)
+    {
         var member = new TeamMemberEntity
         {
             Id = Guid.CreateVersion7(),
-            TeamId = id,
+            TeamId = teamId,
             SubjectId = subjectId,
             Kind = TeamMemberKind.Staff,
-            RoleCeilingSlug = invite.RoleCeilingSlug,
-            LimitTo24Hours = invite.LimitTo24Hours,
-            EndsAt = invite.StaffEndsAt,
-            CreatedFromStaffInviteId = invite.Id,
+            RoleCeilingSlug = narrowing.RoleCeilingSlug,
+            LimitTo24Hours = narrowing.LimitTo24Hours,
+            EndsAt = narrowing.EndsAt,
+            CreatedFromStaffInviteId = inviteId,
         };
         db.TeamMembers.Add(member);
 
         var accesses = await db.TeamTenantAccess.AsNoTracking()
-            .Where(a => a.TeamId == id)
+            .Where(a => a.TeamId == teamId)
             .Select(a => new { a.Id, a.TenantId, a.StaffRule })
             .ToListAsync(ct);
         foreach (var access in accesses)
             db.TeamSiteStaff.Add(await NewSiteStaffAsync(db, access.Id, member.Id, subjectId, access.StaffRule, ct));
 
-        TeamAudit.StageStaffAdded(db, id, subjectId, invite.Id);
-        await db.SaveChangesAsync(ct);
-        return (new TeamInviteAcceptance(id, null), (await TeamReasonChanges.SyncAsync(
-            unit, accesses.Select(a => (a.TenantId, subjectId)), now, ct)).WithStaffNotices(id, accesses.Select(a => a.TenantId)));
+        TeamAudit.StageStaffAdded(db, teamId, subjectId, inviteId);
+        return accesses.Select(a => a.TenantId).ToList();
     }
 
     /// <summary>

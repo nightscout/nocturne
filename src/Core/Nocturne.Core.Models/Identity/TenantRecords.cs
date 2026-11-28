@@ -38,14 +38,18 @@ public sealed record TenantRecord(
     DemoTenantConfig? DemoConfig,
     DateTime? SlugChangedAt = null);
 
-/// <summary>The demo tenant's operational state, which survives its resets.</summary>
+/// <summary>A demo tenant's operational state, which survives its resets.</summary>
+/// <param name="Kind">A <see cref="Demo.DemoTenantKind"/>.</param>
+/// <param name="ClinicTeamId">On the host, the demo clinic's team; null on a person and before the clinic is provisioned.</param>
 public sealed record DemoTenantConfig(
     DateTime? NextResetAt,
     DateTime? LastResetAt,
     string AccessMode,
     int BackfillDays,
     int IntervalMinutes,
-    int ResetIntervalMinutes);
+    int ResetIntervalMinutes,
+    string Kind,
+    Guid? ClinicTeamId = null);
 
 /// <summary>
 /// A tenant to store. <paramref name="Id"/> is given when a reset re-inserts a tenant under its old id;
@@ -86,7 +90,11 @@ public sealed record TenantEdit(
 /// Changes to a tenant's demo configuration, stored with the tenant edit that carries it; the row
 /// is created with its defaults when the tenant has none, and a null member leaves its column as it is.
 /// </summary>
-public sealed record DemoConfigEdit(DateTime? NextResetAt = null, DateTime? LastResetAt = null);
+public sealed record DemoConfigEdit(
+    DateTime? NextResetAt = null,
+    DateTime? LastResetAt = null,
+    string? Kind = null,
+    Guid? ClinicTeamId = null);
 
 /// <summary>The public share token's three columns, written together; all null switches the link off.</summary>
 public sealed record ShareTokenState(string? Hash, string? Encrypted, DateTime? SetAt)

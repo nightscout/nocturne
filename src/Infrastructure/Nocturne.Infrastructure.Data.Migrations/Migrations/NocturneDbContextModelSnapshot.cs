@@ -6650,9 +6650,20 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("backfill_days");
 
+                    b.Property<Guid?>("ClinicTeamId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("clinic_team_id");
+
                     b.Property<int>("IntervalMinutes")
                         .HasColumnType("integer")
                         .HasColumnName("interval_minutes");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("host")
+                        .HasColumnName("kind");
 
                     b.Property<DateTime?>("LastResetAt")
                         .HasColumnType("timestamp with time zone")
@@ -6668,7 +6679,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasKey("TenantId");
 
-                    b.ToTable("tenant_demo_config");
+                    b.HasIndex("ClinicTeamId")
+                        .HasDatabaseName("ix_tenant_demo_config_clinic_team_id");
+
+                    b.ToTable("tenant_demo_config", t =>
+                        {
+                            t.HasCheckConstraint("ck_tenant_demo_config_kind", "kind IN ('host', 'person')");
+                        });
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantEntity", b =>
@@ -12932,11 +12949,18 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TenantDemoConfigEntity", b =>
                 {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TeamEntity", "ClinicTeam")
+                        .WithMany()
+                        .HasForeignKey("ClinicTeamId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", "Tenant")
                         .WithOne("DemoConfig")
                         .HasForeignKey("Nocturne.Infrastructure.Data.Entities.TenantDemoConfigEntity", "TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("ClinicTeam");
 
                     b.Navigation("Tenant");
                 });

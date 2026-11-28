@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Demo;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -76,6 +77,8 @@ public class TenantRepository : ITenantRepository
                 BackfillDays = demo.BackfillDays,
                 IntervalMinutes = demo.IntervalMinutes,
                 ResetIntervalMinutes = demo.ResetIntervalMinutes,
+                Kind = demo.Kind,
+                ClinicTeamId = demo.ClinicTeamId,
             });
         }
 
@@ -162,7 +165,8 @@ public class TenantRepository : ITenantRepository
     public virtual async Task<TenantRecord?> FindDemoTenantAsync(CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
-        return ToRecord(await Tenants(lease.Context).FirstOrDefaultAsync(t => t.IsDemo, ct));
+        return ToRecord(await Tenants(lease.Context)
+            .FirstOrDefaultAsync(t => t.IsDemo && (t.DemoConfig == null || t.DemoConfig.Kind == DemoTenantKind.Host), ct));
     }
 
     /// <inheritdoc/>
@@ -233,6 +237,10 @@ public class TenantRepository : ITenantRepository
                 config.NextResetAt = next;
             if (demoEdit.LastResetAt is { } last)
                 config.LastResetAt = last;
+            if (demoEdit.Kind is not null)
+                config.Kind = demoEdit.Kind;
+            if (demoEdit.ClinicTeamId is { } clinicTeam)
+                config.ClinicTeamId = clinicTeam;
         }
 
         await SaveAsync(lease.Context, ct);
@@ -307,6 +315,8 @@ public class TenantRepository : ITenantRepository
                 tenant.DemoConfig.AccessMode,
                 tenant.DemoConfig.BackfillDays,
                 tenant.DemoConfig.IntervalMinutes,
-                tenant.DemoConfig.ResetIntervalMinutes),
+                tenant.DemoConfig.ResetIntervalMinutes,
+                tenant.DemoConfig.Kind,
+                tenant.DemoConfig.ClinicTeamId),
             tenant.SlugChangedAt);
 }

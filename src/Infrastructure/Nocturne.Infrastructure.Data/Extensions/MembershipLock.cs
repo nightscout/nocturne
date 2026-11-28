@@ -43,7 +43,9 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// by the manager lock; a group change and a site's stop of one person by the site's team access lock. A
 /// site's stop of a team's access, the team's deletion and a staff member's removal take the team's
 /// manager lock and the team access lock of each site they touch; they only remove reasons and insert no
-/// row naming a subject. The startup sync takes one subject's row, then one site's team access lock. A
+/// row naming a subject. The demo clinic's provision (<see cref="Repositories.TeamRepository.LockProvisionAsync"/>)
+/// takes its staff member's row, the team's manager lock and the team access lock of every site in ascending
+/// tenant id, then syncs the member's team reasons there. The startup sync takes one subject's row, then one site's team access lock. A
 /// write that can change whether a subject owns a site (a role change, a step-down, a removal, an access
 /// end, an invite accepted, a request or an access request approved, a member added by the platform)
 /// takes the subject's row, the owners lock and the team access lock, then syncs the subject's team

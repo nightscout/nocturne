@@ -139,15 +139,33 @@ public partial class TeamRepository
             return (Refused(narrowing), null);
 
         link.UseCount++;
+        var teamName = await db.Teams.Where(t => t.Id == id).Select(t => t.Name).FirstAsync(ct);
+        var access = await StageAccessAsync(
+            db, id, teamName, grant, roles.Select(r => (r.Id, r.Slug)).ToList(), approver.SubjectId, link.Id, ct);
+        await db.SaveChangesAsync(ct);
+        return (new TeamAccessApproval(access.Id, null), (await TeamReasonChanges.SyncAsync(
+            unit, staffSubjects.Select(subjectId => (grant.TenantId, subjectId)), now, ct)).WithStaffNotices(id, [grant.TenantId]));
+    }
+
+    /// <summary>
+    /// Stages the team's access to <see cref="TeamAccessGrant.TenantId"/> as <paramref name="grant"/> gives it, with
+    /// <paramref name="roles"/>, a <c>team_site_staff</c> row for each of the team's staff, and its row in the site's
+    /// history with the owner who approved it and the link it was approved from, or neither for access the instance
+    /// provisioned. The caller saves, and syncs the staff's team reasons at the site.
+    /// </summary>
+    private static async Task<TeamTenantAccessEntity> StageAccessAsync(
+        NocturneDbContext db, Guid teamId, string teamName, TeamAccessGrant grant, IReadOnlyList<(Guid Id, string Slug)> roles,
+        Guid? approverSubjectId, Guid? linkId, CancellationToken ct)
+    {
         var access = new TeamTenantAccessEntity
         {
             Id = Guid.CreateVersion7(),
-            TeamId = id,
+            TeamId = teamId,
             TenantId = grant.TenantId,
             LimitTo24Hours = grant.LimitTo24Hours,
             AccessEndsAt = grant.AccessEndsAt,
-            ApprovedBySubjectId = approver.SubjectId,
-            CreatedFromLinkId = link.Id,
+            ApprovedBySubjectId = approverSubjectId,
+            CreatedFromLinkId = linkId,
             StaffRule = grant.StaffRule,
             AccessRoles = roles.Select(role => new TeamTenantAccessRoleEntity
             {
@@ -158,17 +176,14 @@ public partial class TeamRepository
         db.TeamTenantAccess.Add(access);
 
         var staff = await db.TeamMembers.AsNoTracking()
-            .Where(m => m.TeamId == id && m.Kind == TeamMemberKind.Staff)
+            .Where(m => m.TeamId == teamId && m.Kind == TeamMemberKind.Staff)
             .Select(m => new { m.Id, m.SubjectId })
             .ToListAsync(ct);
         foreach (var member in staff)
             db.TeamSiteStaff.Add(await NewSiteStaffAsync(db, access.Id, member.Id, member.SubjectId, grant.StaffRule, ct));
 
-        var teamName = await db.Teams.Where(t => t.Id == id).Select(t => t.Name).FirstAsync(ct);
         TeamAudit.StageAccessGiven(db, access, teamName, roles.Select(r => r.Slug));
-        await db.SaveChangesAsync(ct);
-        return (new TeamAccessApproval(access.Id, null), (await TeamReasonChanges.SyncAsync(
-            unit, staffSubjects.Select(subjectId => (grant.TenantId, subjectId)), now, ct)).WithStaffNotices(id, [grant.TenantId]));
+        return access;
     }
 
     /// <summary>

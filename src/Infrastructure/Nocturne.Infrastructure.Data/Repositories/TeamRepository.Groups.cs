@@ -35,11 +35,9 @@ public partial class TeamRepository
             if (await NameTakenAsync(db, teamId, null, name, token))
                 return new TeamGroupCreation(TeamGroupChange.NameTaken, null);
 
-            var group = new TeamGroupEntity { Id = Guid.CreateVersion7(), TeamId = teamId, Name = name };
-            db.TeamGroups.Add(group);
-            TeamAudit.StageGroupCreated(db, teamId, group.Id, name);
+            var groupId = StageGroup(db, teamId, name);
             await db.SaveChangesAsync(token);
-            return new TeamGroupCreation(TeamGroupChange.Changed, group.Id);
+            return new TeamGroupCreation(TeamGroupChange.Changed, groupId);
         }, ct);
 
     /// <inheritdoc/>
@@ -90,7 +88,7 @@ public partial class TeamRepository
 
         await db.LockTeamAccessAsync(tenantId, ct);
         if (add)
-            db.TeamGroupPeople.Add(new TeamGroupPersonEntity { Id = Guid.CreateVersion7(), TeamGroupId = groupId, TenantId = tenantId });
+            StageGroupPerson(db, groupId, tenantId);
         else
             db.TeamGroupPeople.Remove(place!);
 
@@ -137,10 +135,7 @@ public partial class TeamRepository
             await db.LockTeamAccessAsync(site, ct);
 
         if (add)
-            db.TeamGroupStaff.Add(new TeamGroupStaffEntity
-            {
-                Id = Guid.CreateVersion7(), TeamGroupId = groupId, TeamId = teamId, TeamMemberId = member.Id,
-            });
+            StageGroupStaff(db, teamId, groupId, member.Id);
         else
             db.TeamGroupStaff.Remove(place!);
 
@@ -225,6 +220,24 @@ public partial class TeamRepository
         await db.SaveChangesAsync(ct);
         return (TeamGroupChange.Changed, await SyncGroupAsync(unit, teamId, sites, staff, now, ct));
     }
+
+    /// <summary>Stages an empty group named <paramref name="name"/> in the team, and its row in the team's history. The caller saves.</summary>
+    private static Guid StageGroup(NocturneDbContext db, Guid teamId, string name)
+    {
+        var group = new TeamGroupEntity { Id = Guid.CreateVersion7(), TeamId = teamId, Name = name };
+        db.TeamGroups.Add(group);
+        TeamAudit.StageGroupCreated(db, teamId, group.Id, name);
+        return group.Id;
+    }
+
+    private static void StageGroupPerson(NocturneDbContext db, Guid groupId, Guid tenantId) =>
+        db.TeamGroupPeople.Add(new TeamGroupPersonEntity { Id = Guid.CreateVersion7(), TeamGroupId = groupId, TenantId = tenantId });
+
+    private static void StageGroupStaff(NocturneDbContext db, Guid teamId, Guid groupId, Guid teamMemberId) =>
+        db.TeamGroupStaff.Add(new TeamGroupStaffEntity
+        {
+            Id = Guid.CreateVersion7(), TeamGroupId = groupId, TeamId = teamId, TeamMemberId = teamMemberId,
+        });
 
     /// <summary>A group read under its locks; <c>Group</c> is null when the caller may not change it, and then <c>Team</c> may be too.</summary>
     private sealed record LockedGroup(TeamEntity? Team, TeamGroupEntity? Group, IReadOnlyList<Guid> Staff);

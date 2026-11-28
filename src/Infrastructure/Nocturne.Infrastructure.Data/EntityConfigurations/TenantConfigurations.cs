@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Nocturne.Core.Models.Demo;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -39,6 +40,31 @@ internal sealed class TenantEntityConfiguration : IEntityTypeConfiguration<Tenan
         entity
             .HasIndex(t => t.SetupOwnerSubjectId)
             .HasDatabaseName("ix_tenants_setup_owner_subject_id");
+    }
+}
+
+internal sealed class TenantDemoConfigEntityConfiguration : IEntityTypeConfiguration<TenantDemoConfigEntity>
+{
+    public void Configure(EntityTypeBuilder<TenantDemoConfigEntity> entity)
+    {
+        // A row written before demo tenants had kinds belongs to the one demo there was: the host.
+        entity.Property(c => c.Kind)
+            .HasDefaultValue(DemoTenantKind.Host)
+            .ValueGeneratedNever();
+
+        entity.ToTable(t => t.HasCheckConstraint(
+            "ck_tenant_demo_config_kind",
+            $"kind IN ('{DemoTenantKind.Host}', '{DemoTenantKind.Person}')"));
+
+        entity
+            .HasOne(c => c.ClinicTeam)
+            .WithMany()
+            .HasForeignKey(c => c.ClinicTeamId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        entity
+            .HasIndex(c => c.ClinicTeamId)
+            .HasDatabaseName("ix_tenant_demo_config_clinic_team_id");
     }
 }
 

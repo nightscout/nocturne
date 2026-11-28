@@ -108,8 +108,10 @@ internal static class TeamAudit
     public static void StageStaffInviteRevoked(NocturneDbContext db, Guid teamId, Guid inviteId) =>
         Stage(db, AuthAuditEventType.TeamStaffInviteRevoked, teamId, null, new() { [InviteKey] = inviteId.ToString() });
 
-    public static void StageStaffAdded(NocturneDbContext db, Guid teamId, Guid staffSubjectId, Guid inviteId) =>
-        Stage(db, AuthAuditEventType.TeamStaffAdded, teamId, staffSubjectId, new() { [InviteKey] = inviteId.ToString() });
+    /// <summary>A staff member joined, by the staff invite they accepted, or by none when the instance provisioned them.</summary>
+    public static void StageStaffAdded(NocturneDbContext db, Guid teamId, Guid staffSubjectId, Guid? inviteId) =>
+        Stage(db, AuthAuditEventType.TeamStaffAdded, teamId, staffSubjectId,
+            inviteId is { } id ? new() { [InviteKey] = id.ToString() } : []);
 
     public static void StageStaffChanged(
         NocturneDbContext db, Guid teamId, Guid staffSubjectId, TeamStaffNarrowing before, TeamStaffNarrowing after) =>

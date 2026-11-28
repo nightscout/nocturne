@@ -85,6 +85,32 @@ public static class AdvisoryLockExtensions
     }
 
     /// <summary>
+    /// Runs <paramref name="work"/> while a transaction of <paramref name="context"/>'s own holds the lock on
+    /// <paramref name="id"/>, for work that writes through other contexts: it runs one at a time against every other
+    /// holder, though none of its writes is in the lock's transaction. Other providers take nothing and run the work alone.
+    /// </summary>
+    /// <remarks>
+    /// The execution strategy retries the whole transaction on a transient error, so <paramref name="work"/> must be safe
+    /// to run again after a partial run.
+    /// </remarks>
+    public static Task HoldWhileAsync(
+        this DbContext context,
+        int lockClass,
+        Guid id,
+        Func<CancellationToken, Task> work,
+        CancellationToken ct)
+    {
+        if (!context.Database.IsNpgsql())
+            return work(ct);
+
+        return context.ExecuteInTransactionAsync(async token =>
+        {
+            await context.LockForTransactionAsync(lockClass, id, token);
+            await work(token);
+        }, ct);
+    }
+
+    /// <summary>
     /// Takes the lock only when no other transaction holds it. Other providers always get it.
     /// </summary>
     /// <returns>Whether this transaction now holds the lock.</returns>

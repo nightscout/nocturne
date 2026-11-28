@@ -10,7 +10,10 @@ using Nocturne.API.Services.Demo;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.Demo;
+using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -47,7 +50,7 @@ public class DemoSessionControllerTests : IDisposable
         var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
         var controller = BuildController(tenantId, isDemo: true);
 
-        var result = await controller.CreateSession(redirect: "/reports", format: null, CancellationToken.None);
+        var result = await controller.CreateSession(redirect: "/reports", format: null, persona: null, CancellationToken.None);
 
         result.Should().BeOfType<RedirectResult>()
             .Which.Url.Should().Be("/reports");
@@ -62,7 +65,7 @@ public class DemoSessionControllerTests : IDisposable
         var tenantId = SeedTenant(isDemo: false, withDemoMember: true);
         var controller = BuildController(tenantId, isDemo: false);
 
-        var result = await controller.CreateSession(redirect: null, format: null, CancellationToken.None);
+        var result = await controller.CreateSession(redirect: null, format: null, persona: null, CancellationToken.None);
 
         result.Should().BeOfType<NotFoundResult>();
         VerifyNoSessionIssued();
@@ -74,7 +77,7 @@ public class DemoSessionControllerTests : IDisposable
         var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
         var controller = BuildController(tenantId, isDemo: true, shareAccess: true);
 
-        var result = await controller.CreateSession(redirect: null, format: null, CancellationToken.None);
+        var result = await controller.CreateSession(redirect: null, format: null, persona: null, CancellationToken.None);
 
         result.Should().BeOfType<NotFoundResult>();
         VerifyNoSessionIssued();
@@ -86,7 +89,7 @@ public class DemoSessionControllerTests : IDisposable
         var tenantId = SeedTenant(isDemo: true, withDemoMember: false);
         var controller = BuildController(tenantId, isDemo: true);
 
-        var result = await controller.CreateSession(redirect: null, format: null, CancellationToken.None);
+        var result = await controller.CreateSession(redirect: null, format: null, persona: null, CancellationToken.None);
 
         result.Should().BeOfType<NotFoundResult>();
         VerifyNoSessionIssued();
@@ -99,7 +102,7 @@ public class DemoSessionControllerTests : IDisposable
         var controller = BuildController(tenantId, isDemo: true);
 
         var result = await controller.CreateSession(
-            redirect: "https://evil.example/steal", format: null, CancellationToken.None);
+            redirect: "https://evil.example/steal", format: null, persona: null, CancellationToken.None);
 
         result.Should().BeOfType<RedirectResult>()
             .Which.Url.Should().Be("/");
@@ -115,7 +118,7 @@ public class DemoSessionControllerTests : IDisposable
         var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
         var controller = BuildController(tenantId, isDemo: true);
 
-        await controller.CreateSession(redirect: null, format: null, CancellationToken.None);
+        await controller.CreateSession(redirect: null, format: null, persona: null, CancellationToken.None);
 
         _sessionService.Verify(
             s => s.IssueSessionAsync(
@@ -147,7 +150,84 @@ public class DemoSessionControllerTests : IDisposable
 
         var controller = BuildController(tenantId, isDemo: true);
 
-        var result = await controller.CreateSession(redirect: null, format: null, CancellationToken.None);
+        var result = await controller.CreateSession(redirect: null, format: null, persona: null, CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundResult>();
+        VerifyNoSessionIssued();
+    }
+
+    [Fact]
+    public async Task CreateSession_SignsInTheClinicPersona_AsClinic()
+    {
+        var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
+        var persona = SeedClinic(tenantId, personaIsDemoSubject: true);
+        var controller = BuildController(tenantId, isDemo: true);
+
+        var result = await controller.CreateSession(
+            redirect: "/people", format: null, persona: DemoClinic.SessionPersona, CancellationToken.None);
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/people");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(persona, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateSession_ReturnsNotFound_WhenTheClinicStaffIsNotADemoSubject()
+    {
+        var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
+        SeedClinic(tenantId, personaIsDemoSubject: false);
+        var controller = BuildController(tenantId, isDemo: true);
+
+        var result = await controller.CreateSession(
+            redirect: null, format: null, persona: DemoClinic.SessionPersona, CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundResult>();
+        VerifyNoSessionIssued();
+    }
+
+    [Fact]
+    public async Task CreateSession_ReturnsNotFound_AsClinic_BeforeTheClinicIsProvisioned()
+    {
+        var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
+        var controller = BuildController(tenantId, isDemo: true);
+
+        var result = await controller.CreateSession(
+            redirect: null, format: null, persona: DemoClinic.SessionPersona, CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundResult>();
+        VerifyNoSessionIssued();
+    }
+
+    [Theory]
+    [InlineData("manager")]
+    [InlineData("Clinic")]
+    public async Task CreateSession_ReturnsNotFound_ForAnyOtherPersona(string persona)
+    {
+        var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
+        SeedClinic(tenantId, personaIsDemoSubject: true);
+        var controller = BuildController(tenantId, isDemo: true);
+
+        var result = await controller.CreateSession(redirect: null, format: null, persona, CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundResult>();
+        VerifyNoSessionIssued();
+    }
+
+    /// <summary>
+    /// A person tenant is a demo tenant with no demo member, so the member lookup alone would 404; the clinic's
+    /// persona is a member of it, so only the host check keeps <c>as=clinic</c> off it.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(DemoClinic.SessionPersona)]
+    public async Task CreateSession_ReturnsNotFound_OnAClinicPersonsTenant(string? persona)
+    {
+        var hostId = SeedTenant(isDemo: true, withDemoMember: true);
+        SeedClinic(hostId, personaIsDemoSubject: true);
+        var personId = SeedTenant(isDemo: true, withDemoMember: true, kind: DemoTenantKind.Person, slug: "demo-john");
+        var controller = BuildController(personId, isDemo: true);
+
+        var result = await controller.CreateSession(redirect: null, format: null, persona, CancellationToken.None);
 
         result.Should().BeOfType<NotFoundResult>();
         VerifyNoSessionIssued();
@@ -159,26 +239,28 @@ public class DemoSessionControllerTests : IDisposable
         var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
         var controller = BuildController(tenantId, isDemo: true);
 
-        var result = await controller.CreateSession(redirect: null, format: "json", CancellationToken.None);
+        var result = await controller.CreateSession(redirect: null, format: "json", persona: null, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<DemoSessionResponse>()
             .Which.AccessToken.Should().Be("access");
     }
 
-    private Guid SeedTenant(bool isDemo, bool withDemoMember)
+    private Guid SeedTenant(bool isDemo, bool withDemoMember, string kind = DemoTenantKind.Host, string? slug = null)
     {
         using var db = _db.CreateContext();
 
         var tenant = new TenantEntity
         {
             Id = Guid.CreateVersion7(),
-            Slug = isDemo ? "demo" : "real",
+            Slug = slug ?? (isDemo ? "demo" : "real"),
             DisplayName = isDemo ? "Nocturne Demo" : "Real Tenant",
             IsActive = true,
             IsDemo = isDemo,
         };
         db.Add(tenant);
+        if (isDemo)
+            db.TenantDemoConfigs.Add(new TenantDemoConfigEntity { TenantId = tenant.Id, Kind = kind });
 
         if (withDemoMember)
         {
@@ -205,6 +287,26 @@ public class DemoSessionControllerTests : IDisposable
         return tenant.Id;
     }
 
+    /// <summary>The host's clinic team, with one staff member, whom it returns.</summary>
+    private Guid SeedClinic(Guid hostId, bool personaIsDemoSubject)
+    {
+        using var db = _db.CreateContext();
+        var team = new TeamEntity { Id = Guid.CreateVersion7(), Name = DemoClinic.TeamName };
+        var persona = new SubjectEntity
+        {
+            Id = Guid.CreateVersion7(), Name = DemoClinic.PersonaName, IsActive = true, IsDemoSubject = personaIsDemoSubject,
+        };
+        db.Teams.Add(team);
+        db.Subjects.Add(persona);
+        db.TeamMembers.Add(new TeamMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TeamId = team.Id, SubjectId = persona.Id, Kind = TeamMemberKind.Staff,
+        });
+        db.TenantDemoConfigs.Single(c => c.TenantId == hostId).ClinicTeamId = team.Id;
+        db.SaveChanges();
+        return persona.Id;
+    }
+
     private IDbContextFactory<NocturneDbContext> BuildDbFactory()
     {
         var dbFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
@@ -224,7 +326,10 @@ public class DemoSessionControllerTests : IDisposable
             Mock.Of<ITenantCache>(),
             TimeProvider.System,
             new Mock<ILogger<DemoTenantService>>().Object, AccountLinkRoutes.Off,
-            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))));
+            new Nocturne.API.Services.Auth.GrantRevocationService(new Nocturne.API.Services.Auth.GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()))),
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            Mock.Of<IPeopleViewRepository>(),
+            Mock.Of<IFlagRuleRepository>());
 
         var controller = new DemoSessionController(
             demoTenantService,
