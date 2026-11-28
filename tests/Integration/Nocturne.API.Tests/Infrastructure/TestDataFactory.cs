@@ -103,13 +103,15 @@ public static class TestDataFactory
     /// <param name="id">Custom ID (generates unique if null)</param>
     /// <param name="defaultProfile">Profile name</param>
     /// <param name="timestamp">Start date (uses TestTimeProvider if null)</param>
+    /// <param name="flat">Every schedule holds its first rate all day, so a read at the wall clock does not depend on the time of day</param>
     /// <returns>Profile with dynamic data</returns>
     public static Profile CreateProfile(
-        string? id = null, string? defaultProfile = null, DateTimeOffset? timestamp = null)
+        string? id = null, string? defaultProfile = null, DateTimeOffset? timestamp = null, bool flat = false)
     {
         var uniqueSuffix = Guid.NewGuid().ToString()[..8];
         var profileName = defaultProfile ?? $"test-profile-{uniqueSuffix}";
         var startDate = timestamp ?? TestTimeProvider.GetTestTime();
+        List<TimeValue> Schedule(params TimeValue[] rates) => flat ? [rates[0]] : [.. rates];
 
         return new Profile
         {
@@ -127,35 +129,23 @@ public static class TestDataFactory
                     Delay = 20,
                     Timezone = "UTC",
                     Units = "mg/dL",
-                    Basal = new List<TimeValue>
-                    {
+                    Basal = Schedule(
                         new TimeValue { Time = "00:00", Value = 0.5 },
                         new TimeValue { Time = "06:00", Value = 0.7 },
                         new TimeValue { Time = "09:00", Value = 0.8 },
-                        new TimeValue { Time = "21:00", Value = 0.6 },
-                    },
-                    CarbRatio = new List<TimeValue>
-                    {
+                        new TimeValue { Time = "21:00", Value = 0.6 }),
+                    CarbRatio = Schedule(
                         new TimeValue { Time = "00:00", Value = 15.0 },
                         new TimeValue { Time = "07:00", Value = 12.0 },
                         new TimeValue { Time = "12:00", Value = 15.0 },
-                        new TimeValue { Time = "18:00", Value = 18.0 },
-                    },
-                    Sens = new List<TimeValue>
-                    {
+                        new TimeValue { Time = "18:00", Value = 18.0 }),
+                    Sens = Schedule(
                         new TimeValue { Time = "00:00", Value = 100.0 },
                         new TimeValue { Time = "06:00", Value = 95.0 },
                         new TimeValue { Time = "09:00", Value = 100.0 },
-                        new TimeValue { Time = "17:00", Value = 110.0 },
-                    },
-                    TargetLow = new List<TimeValue>
-                    {
-                        new TimeValue { Time = "00:00", Value = 100.0 },
-                    },
-                    TargetHigh = new List<TimeValue>
-                    {
-                        new TimeValue { Time = "00:00", Value = 180.0 },
-                    },
+                        new TimeValue { Time = "17:00", Value = 110.0 }),
+                    TargetLow = Schedule(new TimeValue { Time = "00:00", Value = 100.0 }),
+                    TargetHigh = Schedule(new TimeValue { Time = "00:00", Value = 180.0 }),
                 },
             },
         };

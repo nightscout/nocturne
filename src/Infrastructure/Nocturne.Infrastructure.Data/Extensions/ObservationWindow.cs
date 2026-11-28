@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using Microsoft.EntityFrameworkCore.Query;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -54,6 +55,23 @@ public static class ObservationWindow
     public static IQueryable<TEntity> InWindow<TEntity>(this IQueryable<TEntity> rows, DateTime? from, DateTime? to)
         where TEntity : IObservationTimestamped =>
         rows.InWindow(e => e.Timestamp, from, to);
+
+    private static readonly MethodInfo ListContains = typeof(List<DateTime>).GetMethod(nameof(List<DateTime>.Contains))!;
+
+    /// <summary>
+    /// The rows of a record table whose event time (<see cref="V4RecordTables.EventTimeOf{T}"/>) is
+    /// exactly one of <paramref name="instants"/>. A record time is stored at the millisecond, so an
+    /// instant at that precision names the row's time and no window is needed.
+    /// </summary>
+    public static IQueryable<TEntity> AtInstants<TEntity>(this IQueryable<TEntity> rows, IReadOnlyCollection<DateTime> instants)
+        where TEntity : class, ITenantScoped, ISoftDeletable, IIdentified, IWriterStamped
+    {
+        var at = instants.ToList();
+        Expression<Func<List<DateTime>>> bound = () => at;
+        var eventTime = V4RecordTables.EventTimeOf<TEntity>();
+        var contains = Expression.Call(bound.Body, ListContains, eventTime.Body);
+        return rows.Where(Expression.Lambda<Func<TEntity, bool>>(contains, eventTime.Parameters));
+    }
 
     /// <summary>
     /// The rows whose <paramref name="at"/> is inside the window, bounds inclusive and either optional,

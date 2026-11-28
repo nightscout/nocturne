@@ -231,6 +231,16 @@ internal static class V4RecordTables
 
     private static readonly HashSet<Type> Entities = [.. All.Select(t => t.Entity)];
 
+    private static readonly Dictionary<Type, TimedRecordTable> TimedByEntity =
+        All.Where(t => t.Timed is not null).ToDictionary(t => t.Entity, t => t.Timed!);
+
+    /// <summary>The event time of <typeparamref name="T"/>, which has to be a table of <see cref="All"/> that carries one.</summary>
+    internal static Expression<Func<T, DateTime>> EventTimeOf<T>()
+        where T : class, ITenantScoped, ISoftDeletable, IIdentified, IWriterStamped =>
+        TimedByEntity.TryGetValue(typeof(T), out var timed)
+            ? ((TimedRecordTable<T>)timed).EventTime
+            : throw new InvalidOperationException($"{typeof(T).Name} is not a record table with an event time.");
+
     private static readonly HashSet<string> RowStamps =
     [
         nameof(ISystemCreated.SysCreatedAt),

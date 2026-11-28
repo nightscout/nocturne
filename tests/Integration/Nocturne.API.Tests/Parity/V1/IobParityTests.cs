@@ -28,7 +28,7 @@ public class IobParityTests : ParityTestBase
     private async Task SeedIobTestDataAsync()
     {
         // Seed a profile (required for IOB calculations)
-        var profile = TestDataFactory.CreateProfile();
+        var profile = TestDataFactory.CreateProfile(flat: true);
         var nsProfile = new
         {
             defaultProfile = profile.DefaultProfile,

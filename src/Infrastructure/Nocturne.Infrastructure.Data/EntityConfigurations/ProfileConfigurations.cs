@@ -32,14 +32,3 @@ internal sealed class ProfileActivationEntityConfiguration : IEntityTypeConfigur
             .OnDelete(DeleteBehavior.SetNull);
     }
 }
-
-internal sealed class TherapySettingsEntityConfiguration : IEntityTypeConfiguration<TherapySettingsEntity>
-{
-    public void Configure(EntityTypeBuilder<TherapySettingsEntity> entity)
-    {
-        entity
-            .HasIndex(e => new { e.TenantId, e.Timestamp })
-            .HasDatabaseName("ix_therapy_settings_tenant_timestamp")
-            .IsDescending(false, true);
-    }
-}

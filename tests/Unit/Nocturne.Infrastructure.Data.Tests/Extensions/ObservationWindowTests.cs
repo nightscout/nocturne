@@ -1,4 +1,5 @@
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.Infrastructure.Data.Tests.Extensions;
@@ -311,6 +312,29 @@ public class ObservationWindowTests
         Statement(first).Should().Be(Statement(second));
         Statement(first).Should().NotContain(From.Year.ToString());
         Statement(first).Should().Contain("s.end_timestamp IS NULL OR s.end_timestamp > @at");
+    }
+
+    [Fact]
+    public void AtInstants_ReadsTheRegistrysEventTimeOfEachTableAsOneArrayParameter()
+    {
+        using var db = OfflineDbContext.Create();
+        DateTime[] instants = [From, To];
+
+        Statement(db.Boluses.AtInstants(instants).ToQueryString()).Should().Contain("b.timestamp = ANY (@at)");
+        Statement(db.StateSpans.AtInstants(instants).ToQueryString()).Should().Contain("s.start_timestamp = ANY (@at)");
+        Statement(db.ProfileActivations.AtInstants(instants).ToQueryString()).Should().Contain("p.start_timestamp = ANY (@at)");
+    }
+
+    [Fact]
+    public void AtInstants_ReadsOnlyTheRowsWhoseEventTimeIsExactlyOneOfTheInstants()
+    {
+        BolusEntity[] boluses =
+        [
+            new() { Timestamp = From }, new() { Timestamp = From.AddMilliseconds(1) },
+            new() { Timestamp = To }, new() { Timestamp = To.AddMilliseconds(-1) },
+        ];
+
+        boluses.AsQueryable().AtInstants([From, To]).Select(b => b.Timestamp).Should().Equal(From, To);
     }
 
     private static string Statement(string sql) => sql[sql.IndexOf("SELECT", StringComparison.Ordinal)..];

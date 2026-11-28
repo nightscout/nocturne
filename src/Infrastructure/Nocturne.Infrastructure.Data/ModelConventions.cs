@@ -102,32 +102,32 @@ internal static class ModelConventions
                 .HasFilter("deleted_at IS NULL AND NOT is_duplicate");
         }
 
-        // Not partial on deleted_at, unlike the list indexes above, because these reads take deleted
-        // rows too. Without it a deleted-inclusive window read of the largest tenant walks the
-        // instance-wide ix_<table>_timestamp past every other tenant's rows: on a tenant of 100k
-        // bolus calculations, half the instance, 325 ms and 127k buffers for a 100k-row read against
-        // 84 ms and 2k with it. Named for the column, which is start_timestamp on the span tables.
-        foreach (var entity in V4DeletedInclusiveWindowEntities.Select(t => modelBuilder.Entity(t)))
+        // A tenant's range reads by timestamp. Not partial on deleted_at, unlike the list indexes above,
+        // because the window reads over some of these tables take deleted rows too. Without it a deleted-inclusive window read of the largest tenant
+        // walks the instance-wide ix_<table>_timestamp past every other tenant's rows: on a tenant of
+        // 100k bolus calculations, half the instance, 325 ms and 127k buffers for a 100k-row read
+        // against 84 ms and 2k with it. Named for the column, which is start_timestamp on the span tables.
+        foreach (var entity in TenantTimestampIndexedEntities.Select(t => modelBuilder.Entity(t)))
         {
             var column = entity.Property(nameof(IObservationTimestamped.Timestamp)).Metadata.GetColumnName();
-            if (V4SortedListEntities.Contains(entity.Metadata.ClrType))
-            {
-                // The list index's columns, so a live read keeps the partial list index, the smaller of
-                // the two once any row is deleted (until then they hold the same entries), and only a
-                // read that takes deleted rows needs this one. With fewer columns this index would be
-                // the smaller, and a live read ordered by timestamp alone would walk it past deleted
-                // rows. Named in HasIndex because EF keys an unnamed index by its columns, which the
-                // list index already holds.
-                var name = $"ix_{entity.Metadata.GetTableName()}_tenant_{column}_id_any";
-                entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp), nameof(IIdentified.Id)], name)
-                    .HasDatabaseName(name)
-                    .IsDescending(false, true, true);
-                continue;
-            }
+            var index = entity.HasIndex(nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_{column}");
+            if (!TenantTimestampAscending.ContainsKey(entity.Metadata.ClrType))
+                index.IsDescending(false, true);
+        }
 
-            entity.HasIndex(nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp))
-                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_{column}")
-                .IsDescending(false, true);
+        // A table with a list index takes that index's columns, so a live read keeps the partial list
+        // index, the smaller of the two once any row is deleted (until then they hold the same entries),
+        // and only a read that takes deleted rows needs this one. With fewer columns this index would be
+        // the smaller, and a live read ordered by timestamp alone would walk it past deleted rows. Named
+        // in HasIndex because EF keys an unnamed index by its columns, which the list index already holds.
+        foreach (var entity in V4DeletedInclusiveWindowEntities.Where(V4SortedListEntities.Contains).Select(t => modelBuilder.Entity(t)))
+        {
+            var column = entity.Property(nameof(IObservationTimestamped.Timestamp)).Metadata.GetColumnName();
+            var name = $"ix_{entity.Metadata.GetTableName()}_tenant_{column}_id_any";
+            entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp), nameof(IIdentified.Id)], name)
+                .HasDatabaseName(name)
+                .IsDescending(false, true, true);
         }
 
         // The legacy-id uniqueness must drop soft-deleted rows, or the next resync of a
