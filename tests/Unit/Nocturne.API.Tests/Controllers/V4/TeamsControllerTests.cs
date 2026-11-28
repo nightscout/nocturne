@@ -81,11 +81,6 @@ public class TeamsControllerTests
 
     [Theory]
     [MemberData(nameof(ActionNames))]
-    public async Task Every_action_refuses_the_demo_subject(string action) =>
-        (await AuthorizeAsync(action, Session(), isDemo: true)).Should().BeOfType<ForbidResult>();
-
-    [Theory]
-    [MemberData(nameof(ActionNames))]
     public async Task Every_action_admits_a_persons_own_session(string action) =>
         (await AuthorizeAsync(action, Session(), isDemo: false)).Should().BeNull();
 
@@ -99,10 +94,23 @@ public class TeamsControllerTests
     {
         Policy(restricted);
         _teams.Setup(t => t.GetTeamsOfAsync(Caller, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _subjects.Setup(s => s.IsDemoSubjectAsync(Caller, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var result = await Controller(Session(isPlatformAdmin)).GetMyTeams(default);
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(new MyTeamsResponse([], canCreate));
+    }
+
+    [Fact]
+    public async Task A_demo_subject_is_not_offered_team_creation_on_an_open_site()
+    {
+        Policy(restricted: false);
+        _teams.Setup(t => t.GetTeamsOfAsync(Caller, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _subjects.Setup(s => s.IsDemoSubjectAsync(Caller, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var result = await Controller(Session()).GetMyTeams(default);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(new MyTeamsResponse([], CanCreate: false));
     }
 
     [Fact]
@@ -658,7 +666,7 @@ public class TeamsControllerTests
         var method = typeof(TeamsController).GetMethod(action)!;
         var filters = typeof(TeamsController).GetCustomAttributes(true).Concat(method.GetCustomAttributes(true)).ToList();
         var context = new AuthorizationFilterContext(
-            new ActionContext(HttpContext(auth), new RouteData(), new ActionDescriptor()), []);
+            new ActionContext(HttpContext(auth), new RouteData(), new ActionDescriptor { EndpointMetadata = filters }), []);
 
         foreach (var filter in filters)
         {

@@ -85,9 +85,17 @@ internal static class ControllerActionReflection
         HasGate(action.GetCustomAttributes(inherit: true))
         || HasGate(controller.GetCustomAttributes(inherit: true));
 
+    /// <summary>
+    /// Whether <see cref="DenyDemoSubjectAttribute"/> refuses a demo subject on the action however the demo is configured:
+    /// it is on the action or its controller, and <see cref="OpenToDemoSubjectAttribute"/> opens nothing.
+    /// </summary>
     public static bool DeniesTheDemoSubject(MethodInfo action, Type controller) =>
-        action.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null
-        || controller.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null;
+        (action.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null
+         || controller.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null)
+        && OpeningOf(action) is null;
+
+    public static DemoSubjectOpening? OpeningOf(MethodInfo action) =>
+        action.GetCustomAttribute<OpenToDemoSubjectAttribute>()?.Opening;
 
     /// <summary>
     /// Whether the action or its controller names what admits a caller: the scope it requires

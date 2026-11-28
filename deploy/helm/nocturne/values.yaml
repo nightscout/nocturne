@@ -235,6 +235,9 @@ demo:
   intervalMinutes: 5
   resetIntervalMinutes: 0
   accessMode: open
+  # Lets the clinic demo persona change its own saved views and flag rules. Set false to make
+  # the demo read-only for it. Sets the API's DemoMode__AllowTeamWrites.
+  allowTeamWrites: true
   resources:
     requests:
       cpu: 50m
