@@ -257,7 +257,7 @@ public sealed class ExternalNotificationService(
         var actions = new List<NotificationActionDto>();
         if (link is not null)
             actions.Add(new NotificationActionDto { ActionId = "navigate", Label = link.Label, Variant = "default" });
-        actions.Add(new NotificationActionDto { ActionId = "dismiss", Label = "dismiss", Variant = "outline" });
+        actions.Add(new NotificationActionDto { ActionId = "dismiss", Label = NotificationLabel.Dismiss.ToWireString(), Variant = "outline" });
         return actions;
     }
 

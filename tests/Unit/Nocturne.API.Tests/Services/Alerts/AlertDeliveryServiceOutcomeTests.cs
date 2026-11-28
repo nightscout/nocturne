@@ -198,7 +198,7 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
         delivery.Status.Should().Be("delivered");
         _inApp.Verify(n => n.CreateNotificationAsync(
             Member.ToString(),
-            InAppProvider.NotificationType,
+            InAppNotificationType.AlertFiring.ToWireString(),
             It.IsAny<string>(),
             It.IsAny<NotificationCategory?>(),
             It.IsAny<NotificationUrgency?>(),

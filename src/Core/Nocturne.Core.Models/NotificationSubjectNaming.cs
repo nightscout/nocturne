@@ -37,12 +37,6 @@ public static class NotificationSubjectNaming
     /// <summary>Tells an owner that a person asked to sign in. The notice is about the person.</summary>
     public const string AnonymousLoginRequest = "passkey.anonymous_login_request";
 
-    /// <summary>
-    /// Tells an owner that a channel of an enabled rule does not send. It carries the channel's label,
-    /// which can name a contact, and the member it reaches and the member who added it.
-    /// </summary>
-    public const string AlertChannelNotSending = "alerts.channelNotSending";
-
     /// <summary>The metadata key of the member a notice is about.</summary>
     public const string MemberSubjectIdKey = "memberSubjectId";
 
@@ -54,7 +48,7 @@ public static class NotificationSubjectNaming
         {
             [MembershipRequested] = NoticeSubjectPointer.MembershipRequestId,
             [AnonymousLoginRequest] = NoticeSubjectPointer.SubjectId,
-            [AlertChannelNotSending] = NoticeSubjectPointer.MetadataSubject,
+            [InAppNotificationType.AlertChannelNotSending.ToWireString()] = NoticeSubjectPointer.MetadataSubject,
         };
 
     /// <summary>The types whose source id is one of the person's membership request ids.</summary>

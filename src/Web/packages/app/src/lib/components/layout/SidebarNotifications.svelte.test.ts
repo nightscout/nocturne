@@ -5,6 +5,8 @@ import { toast } from "svelte-sonner";
 import { goto } from "$app/navigation";
 import { missingScopeError } from "#lib/forms/submit-messages.svelte.js";
 import {
+  InAppNotificationType,
+  NotificationLabel,
   NotificationUrgency,
   type InAppNotificationDto,
 } from "@nocturne/api-client";
@@ -67,9 +69,9 @@ describe("SidebarNotifications", () => {
       notifications: [
         {
           id: "ch1",
-          type: "alerts.channelNotSending",
+          type: InAppNotificationType.AlertChannelNotSending,
           urgency: NotificationUrgency.Warn,
-          title: "alert_channel_stopped",
+          title: NotificationLabel.AlertChannelStopped,
           createdAt: new Date().toISOString(),
           metadata: { alertRuleId: "rule-7", state: "stopped", channelType: "webhook" },
         },
@@ -87,7 +89,7 @@ describe("SidebarNotifications", () => {
     expect(server.executed).toEqual([]);
   });
 
-  it.each(["team.staff_waiting", "team.staff_joined"])(
+  it.each([InAppNotificationType.TeamStaffWaiting, InAppNotificationType.TeamStaffJoined])(
     "marks a %s notice read when its link is followed, and runs no server action",
     async (type) => {
       render(Harness, {
@@ -96,7 +98,7 @@ describe("SidebarNotifications", () => {
             id: "ts1",
             type,
             urgency: NotificationUrgency.Info,
-            title: type === "team.staff_waiting" ? "team_staff_waiting" : "team_staff_joined",
+            title: type === InAppNotificationType.TeamStaffWaiting ? NotificationLabel.TeamStaffWaiting : NotificationLabel.TeamStaffJoined,
             createdAt: new Date().toISOString(),
             metadata: { team: "Ward 4", teamId: "0199a1b2-0000-7000-8000-0000000000bb", count: 2 },
           },
@@ -120,9 +122,9 @@ describe("SidebarNotifications", () => {
       notifications: [
         {
           id: "k1",
-          type: "system.instance_key_changed",
+          type: InAppNotificationType.SystemInstanceKeyChanged,
           urgency: NotificationUrgency.Urgent,
-          title: "instance_key_changed",
+          title: NotificationLabel.InstanceKeyChanged,
           createdAt: new Date().toISOString(),
           metadata: {
             Connectors: ["Dexcom", "Glooko"],
@@ -132,8 +134,8 @@ describe("SidebarNotifications", () => {
             ],
           },
           actions: [
-            { actionId: "open_connectors", label: "open_connectors" },
-            { actionId: "open_alerts", label: "open_alerts" },
+            { actionId: "open_connectors", label: NotificationLabel.OpenConnectors },
+            { actionId: "open_alerts", label: NotificationLabel.OpenAlerts },
           ],
         },
       ],
@@ -160,12 +162,12 @@ describe("SidebarNotifications", () => {
       notifications: [
         {
           id: "k2",
-          type: "system.instance_key_changed_platform",
+          type: InAppNotificationType.SystemInstanceKeyChangedPlatform,
           urgency: NotificationUrgency.Warn,
-          title: "instance_key_changed_platform",
+          title: NotificationLabel.InstanceKeyChangedPlatform,
           createdAt: new Date().toISOString(),
           metadata: { PlatformSettings: ["discord", "resend"] },
-          actions: [{ actionId: "open_platform_settings", label: "open_platform_settings" }],
+          actions: [{ actionId: "open_platform_settings", label: NotificationLabel.OpenPlatformSettings }],
         },
       ],
     });
@@ -185,7 +187,7 @@ describe("SidebarNotifications", () => {
       notifications: [
         {
           id: "n1",
-          type: "meal_matching.suggested_match",
+          type: InAppNotificationType.MealMatchingSuggestedMatch,
           urgency: NotificationUrgency.Info,
           title: "Meal match found",
           createdAt: new Date().toISOString(),

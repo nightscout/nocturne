@@ -163,7 +163,7 @@ public class NotificationsController : ControllerBase
     /// declines the write for a caller without it. The meal-match <c>accept</c> is gated the same way, as
     /// <see cref="Services.NotificationActionHandlers.MealMatchActionHandler"/> states, and a refused
     /// accept answers 403 naming its scope, leaving the notification in place. So the
-    /// capability arm is confined here to <see cref="InAppProvider.NotificationType"/>: a caller holding only
+    /// capability arm is confined here to <see cref="InAppNotificationType.AlertFiring"/>: a caller holding only
     /// <c>device.notify</c> is refused any other notification type, and only a holder of
     /// <c>alerts.readwrite</c> reaches the rest of the dispatch table.
     /// </para>
@@ -177,7 +177,7 @@ public class NotificationsController : ControllerBase
     [RemoteCommand(Invalidates = ["GetNotifications", "MealMatching_GetSuggestions", "Nutrition_GetMeals"])]
     [Authorize]
     [RequireScope(Scope.AlertsReadWrite, Scope.DeviceNotify)]
-    [ScopeDecidedBy(typeof(InAppProvider), nameof(InAppProvider.NotificationType))]
+    [ScopeDecidedBy(typeof(InAppNotificationType), nameof(InAppNotificationType.AlertFiring))]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -204,7 +204,7 @@ public class NotificationsController : ControllerBase
                 return NotFound();
             }
 
-            if (!string.Equals(type, InAppProvider.NotificationType, StringComparison.Ordinal))
+            if (!string.Equals(type, InAppNotificationType.AlertFiring.ToWireString(), StringComparison.Ordinal))
             {
                 _logger.LogWarning(
                     "User {UserId} holding only device.notify attempted action {ActionId} on {Type} notification {NotificationId}",

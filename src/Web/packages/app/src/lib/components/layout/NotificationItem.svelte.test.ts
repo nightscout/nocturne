@@ -1,7 +1,12 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { NotificationUrgency, type InAppNotificationDto } from "@nocturne/api-client";
+import {
+  InAppNotificationType,
+  NotificationLabel,
+  NotificationUrgency,
+  type InAppNotificationDto,
+} from "@nocturne/api-client";
 import { formatMediumDate } from "#lib/utils/formatting.js";
 import NotificationItem from "./NotificationItem.svelte";
 
@@ -9,13 +14,16 @@ const RULE = "0199a1b2-0000-7000-8000-0000000000aa";
 const STOP = "2026-12-01T00:00:00.0000000Z";
 
 function notice(state: string, metadata: Record<string, unknown> = {}): InAppNotificationDto {
-  const title = state === "stopped" ? "alert_channel_stopped" : "alert_channel_no_recipient";
+  const [title, subtitle] =
+    state === "stopped"
+      ? [NotificationLabel.AlertChannelStopped, NotificationLabel.AlertChannelStoppedSubtitle]
+      : [NotificationLabel.AlertChannelNoRecipient, NotificationLabel.AlertChannelNoRecipientSubtitle];
   return {
     id: "n1",
-    type: "alerts.channelNotSending",
+    type: InAppNotificationType.AlertChannelNotSending,
     urgency: NotificationUrgency.Warn,
     title,
-    subtitle: `${title}_subtitle`,
+    subtitle,
     createdAt: new Date().toISOString(),
     metadata: {
       alertRuleId: RULE,
@@ -73,9 +81,9 @@ describe("NotificationItem team rename notice", () => {
   function renamed(metadata: Record<string, unknown>): InAppNotificationDto {
     return {
       id: "n2",
-      type: "team.renamed",
+      type: InAppNotificationType.TeamRenamed,
       urgency: NotificationUrgency.Info,
-      title: "team_renamed",
+      title: NotificationLabel.TeamRenamed,
       createdAt: new Date().toISOString(),
       metadata,
     } as InAppNotificationDto;
@@ -85,14 +93,14 @@ describe("NotificationItem team rename notice", () => {
     render(NotificationItem, { notification: renamed({ oldName: "Clinic", newName: "Ward 4" }) });
 
     await expect.element(page.getByText("The team Clinic is now named Ward 4.")).toBeVisible();
-    expect(page.getByText("team_renamed").elements()).toHaveLength(0);
+    expect(page.getByText(NotificationLabel.TeamRenamed).elements()).toHaveLength(0);
   });
 
   it("never shows the raw title when the metadata lacks a name", async () => {
     render(NotificationItem, { notification: renamed({ newName: "Ward 4" }) });
 
     await expect.element(page.getByText("A team has a new name")).toBeVisible();
-    expect(page.getByText("team_renamed").elements()).toHaveLength(0);
+    expect(page.getByText(NotificationLabel.TeamRenamed).elements()).toHaveLength(0);
     expect(page.getByText(/is now named/).elements()).toHaveLength(0);
   });
 });
@@ -112,7 +120,7 @@ describe("NotificationItem team staff notice", () => {
   }
 
   const waiting = (metadata: Record<string, unknown>) =>
-    staffNotice("team.staff_waiting", "team_staff_waiting", metadata);
+    staffNotice(InAppNotificationType.TeamStaffWaiting, NotificationLabel.TeamStaffWaiting, metadata);
 
   it("says that one staff member waits", async () => {
     render(NotificationItem, { notification: waiting({ team: "Ward 4", teamId: TEAM, count: 1 }) });
@@ -144,7 +152,7 @@ describe("NotificationItem team staff notice", () => {
 
   it("says that the team has new staff who can see the site", async () => {
     render(NotificationItem, {
-      notification: staffNotice("team.staff_joined", "team_staff_joined", { team: "Ward 4", teamId: TEAM }),
+      notification: staffNotice(InAppNotificationType.TeamStaffJoined, NotificationLabel.TeamStaffJoined, { team: "Ward 4", teamId: TEAM }),
     });
 
     await expect.element(page.getByText("A team has new staff")).toBeVisible();
@@ -158,7 +166,7 @@ describe("NotificationItem team staff notice", () => {
     render(NotificationItem, { notification: waiting({ count: 3 }) });
 
     await expect.element(page.getByText("Team staff are waiting for your approval")).toBeVisible();
-    expect(page.getByText("team_staff_waiting").elements()).toHaveLength(0);
+    expect(page.getByText(NotificationLabel.TeamStaffWaiting).elements()).toHaveLength(0);
     expect(page.getByText(/waiting for your approval\./).elements()).toHaveLength(0);
     expect(page.getByRole("link", { name: "Open the team" }).elements()).toHaveLength(0);
   });
@@ -166,14 +174,14 @@ describe("NotificationItem team staff notice", () => {
 
 describe("NotificationItem external notice", () => {
   function external(
-    type: "external.operator" | "external.app",
+    type: InAppNotificationType.ExternalOperator | InAppNotificationType.ExternalApp,
     metadata: Record<string, unknown>,
   ): InAppNotificationDto {
     return {
       id: "n4",
       type,
       urgency: NotificationUrgency.Info,
-      title: "update_available",
+      title: NotificationLabel.UpdateAvailable,
       subtitle: "Your plan renews on 1 December.\n<b>Not bold</b>",
       createdAt: new Date().toISOString(),
       metadata,
@@ -182,10 +190,10 @@ describe("NotificationItem external notice", () => {
 
   it("shows the operator's text as written, under the operator's name", async () => {
     render(NotificationItem, {
-      notification: external("external.operator", { senderKind: "operator", senderName: "Nocturne.run" }),
+      notification: external(InAppNotificationType.ExternalOperator, { senderKind: "operator", senderName: "Nocturne.run" }),
     });
 
-    await expect.element(page.getByText("update_available")).toBeVisible();
+    await expect.element(page.getByText(NotificationLabel.UpdateAvailable)).toBeVisible();
     await expect.element(page.getByText("From Nocturne.run", { exact: true })).toBeVisible();
     await expect.element(page.getByText(/<b>Not bold<\/b>/)).toBeVisible();
     expect(page.getByText(/connected app/).elements()).toHaveLength(0);
@@ -193,7 +201,7 @@ describe("NotificationItem external notice", () => {
 
   it("marks an app's notice as from a connected app", async () => {
     render(NotificationItem, {
-      notification: external("external.app", { senderKind: "app", senderName: "Sugarmate" }),
+      notification: external(InAppNotificationType.ExternalApp, { senderKind: "app", senderName: "Sugarmate" }),
     });
 
     await expect.element(page.getByText("From Sugarmate · connected app")).toBeVisible();
@@ -202,7 +210,7 @@ describe("NotificationItem external notice", () => {
   it("opens the link in a new tab and archives the notice", async () => {
     const actions: string[] = [];
     render(NotificationItem, {
-      notification: external("external.app", {
+      notification: external(InAppNotificationType.ExternalApp, {
         senderName: "Sugarmate",
         linkUrl: "https://app.sugarmate.io/plan",
         linkLabel: "See your plan",
@@ -221,7 +229,7 @@ describe("NotificationItem external notice", () => {
 
   it("offers no link that is not https", async () => {
     render(NotificationItem, {
-      notification: external("external.operator", {
+      notification: external(InAppNotificationType.ExternalOperator, {
         senderName: "Nocturne.run",
         linkUrl: "javascript:alert(1)",
         linkLabel: "Open",

@@ -150,7 +150,7 @@ public sealed class ExternalNotificationServiceTests : IDisposable
         created.Urgency.Should().Be(NotificationUrgency.Info);
         created.Category.Should().Be(NotificationCategory.Informational);
         DeviceNotificationMirror.Qualifies(created).Should().BeFalse("it stays in the tray, with no banner and no push");
-        created.Type.Should().Be(ExternalNotificationSender.OperatorType);
+        created.Type.Should().Be(InAppNotificationType.ExternalOperator.ToWireString());
         created.Source.Should().Be(ExternalNotificationSender.OperatorId);
         created.Actions.Select(a => a.ActionId).Should().Equal("navigate", "dismiss");
         created.Metadata.Should().Contain(new Dictionary<string, object>
@@ -168,6 +168,7 @@ public sealed class ExternalNotificationServiceTests : IDisposable
         await SendAsync(Operator, Request("renewal", ExternalNotificationAudience.Owners));
 
         _stored.Values.Single().Actions.Select(a => a.ActionId).Should().Equal("dismiss");
+        _stored.Values.Single().Actions.Select(a => a.Label).Should().Equal(NotificationLabel.Dismiss.ToWireString());
     }
 
     [Fact]
@@ -253,7 +254,7 @@ public sealed class ExternalNotificationServiceTests : IDisposable
         var result = await SendAsync(App, Request("a", audience: null), grantingSubjectId: Viewer);
 
         result.Recipients.Select(r => r.SubjectId).Should().Equal(Viewer);
-        _stored.Values.Single().Type.Should().Be(ExternalNotificationSender.AppType);
+        _stored.Values.Single().Type.Should().Be(InAppNotificationType.ExternalApp.ToWireString());
         _stored.Values.Single().Source.Should().Be("app:client-1");
         _stored.Values.Single().Metadata![ExternalNotificationSender.SenderKindKey].Should().Be("app");
     }

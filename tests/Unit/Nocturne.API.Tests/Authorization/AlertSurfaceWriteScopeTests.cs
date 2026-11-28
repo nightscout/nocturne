@@ -92,7 +92,7 @@ public class AlertSurfaceWriteScopeTests
     /// <c>InAppNotificationService.ExecuteActionAsync</c> hands the action to whichever
     /// <c>INotificationActionHandler</c> is registered for the notification's type, of which
     /// <c>AlertActionHandler</c> — the one that acknowledges the excursion — is only one. The
-    /// action confines the <c>device.notify</c> arm to <c>InAppProvider.NotificationType</c> before
+    /// action confines the <c>device.notify</c> arm to <c>InAppNotificationType.AlertFiring</c> before
     /// dispatching, so a caller admitted only by that scope reaches no other handler; that check is
     /// pinned by <c>NotificationsControllerExecuteActionScopeTests</c>. Membership here is asserted
     /// exhaustively by <see cref="OnlyTheExcursionAckPaths_AcceptADeviceCapabilityScope"/> so the

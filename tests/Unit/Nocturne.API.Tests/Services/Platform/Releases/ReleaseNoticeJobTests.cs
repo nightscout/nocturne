@@ -94,10 +94,10 @@ public sealed class ReleaseNoticeJobTests : IDisposable
 
         await service.CheckAsync(CancellationToken.None);
 
-        _sent.Where(s => s.Type == ReleaseNoticeJob.ReleaseInstalledType)
+        _sent.Where(s => s.Type == InAppNotificationType.SystemReleaseInstalled.ToWireString())
             .Should().OnlyContain(s => s.Version == "0.2.7")
             .And.Subject.Select(s => s.UserId).Should().BeEquivalentTo(owners);
-        var available = _sent.Where(s => s.Type == ReleaseNoticeJob.UpdateAvailableType).ToList();
+        var available = _sent.Where(s => s.Type == InAppNotificationType.SystemUpdateAvailable.ToWireString()).ToList();
         available.Select(s => s.UserId).Should().BeEquivalentTo(owners);
         available.Should().OnlyContain(s => s.Version == "0.2.8"
             && (string)s.Metadata["AutoUpdateMode"] == "Automatic"
@@ -148,8 +148,8 @@ public sealed class ReleaseNoticeJobTests : IDisposable
     {
         _releases.Setup(r => r.GetLatestAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Release("0.2.8"));
         var owner = OwnersOf(SecondTenant)[0];
-        var olderAvailable = Active(owner, ReleaseNoticeJob.UpdateAvailableType, "0.2.8");
-        var olderInstalled = Active(owner, ReleaseNoticeJob.ReleaseInstalledType);
+        var olderAvailable = Active(owner, InAppNotificationType.SystemUpdateAvailable.ToWireString(), "0.2.8");
+        var olderInstalled = Active(owner, InAppNotificationType.SystemReleaseInstalled.ToWireString());
 
         await CreateService("0.2.8").CheckAsync(CancellationToken.None);
 
@@ -170,8 +170,8 @@ public sealed class ReleaseNoticeJobTests : IDisposable
             await Ledger().TryClaimAsync(
                 ReleaseNoticeJob.InstalledKind, "0.2.7", tenant, Guid.Parse(subject), CancellationToken.None);
         }
-        var olderAvailable = Active(owner, ReleaseNoticeJob.UpdateAvailableType, "0.2.8");
-        var installed = Active(owner, ReleaseNoticeJob.ReleaseInstalledType);
+        var olderAvailable = Active(owner, InAppNotificationType.SystemUpdateAvailable.ToWireString(), "0.2.8");
+        var installed = Active(owner, InAppNotificationType.SystemReleaseInstalled.ToWireString());
 
         await CreateService("0.2.7").CheckAsync(CancellationToken.None);
 
@@ -217,14 +217,14 @@ public sealed class ReleaseNoticeJobTests : IDisposable
     }
 
     [Theory]
-    [InlineData(ReleaseNoticeJob.UpdateAvailableType, "0.2.9", ReleaseNoticeJob.UpdateAvailableType, "0.2.8", true)]
-    [InlineData(ReleaseNoticeJob.UpdateAvailableType, "0.2.9", ReleaseNoticeJob.ReleaseInstalledType, "0.2.7", false)]
-    [InlineData(ReleaseNoticeJob.ReleaseInstalledType, "0.2.8", ReleaseNoticeJob.ReleaseInstalledType, "0.2.7", true)]
-    [InlineData(ReleaseNoticeJob.ReleaseInstalledType, "0.2.8", ReleaseNoticeJob.UpdateAvailableType, "0.2.8", true)]
-    [InlineData(ReleaseNoticeJob.ReleaseInstalledType, "0.2.8", ReleaseNoticeJob.UpdateAvailableType, "0.2.9", false)]
-    public void ANoticeSupersedesWhatItReplaces(string type, string version, string olderType, string olderVersion, bool superseded)
+    [InlineData(InAppNotificationType.SystemUpdateAvailable, "0.2.9", InAppNotificationType.SystemUpdateAvailable, "0.2.8", true)]
+    [InlineData(InAppNotificationType.SystemUpdateAvailable, "0.2.9", InAppNotificationType.SystemReleaseInstalled, "0.2.7", false)]
+    [InlineData(InAppNotificationType.SystemReleaseInstalled, "0.2.8", InAppNotificationType.SystemReleaseInstalled, "0.2.7", true)]
+    [InlineData(InAppNotificationType.SystemReleaseInstalled, "0.2.8", InAppNotificationType.SystemUpdateAvailable, "0.2.8", true)]
+    [InlineData(InAppNotificationType.SystemReleaseInstalled, "0.2.8", InAppNotificationType.SystemUpdateAvailable, "0.2.9", false)]
+    public void ANoticeSupersedesWhatItReplaces(InAppNotificationType type, string version, InAppNotificationType olderType, string olderVersion, bool superseded)
     {
-        ReleaseNoticeJob.Supersedes(type, version, olderType, olderVersion).Should().Be(superseded);
+        ReleaseNoticeJob.Supersedes(type, version, olderType.ToWireString(), olderVersion).Should().Be(superseded);
     }
 
     private string[] OwnersOf(Guid tenantId)

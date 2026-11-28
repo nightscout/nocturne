@@ -1,4 +1,4 @@
-import type { InAppNotificationDto } from "#lib/api/index.js";
+import { InAppNotificationType, type InAppNotificationDto } from "@nocturne/api-client";
 import { createSystemNotification } from "#lib/audio/alarm-sounds.js";
 import { resolveNotificationLabel } from "#lib/utils/notification-labels.js";
 import { WebSocketClient } from "#lib/websocket/websocket-client.svelte.js";
@@ -9,7 +9,11 @@ import { BROWSER_SOCKET_TIMING } from "#lib/websocket/socket-options.js";
  * the notice that the rule cannot run until its conditions are edited, and the notice that it has
  * waited 24 hours for missing data.
  */
-const ALERT_TYPES = new Set(["alert.firing", "alert.unevaluable", "alert.held"]);
+const ALERT_TYPES = new Set<string>([
+  InAppNotificationType.AlertFiring,
+  InAppNotificationType.AlertUnevaluable,
+  InAppNotificationType.AlertHeld,
+]);
 
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders from it
 const shown = new Map<string, Notification>();

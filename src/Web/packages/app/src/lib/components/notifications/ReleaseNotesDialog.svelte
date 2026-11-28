@@ -7,6 +7,7 @@
   import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import {
     AutoUpdateMode,
+    InAppNotificationType,
     type InAppNotificationDto,
   } from "@nocturne/api-client";
   import { formatLongDate } from "#lib/utils/formatting.js";
@@ -23,7 +24,7 @@
   retainQuery(() => statusQuery);
   const status = $derived(statusQuery?.current ?? null);
 
-  const isUpdate = $derived(notification?.type === "system.update_available");
+  const isUpdate = $derived(notification?.type === InAppNotificationType.SystemUpdateAvailable);
   const version = $derived(notification?.metadata?.["Version"]?.toString() ?? "");
 
   // The notice names one version; show its notes only while the server still describes that

@@ -105,7 +105,6 @@ internal sealed class ClockAnomalyNotice(
     internal const string AheadUntilKey = "aheadUntil";
     private const string PumpModesFact = "active_pump_modes";
     private const string OverrideFact = "active_override";
-    private const string TitleKey = "device_clock_ahead";
 
     /// <summary>Instants the host writes from its own clock (docs/alerts/engine-semantics.md §5.4).</summary>
     internal static readonly IReadOnlySet<string> HostFacts =
@@ -246,10 +245,10 @@ internal sealed class ClockAnomalyNotice(
                 continue;
             }
             if (await notifications.CreateNotificationUnlessActiveAsync(
-                    owner, NotificationType, TitleKey, fact,
+                    owner, NotificationType, NotificationLabel.DeviceClockAhead.ToWireString(), fact,
                     category: NotificationCategory.Alert,
                     source: NotificationSource,
-                    subtitle: TitleKey + "_subtitle",
+                    subtitle: NotificationLabel.DeviceClockAheadSubtitle.ToWireString(),
                     metadata: metadata,
                     cancellationToken: ct))
                 logger.LogWarning(

@@ -89,7 +89,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
             foreach (var (key, named) in ChannelNotices)
             {
                 var channel = _channels[(tenant, key, named)] = Guid.CreateVersion7().ToString();
-                await InsertNoticeAsync(conn, tenant, _bystander, NotificationSubjectNaming.AlertChannelNotSending,
+                await InsertNoticeAsync(conn, tenant, _bystander, InAppNotificationType.AlertChannelNotSending.ToWireString(),
                     "alert_channel_no_recipient", "alert_channel_no_recipient_subtitle", channel,
                     metadata: $$"""{"channelId":"{{channel}}","destinationLabel":"{{Name(named)}}","{{key}}":"{{named}}"}""");
             }
@@ -185,9 +185,9 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
                 (_bystander.ToString(), "passkey.anonymous_login_request", _bystander.ToString()),
                 (_bystander.ToString(), "tracker.alert", _requests[(tenant, _leaver)].ToString()),
                 (_bystander.ToString(), "sharing.link_rotated", tenant.ToString()),
-                (_bystander.ToString(), NotificationSubjectNaming.AlertChannelNotSending,
+                (_bystander.ToString(), InAppNotificationType.AlertChannelNotSending.ToWireString(),
                     _channels[(tenant, NotificationSubjectNaming.MemberSubjectIdKey, _bystander)]),
-                (_bystander.ToString(), NotificationSubjectNaming.AlertChannelNotSending,
+                (_bystander.ToString(), InAppNotificationType.AlertChannelNotSending.ToWireString(),
                     _channels[(tenant, NotificationSubjectNaming.AddedBySubjectIdKey, _bystander)]),
             ], $"tenant {tenant} kept the other subject's notices, and a type the catalogue does not declare");
         }
@@ -204,7 +204,7 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
         foreach (var tenant in Tenants)
         {
             var channels = (await NoticesAsync(tenant))
-                .Where(n => n.Type == NotificationSubjectNaming.AlertChannelNotSending)
+                .Where(n => n.Type == InAppNotificationType.AlertChannelNotSending.ToWireString())
                 .Select(n => n.SourceId);
 
             channels.Should().BeEquivalentTo(
@@ -224,9 +224,9 @@ public class SubjectRepositoryDeleteAuditScrubTests : IAsyncLifetime
         {
             expected.Add((tenant, _bystander.ToString(), "membership.requested", _requests[(tenant, _leaver)].ToString()));
             expected.Add((tenant, _bystander.ToString(), "passkey.anonymous_login_request", _leaver.ToString()));
-            expected.Add((tenant, _bystander.ToString(), NotificationSubjectNaming.AlertChannelNotSending,
+            expected.Add((tenant, _bystander.ToString(), InAppNotificationType.AlertChannelNotSending.ToWireString(),
                 _channels[(tenant, NotificationSubjectNaming.MemberSubjectIdKey, _leaver)]));
-            expected.Add((tenant, _bystander.ToString(), NotificationSubjectNaming.AlertChannelNotSending,
+            expected.Add((tenant, _bystander.ToString(), InAppNotificationType.AlertChannelNotSending.ToWireString(),
                 _channels[(tenant, NotificationSubjectNaming.AddedBySubjectIdKey, _leaver)]));
         }
 

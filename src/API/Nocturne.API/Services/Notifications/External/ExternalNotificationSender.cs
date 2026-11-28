@@ -1,3 +1,5 @@
+using Nocturne.Core.Models;
+
 namespace Nocturne.API.Services.Notifications.External;
 
 /// <summary>Who sends an external notice.</summary>
@@ -27,12 +29,6 @@ public sealed record ExternalNotificationSender(
 {
     public const string OperatorId = "operator";
 
-    /// <summary>The notification type of the operator's notices.</summary>
-    public const string OperatorType = "external.operator";
-
-    /// <summary>The notification type of an app's notices.</summary>
-    public const string AppType = "external.app";
-
     /// <summary>The metadata key the sender's kind is stored under: <c>operator</c> or <c>app</c>.</summary>
     public const string SenderKindKey = "senderKind";
 
@@ -58,7 +54,8 @@ public sealed record ExternalNotificationSender(
     public string KindName => Kind == ExternalSenderKind.Operator ? "operator" : "app";
 
     /// <summary>The in-app notification type of this sender's notices.</summary>
-    public string NotificationType => Kind == ExternalSenderKind.Operator ? OperatorType : AppType;
+    public string NotificationType =>
+        (Kind == ExternalSenderKind.Operator ? InAppNotificationType.ExternalOperator : InAppNotificationType.ExternalApp).ToWireString();
 
     /// <summary>
     /// The in-app notification source of this sender's notices, so the per-source cap of active

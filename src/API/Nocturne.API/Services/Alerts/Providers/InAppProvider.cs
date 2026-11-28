@@ -11,7 +11,7 @@ namespace Nocturne.API.Services.Alerts.Providers;
 /// acknowledge, dismiss, or the excursion auto-archives on resolve.
 /// </summary>
 /// <remarks>
-/// The notification's <c>type</c> is the discriminator <see cref="NotificationType"/> and
+/// The notification's <c>type</c> is the discriminator <see cref="InAppNotificationType.AlertFiring"/> and
 /// <c>sourceId</c> is the excursion id. <c>CreateNotificationAsync</c> does NOT dedupe by
 /// (type, sourceId), so each escalation step appends a fresh row — the user sees one
 /// notification per step. The pair is consumed by <c>AlertActionHandler</c> (action
@@ -23,62 +23,33 @@ internal sealed class InAppProvider(
     IInAppNotificationService notificationService,
     ILogger<InAppProvider> logger)
 {
-    /// <summary>
-    /// Stable notification-type discriminator used by both the provider (creation) and the
-    /// action handler (archival on resolve / ack action). Keep in sync with
-    /// <c>AlertActionHandler.NotificationType</c>.
-    /// </summary>
-    public const string NotificationType = "alert.firing";
-
-    /// <summary>
-    /// The type of the notice that a rule cannot be evaluated. Its title is the rule's name and its
-    /// subtitle the label key <see cref="UnevaluableSubtitle"/>, which the web app renders. It has
-    /// no actions: there is no excursion to acknowledge.
-    /// </summary>
-    public const string UnevaluableNotificationType = "alert.unevaluable";
-
-    public const string UnevaluableSubtitle = "alert_unevaluable_subtitle";
-
-    /// <summary>
-    /// The subtitle of the notice, of type <see cref="UnevaluableNotificationType"/>, that a rule's
-    /// auto-resolve tree or smart-snooze conditions cannot be evaluated.
-    /// </summary>
-    public const string PartlyUnevaluableSubtitle = "alert_partly_unevaluable_subtitle";
-
-    /// <summary>
-    /// The type of the notice that a rule's hold reached the engine's bound, titled and without
-    /// actions as <see cref="UnevaluableNotificationType"/>. Its subtitle is the label key
-    /// <see cref="HeldSubtitle"/>, or <see cref="HeldClosedSubtitle"/> when it closed an alert.
-    /// </summary>
-    public const string HeldNotificationType = "alert.held";
-
-    public const string HeldSubtitle = "alert_held_subtitle";
-
-    public const string HeldClosedSubtitle = "alert_held_closed_subtitle";
-
     /// <summary>Every notification type an excursion or a notice can create.</summary>
     public static readonly IReadOnlyList<string> AllNotificationTypes =
-        [NotificationType, UnevaluableNotificationType, HeldNotificationType];
+    [
+        InAppNotificationType.AlertFiring.ToWireString(),
+        InAppNotificationType.AlertUnevaluable.ToWireString(),
+        InAppNotificationType.AlertHeld.ToWireString(),
+    ];
 
     /// <summary>The type of the notifications the excursion, or notice, of <paramref name="rule"/> created.</summary>
     public static string NotificationTypeFor(ExcursionRuleSnapshot rule) =>
-        rule.IsUnevaluableNotice ? UnevaluableNotificationType
-        : rule.IsHeldNotice ? HeldNotificationType
-        : NotificationType;
+        rule.IsUnevaluableNotice ? InAppNotificationType.AlertUnevaluable.ToWireString()
+        : rule.IsHeldNotice ? InAppNotificationType.AlertHeld.ToWireString()
+        : InAppNotificationType.AlertFiring.ToWireString();
 
     private static string NotificationTypeFor(AlertPayloadKind kind) => kind switch
     {
-        AlertPayloadKind.Unevaluable or AlertPayloadKind.PartlyUnevaluable => UnevaluableNotificationType,
-        AlertPayloadKind.Held or AlertPayloadKind.HeldClosed => HeldNotificationType,
-        _ => NotificationType,
+        AlertPayloadKind.Unevaluable or AlertPayloadKind.PartlyUnevaluable => InAppNotificationType.AlertUnevaluable.ToWireString(),
+        AlertPayloadKind.Held or AlertPayloadKind.HeldClosed => InAppNotificationType.AlertHeld.ToWireString(),
+        _ => InAppNotificationType.AlertFiring.ToWireString(),
     };
 
     private static string? NoticeSubtitle(AlertPayloadKind kind) => kind switch
     {
-        AlertPayloadKind.Unevaluable => UnevaluableSubtitle,
-        AlertPayloadKind.PartlyUnevaluable => PartlyUnevaluableSubtitle,
-        AlertPayloadKind.Held => HeldSubtitle,
-        AlertPayloadKind.HeldClosed => HeldClosedSubtitle,
+        AlertPayloadKind.Unevaluable => NotificationLabel.AlertUnevaluableSubtitle.ToWireString(),
+        AlertPayloadKind.PartlyUnevaluable => NotificationLabel.AlertPartlyUnevaluableSubtitle.ToWireString(),
+        AlertPayloadKind.Held => NotificationLabel.AlertHeldSubtitle.ToWireString(),
+        AlertPayloadKind.HeldClosed => NotificationLabel.AlertHeldClosedSubtitle.ToWireString(),
         _ => null,
     };
 

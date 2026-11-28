@@ -141,7 +141,7 @@ public class CompressionLowServiceTests
     private void VerifyArchivedUnder(string userId) =>
         _notificationService.Verify(n => n.ArchiveBySourceAsync(
             userId,
-            CompressionLowDetectionService.NotificationType,
+            InAppNotificationType.GlucoseCompressionLowReview.ToWireString(),
             "2026-04-17",
             NotificationArchiveReason.Completed,
             It.IsAny<CancellationToken>()), Times.Once);

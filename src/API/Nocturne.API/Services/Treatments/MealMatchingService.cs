@@ -108,7 +108,7 @@ public class MealMatchingService : IMealMatchingService
     {
         await _notificationService.ArchiveBySourceAsync(
             userId,
-            IMealMatchingService.SuggestedMatchNotificationType,
+            InAppNotificationType.MealMatchingSuggestedMatch.ToWireString(),
             foodEntryId.ToString(),
             NotificationArchiveReason.ConditionMet,
             ct);
@@ -288,7 +288,7 @@ public class MealMatchingService : IMealMatchingService
         // and starts throwing.
         var existing = await _notificationRepository.FindBySourceAsync(
             userId,
-            IMealMatchingService.SuggestedMatchNotificationType,
+            InAppNotificationType.MealMatchingSuggestedMatch.ToWireString(),
             entry.Id.ToString(),
             ct);
 
@@ -325,7 +325,7 @@ public class MealMatchingService : IMealMatchingService
 
         await _notificationService.CreateNotificationAsync(
             userId,
-            IMealMatchingService.SuggestedMatchNotificationType,
+            InAppNotificationType.MealMatchingSuggestedMatch.ToWireString(),
             title,
             subtitle: subtitle,
             sourceId: entry.Id.ToString(),

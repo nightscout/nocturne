@@ -17,6 +17,7 @@
   } from "#lib/api/generated/notifications.generated.remote.js";
   import CheckCheck from "@lucide/svelte/icons/check-check";
   import {
+    InAppNotificationType,
     NotificationUrgency,
     type InAppNotificationDto,
   } from "@nocturne/api-client";
@@ -88,7 +89,7 @@
     if (!notification.id) return;
 
     if (
-      notification.type === "meal_matching.suggested_match" &&
+      notification.type === InAppNotificationType.MealMatchingSuggestedMatch &&
       actionId === "review"
     ) {
       reviewNotification = notification;
@@ -100,7 +101,7 @@
     // server action (which would just archive it). Mark it read on the way so the
     // badge clears; the notification auto-archives once its suggestions are resolved.
     if (
-      notification.type === "glucose.compression_low_review" &&
+      notification.type === InAppNotificationType.GlucoseCompressionLowReview &&
       actionId === "review"
     ) {
       markRead(notification.id);
@@ -117,32 +118,35 @@
       return;
     }
 
-    if (notification.type === "alerts.channelNotSending" && actionId === "open_rule") {
+    if (notification.type === InAppNotificationType.AlertChannelNotSending && actionId === "open_rule") {
       markRead(notification.id);
       return;
     }
 
     if (
-      (notification.type === "team.staff_waiting" || notification.type === "team.staff_joined") &&
+      (notification.type === InAppNotificationType.TeamStaffWaiting || notification.type === InAppNotificationType.TeamStaffJoined) &&
       actionId === "open_team"
     ) {
       markRead(notification.id);
       return;
     }
 
-    if (notification.type === "data.rejected_uploads" && actionId === "review") {
+    if (notification.type === InAppNotificationType.DataRejectedUploads && actionId === "review") {
       markRead(notification.id);
       goto(resolve('reports/data-quality/rejected-uploads'));
       return;
     }
 
-    if (notification.type === "profile.raw_mmol_values" && actionId === "review") {
+    if (notification.type === InAppNotificationType.ProfileRawMmolValues && actionId === "review") {
       markRead(notification.id);
       goto(resolve("settings/profile"));
       return;
     }
 
-    if (notification.type?.startsWith("system.instance_key_changed")) {
+    if (
+      notification.type === InAppNotificationType.SystemInstanceKeyChanged ||
+      notification.type === InAppNotificationType.SystemInstanceKeyChangedPlatform
+    ) {
       if (actionId === "open_connectors") {
         markRead(notification.id);
         goto(resolve("settings/connectors"));

@@ -3,6 +3,7 @@ using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.NotificationActionHandlers;
 
@@ -31,7 +32,7 @@ internal sealed class AlertActionHandler(
     ILogger<AlertActionHandler> logger
 ) : INotificationActionHandler
 {
-    public string NotificationType => InAppProvider.NotificationType;
+    public string NotificationType => InAppNotificationType.AlertFiring.ToWireString();
 
     public async Task<NotificationActionResult> HandleAsync(
         Guid notificationId,

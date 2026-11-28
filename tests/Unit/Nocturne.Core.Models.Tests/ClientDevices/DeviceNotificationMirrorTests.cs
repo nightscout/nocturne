@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using FluentAssertions;
 using Nocturne.Core.Models.ClientDevices;
 using Xunit;
@@ -27,36 +26,16 @@ public class DeviceNotificationMirrorTests
             .Should().BeFalse();
     }
 
-    public static TheoryData<string> WebLabelKeys()
+    public static TheoryData<string> LabelKeys()
     {
-        var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, WebLabelsPath)))
-            root = root.Parent;
-        root.Should().NotBeNull("the web app's label map is the source of every key");
-
-        var source = File.ReadAllText(Path.Combine(root!.FullName, WebLabelsPath));
-        var map = Regex.Match(source, @"const LABEL_MAP[^{]*\{(?<body>.*?)^\};", RegexOptions.Singleline | RegexOptions.Multiline);
-        map.Success.Should().BeTrue("the map is a const object literal");
-        var keys = Regex.Matches(
-                map.Groups["body"].Value,
-                @"^ {2}(?:""(?<k>[^""]+)""|'(?<k>[^']+)'|(?<k>[A-Za-z_$][\w$]*))\s*:",
-                RegexOptions.Multiline)
-            .Select(m => m.Groups["k"].Value)
-            .ToList();
-        keys.Should().Contain("rejected_uploads_subtitle", "the map was read");
-        keys.Count.Should().BeGreaterThanOrEqualTo(24, "a partial read must not pass");
-
         var data = new TheoryData<string>();
-        foreach (var key in keys)
-            data.Add(key);
+        foreach (var label in Enum.GetValues<NotificationLabel>())
+            data.Add(label.ToWireString());
         return data;
     }
 
-    private static readonly string WebLabelsPath =
-        Path.Combine("src", "Web", "packages", "app", "src", "lib", "utils", "notification-labels.ts");
-
     [Theory]
-    [MemberData(nameof(WebLabelKeys))]
+    [MemberData(nameof(LabelKeys))]
     public void Qualifies_excludes_a_notification_whose_title_is_a_label_key(string key)
     {
         var notification = Dto("any.type", NotificationUrgency.Urgent, NotificationCategory.Alert);
@@ -65,7 +44,7 @@ public class DeviceNotificationMirrorTests
     }
 
     [Theory]
-    [MemberData(nameof(WebLabelKeys))]
+    [MemberData(nameof(LabelKeys))]
     public void Qualifies_excludes_a_notification_whose_subtitle_is_a_label_key_under_a_text_title(string key)
     {
         var notification = Dto("any.type", NotificationUrgency.Urgent, NotificationCategory.Alert);

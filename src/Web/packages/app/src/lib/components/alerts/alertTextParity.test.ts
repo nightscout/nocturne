@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AlertLimitFact, AlertRuleSeverity, ForecastCurve } from "@nocturne/api-client";
+import { AlertLimitFact, AlertRuleSeverity, ForecastCurve, NotificationLabel } from "@nocturne/api-client";
 import {
   CARD_TEXT,
   CURVE_NAMES,
@@ -67,11 +67,11 @@ describe("the app's and the bot's alert text", () => {
   });
 
   it("gives the same text for a rule that cannot run, partly cannot run, or is held", () => {
-    expect(CARD_TEXT.unevaluable).toBe(resolveNotificationLabel("alert_unevaluable_subtitle"));
-    expect(CARD_TEXT.partlyUnevaluable).toBe(resolveNotificationLabel("alert_partly_unevaluable_subtitle"));
+    expect(CARD_TEXT.unevaluable).toBe(resolveNotificationLabel(NotificationLabel.AlertUnevaluableSubtitle));
+    expect(CARD_TEXT.partlyUnevaluable).toBe(resolveNotificationLabel(NotificationLabel.AlertPartlyUnevaluableSubtitle));
     expect(CARD_TEXT.held + ALLOWED_DIFFERENCES.heldSubtitleSuffix).toBe(
-      resolveNotificationLabel("alert_held_subtitle"),
+      resolveNotificationLabel(NotificationLabel.AlertHeldSubtitle),
     );
-    expect(CARD_TEXT.heldClosed).toBe(resolveNotificationLabel("alert_held_closed_subtitle"));
+    expect(CARD_TEXT.heldClosed).toBe(resolveNotificationLabel(NotificationLabel.AlertHeldClosedSubtitle));
   });
 });

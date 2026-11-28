@@ -123,7 +123,7 @@ public class TeamRenameAnnouncerTests
 
         var notice = Live.Should().ContainSingle().Subject;
         (notice.Tenant, notice.User, notice.Type, notice.Source, notice.Title).Should().Be(
-            ((Guid?)SiteA, Stayed.ToString(), TeamRenameAnnouncer.NotificationType, TeamId.ToString(), TeamRenameAnnouncer.TitleKey));
+            ((Guid?)SiteA, Stayed.ToString(), InAppNotificationType.TeamRenamed.ToWireString(), TeamId.ToString(), NotificationLabel.TeamRenamed.ToWireString()));
         notice.Metadata.Should().Equal(Names("Old name", "New name"));
     }
 

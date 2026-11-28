@@ -91,10 +91,10 @@ public class TeamStaffAnnouncerTests
 
         await Announcer().AnnounceAsync(Recount(Site));
 
-        Live(TeamStaffAnnouncer.WaitingType).Select(n => (n.Tenant, n.User, n.Source, n.Title)).Should().BeEquivalentTo(new (Guid?, string, string, string)[]
+        Live(InAppNotificationType.TeamStaffWaiting.ToWireString()).Select(n => (n.Tenant, n.User, n.Source, n.Title)).Should().BeEquivalentTo(new (Guid?, string, string, string)[]
         {
-            (Site, OwnerA.ToString(), TeamId.ToString(), TeamStaffAnnouncer.WaitingTitleKey),
-            (Site, OwnerB.ToString(), TeamId.ToString(), TeamStaffAnnouncer.WaitingTitleKey),
+            (Site, OwnerA.ToString(), TeamId.ToString(), NotificationLabel.TeamStaffWaiting.ToWireString()),
+            (Site, OwnerB.ToString(), TeamId.ToString(), NotificationLabel.TeamStaffWaiting.ToWireString()),
         });
     }
 
@@ -105,7 +105,7 @@ public class TeamStaffAnnouncerTests
 
         await Announcer().AnnounceAsync(Recount(Site));
 
-        Live(TeamStaffAnnouncer.WaitingType).First().Metadata.Should().Equal(new Dictionary<string, object>
+        Live(InAppNotificationType.TeamStaffWaiting.ToWireString()).First().Metadata.Should().Equal(new Dictionary<string, object>
         {
             [TeamStaffAnnouncer.TeamKey] = "Ward 4",
             [TeamStaffAnnouncer.TeamIdKey] = TeamId,
@@ -121,7 +121,7 @@ public class TeamStaffAnnouncerTests
 
         await Announcer().AnnounceAsync(Recount(Site));
 
-        Live(TeamStaffAnnouncer.WaitingType).Should().OnlyContain(n => CountOf(n) == 2);
+        Live(InAppNotificationType.TeamStaffWaiting.ToWireString()).Should().OnlyContain(n => CountOf(n) == 2);
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class TeamStaffAnnouncerTests
         Waiting(3);
         await announcer.AnnounceAsync(Recount(Site));
 
-        Live(TeamStaffAnnouncer.WaitingType).Should().HaveCount(2).And.OnlyContain(n => CountOf(n) == 3);
+        Live(InAppNotificationType.TeamStaffWaiting.ToWireString()).Should().HaveCount(2).And.OnlyContain(n => CountOf(n) == 3);
         _notices.All.Where(n => n.Archived is not null).Should().OnlyContain(n => n.Archived == NotificationArchiveReason.Superseded);
     }
 
@@ -183,7 +183,7 @@ public class TeamStaffAnnouncerTests
         Waiting(0);
         await announcer.AnnounceAsync(Recount(Site));
 
-        Live(TeamStaffAnnouncer.WaitingType).Select(n => (n.Tenant, n.Source)).Should().BeEquivalentTo(new (Guid?, string)[]
+        Live(InAppNotificationType.TeamStaffWaiting.ToWireString()).Select(n => (n.Tenant, n.Source)).Should().BeEquivalentTo(new (Guid?, string)[]
         {
             (Site, OtherTeam.ToString()), (Site, OtherTeam.ToString()), (OtherSite, TeamId.ToString()), (OtherSite, TeamId.ToString()),
         });
@@ -199,11 +199,11 @@ public class TeamStaffAnnouncerTests
         Waiting(0);
         await announcer.AnnounceAsync(Recount(Site));
 
-        var joined = Live(TeamStaffAnnouncer.JoinedType).ToList();
+        var joined = Live(InAppNotificationType.TeamStaffJoined.ToWireString()).ToList();
         joined.Select(n => (n.User, n.Source, n.Title)).Should().BeEquivalentTo(new[]
         {
-            (OwnerA.ToString(), TeamId.ToString(), TeamStaffAnnouncer.JoinedTitleKey),
-            (OwnerB.ToString(), TeamId.ToString(), TeamStaffAnnouncer.JoinedTitleKey),
+            (OwnerA.ToString(), TeamId.ToString(), NotificationLabel.TeamStaffJoined.ToWireString()),
+            (OwnerB.ToString(), TeamId.ToString(), NotificationLabel.TeamStaffJoined.ToWireString()),
         });
         joined.Should().OnlyContain(n => n.Metadata!.Count == 2 && (string)n.Metadata[TeamStaffAnnouncer.TeamKey] == "Ward 4");
         _notices.All.Should().HaveCount(2, "the second announcement files nothing while one is active");
@@ -226,7 +226,7 @@ public class TeamStaffAnnouncerTests
 
         await Announcer().AnnounceAsync(new StaffNotices([new TeamSiteKey(Site, TeamId)], [new TeamSiteKey(Site, TeamId)]));
 
-        _notices.Live.Select(n => n.Type).Distinct().Should().BeEquivalentTo(TeamStaffAnnouncer.WaitingType, TeamStaffAnnouncer.JoinedType);
+        _notices.Live.Select(n => n.Type).Distinct().Should().BeEquivalentTo(InAppNotificationType.TeamStaffWaiting.ToWireString(), InAppNotificationType.TeamStaffJoined.ToWireString());
     }
 
     [Fact]
@@ -239,7 +239,7 @@ public class TeamStaffAnnouncerTests
 
         await Announcer().RecountOwnerChangeAsync(Site, Guid.CreateVersion7());
 
-        Live(TeamStaffAnnouncer.WaitingType).Select(n => (n.Source, CountOf(n))).Should().BeEquivalentTo(new[]
+        Live(InAppNotificationType.TeamStaffWaiting.ToWireString()).Select(n => (n.Source, CountOf(n))).Should().BeEquivalentTo(new[]
         {
             (TeamId.ToString(), 2), (TeamId.ToString(), 2), (OtherTeam.ToString(), 1), (OtherTeam.ToString(), 1),
         });
@@ -253,7 +253,7 @@ public class TeamStaffAnnouncerTests
     {
         var templates = new NotificationTemplateRegistry().AddBuiltInTemplates();
 
-        var sources = new[] { TeamStaffAnnouncer.WaitingType, TeamStaffAnnouncer.JoinedType, TeamRenameAnnouncer.NotificationType }
+        var sources = new[] { InAppNotificationType.TeamStaffWaiting.ToWireString(), InAppNotificationType.TeamStaffJoined.ToWireString(), InAppNotificationType.TeamRenamed.ToWireString() }
             .Select(type => templates.GetTemplate(type)!.Source)
             .ToList();
 
@@ -262,10 +262,12 @@ public class TeamStaffAnnouncerTests
     }
 
     [Theory]
-    [InlineData(TeamStaffAnnouncer.WaitingType, TeamStaffAnnouncer.WaitingTitleKey)]
-    [InlineData(TeamStaffAnnouncer.JoinedType, TeamStaffAnnouncer.JoinedTitleKey)]
-    public void A_notice_never_reaches_a_device(string type, string title)
+    [InlineData(InAppNotificationType.TeamStaffWaiting, NotificationLabel.TeamStaffWaiting)]
+    [InlineData(InAppNotificationType.TeamStaffJoined, NotificationLabel.TeamStaffJoined)]
+    public void A_notice_never_reaches_a_device(InAppNotificationType notificationType, NotificationLabel label)
     {
+        var type = notificationType.ToWireString();
+        var title = label.ToWireString();
         DeviceNotificationMirror.Qualifies(new InAppNotificationDto
         {
             Type = type,

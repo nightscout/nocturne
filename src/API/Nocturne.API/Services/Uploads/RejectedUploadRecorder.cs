@@ -40,8 +40,6 @@ public sealed class RejectedUploadRecorder(
     TimeProvider clock,
     ILogger<RejectedUploadRecorder> logger) : IRejectedUploadRecorder
 {
-    public const string NotificationType = "data.rejected_uploads";
-
     internal const int MaxStringLength = 1024;
 
     internal const int MaxPayloadLength = 32 * 1024;
@@ -76,7 +74,7 @@ public sealed class RejectedUploadRecorder(
         var left = (await store.GetAsync(1, 0, ct)).Pagination.Total;
         if (left == 0 && await owners.GetOwnerSubjectIdAsync(tenant.TenantId, ct) is { } owner)
             await notifications.ArchiveBySourceAsync(
-                owner, NotificationType, NotificationSource, NotificationArchiveReason.Completed, ct);
+                owner, InAppNotificationType.DataRejectedUploads.ToWireString(), NotificationSource, NotificationArchiveReason.Completed, ct);
         return cleared;
     }
 
@@ -174,16 +172,16 @@ public sealed class RejectedUploadRecorder(
                 return;
 
             await notifications.ArchiveBySourceAsync(
-                owner, NotificationType, NotificationSource, NotificationArchiveReason.Superseded, CancellationToken.None);
+                owner, InAppNotificationType.DataRejectedUploads.ToWireString(), NotificationSource, NotificationArchiveReason.Superseded, CancellationToken.None);
             await notifications.CreateNotificationAsync(
                 userId: owner,
-                type: NotificationType,
-                title: "rejected_uploads",
+                type: InAppNotificationType.DataRejectedUploads.ToWireString(),
+                title: NotificationLabel.RejectedUploads.ToWireString(),
                 category: NotificationCategory.Informational,
                 source: NotificationSource,
-                subtitle: "rejected_uploads_subtitle",
+                subtitle: NotificationLabel.RejectedUploadsSubtitle.ToWireString(),
                 sourceId: NotificationSource,
-                actions: [new NotificationActionDto { ActionId = "review", Label = "review", Icon = "eye", Variant = "default" }],
+                actions: [new NotificationActionDto { ActionId = "review", Label = NotificationLabel.Review.ToWireString(), Icon = "eye", Variant = "default" }],
                 cancellationToken: CancellationToken.None);
         }
         catch (Exception ex) when (StoreFailure.Is(ex)) { LogUnnotified(ex); }

@@ -110,7 +110,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
 
         _sent.Should().HaveCount(2).And.OnlyContain(s =>
             s.TenantId == Affected
-            && s.Type == InstanceKeyChangeService.TenantNoticeType
+            && s.Type == InAppNotificationType.SystemInstanceKeyChanged.ToWireString()
             && s.Urgency == NotificationUrgency.Urgent
             && s.SourceId == generation.ToString());
         _sent.Select(s => s.UserId).Should().BeEquivalentTo(OwnersOf(Affected));
@@ -178,7 +178,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         var notice = _sent.Should().ContainSingle().Subject;
         notice.Should().Match<Sent>(s => s.UserId == admin.ToString()
             && s.TenantId == Unaffected
-            && s.Type == InstanceKeyChangeService.PlatformNoticeType
+            && s.Type == InAppNotificationType.SystemInstanceKeyChangedPlatform.ToWireString()
             && s.Urgency == NotificationUrgency.Urgent);
         ((IEnumerable<string>)notice.Metadata["PlatformSettings"]).Should().Equal("discord");
     }
@@ -221,8 +221,8 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         await service.ExecuteTask!;
 
         _archived.Should().BeEquivalentTo(
-            OwnersOf(Affected).Select(o => (o, InstanceKeyChangeService.TenantNoticeType, generation, NotificationArchiveReason.Completed))
-                .Append((admin.ToString(), InstanceKeyChangeService.PlatformNoticeType, generation, NotificationArchiveReason.Completed)));
+            OwnersOf(Affected).Select(o => (o, InAppNotificationType.SystemInstanceKeyChanged.ToWireString(), generation, NotificationArchiveReason.Completed))
+                .Append((admin.ToString(), InAppNotificationType.SystemInstanceKeyChangedPlatform.ToWireString(), generation, NotificationArchiveReason.Completed)));
         (await CheckAsync())!.Outstanding.Should().BeFalse();
 
         _sent.Clear();
@@ -273,7 +273,7 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         _sent.Where(s => s.TenantId == Affected).Select(s => s.UserId).Should().BeEquivalentTo(OwnersOf(Affected));
         _sent.Should().OnlyContain(s => s.SourceId == secondChange);
         _archived.Should().BeEquivalentTo(OwnersOf(Unaffected)
-            .Select(o => (o, InstanceKeyChangeService.TenantNoticeType, firstChange, NotificationArchiveReason.Superseded)));
+            .Select(o => (o, InAppNotificationType.SystemInstanceKeyChanged.ToWireString(), firstChange, NotificationArchiveReason.Superseded)));
     }
 
     [Theory]
@@ -344,8 +344,8 @@ public sealed class InstanceKeyChangeServiceTests : IDisposable
         _sent.Should().OnlyContain(s => s.TenantId == Affected && s.SourceId == rollback)
             .And.Subject.Select(s => s.UserId).Should().BeEquivalentTo(OwnersOf(Affected), "once per owner");
         _archived.Should().BeEquivalentTo(
-            OwnersOf(Affected).Select(o => (o, InstanceKeyChangeService.TenantNoticeType, newerChange, NotificationArchiveReason.Superseded))
-                .Concat(OwnersOf(Unaffected).Select(o => (o, InstanceKeyChangeService.TenantNoticeType, newerChange, NotificationArchiveReason.Completed))));
+            OwnersOf(Affected).Select(o => (o, InAppNotificationType.SystemInstanceKeyChanged.ToWireString(), newerChange, NotificationArchiveReason.Superseded))
+                .Concat(OwnersOf(Unaffected).Select(o => (o, InAppNotificationType.SystemInstanceKeyChanged.ToWireString(), newerChange, NotificationArchiveReason.Completed))));
         _log.Entries.Should().NotContain(e => e.Message.Contains("two instance keys"));
     }
 
