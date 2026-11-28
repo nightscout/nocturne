@@ -29,12 +29,15 @@ public class ApsSnapshotCurvesRewriterFixture() : MigratedDatabase("aps_curves_r
     /// <summary>A Loop status, with its recommended, enacted and predicted values copied out.</summary>
     internal static readonly Guid Loop = Guid.Parse("c0000000-0000-7000-8000-000000000004");
 
+    /// <summary>An AAPS snapshot whose commands hold no curves and whose default column copies its IOB curve.</summary>
+    internal static readonly Guid CopiedDefault = Guid.Parse("c0000000-0000-7000-8000-000000000005");
+
     internal Dictionary<Guid, Row> Rewritten { get; } = [];
     internal int CrossTenantChanged { get; private set; }
     internal int FirstRewriteChanged { get; private set; }
     internal int RerunChanged { get; private set; }
 
-    internal sealed record Row(string? Suggested, string? Enacted, string? Loop);
+    internal sealed record Row(string? Suggested, string? Enacted, string? Loop, string? Default);
 
     public override async Task InitializeAsync()
     {
@@ -84,14 +87,18 @@ public class ApsSnapshotCurvesRewriterFixture() : MigratedDatabase("aps_curves_r
             await conn.PinTenantAsync(tenant);
 
             await using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT id, suggested_json::text, enacted_json::text, loop_json::text FROM aps_snapshots;";
+            cmd.CommandText = """
+                SELECT id, suggested_json::text, enacted_json::text, loop_json::text, predicted_default_json::text
+                FROM aps_snapshots;
+                """;
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
                 rows[reader.GetGuid(0)] = new Row(
                     reader.IsDBNull(1) ? null : reader.GetString(1),
                     reader.IsDBNull(2) ? null : reader.GetString(2),
-                    reader.IsDBNull(3) ? null : reader.GetString(3));
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4));
             }
         }
     }
@@ -110,16 +117,20 @@ public class ApsSnapshotCurvesRewriterFixture() : MigratedDatabase("aps_curves_r
         await conn.ExecuteAsync($$"""
             INSERT INTO aps_snapshots
               (id, tenant_id, timestamp, aps_system, enacted, suggested_json, enacted_json,
-               predicted_iob_json, predicted_zt_json, predicted_uam_json)
+               predicted_default_json, predicted_iob_json, predicted_zt_json, predicted_uam_json)
             VALUES
               ('{{SameCycle}}', '{{TenantA}}', '2026-01-01T00:00:00Z', 'OpenAps', true,
                '{"bg": 120, "tick": null, "timestamp": "2026-01-01T00:00:00Z", "predBGs": {{curves}} }',
                '{"bg": 120, "rate": 0.8, "smb": null, "timestamp": "2026-01-01T00:00:00Z", "predBGs": {{curves}} }',
-               '[120, 115, 110]', '[120, 118]', '[120, 130]'),
+               '[120, 115, 110]', '[120, 115, 110]', '[120, 118]', '[120, 130]'),
               ('{{OneSided}}', '{{TenantA}}', '2026-01-01T00:05:00Z', 'Trio', true,
                '{"bg": 91, "tick": null, "timestamp": "2026-01-01T00:05:00Z", "predBGs": null}',
                '{"bg": 91, "rate": 0.6, "timestamp": "2026-01-01T00:05:00Z", "predBGs": {{curves}} }',
-               '[120, 115, 110]', '[120, 118]', '[120, 130]');
+               '[120, 115, 110]', '[120, 115, 110]', '[120, 118]', '[120, 130]'),
+              ('{{CopiedDefault}}', '{{TenantA}}', '2026-01-01T00:20:00Z', 'AndroidAps', true,
+               '{"bg": 100, "timestamp": "2026-01-01T00:20:00Z"}',
+               NULL,
+               '[100, 98, 96]', '[100, 98, 96]', NULL, NULL);
             """);
 
         await conn.PinTenantAsync(TenantB);
@@ -164,7 +175,7 @@ public class ApsSnapshotCurvesRewriterTests(ApsSnapshotCurvesRewriterFixture fix
     [Fact]
     public void The_rewrite_changes_every_seeded_row_once_and_a_rerun_writes_nothing()
     {
-        fixture.FirstRewriteChanged.Should().Be(4);
+        fixture.FirstRewriteChanged.Should().Be(5);
         fixture.RerunChanged.Should().Be(0);
     }
 
@@ -176,6 +187,7 @@ public class ApsSnapshotCurvesRewriterTests(ApsSnapshotCurvesRewriterFixture fix
         Json(row.Suggested).Should().NotContainKeys("predBGs", "tick");
         Json(row.Enacted).Should().NotContainKeys("predBGs", "smb");
         Json(row.Enacted)["rate"]!.GetValue<double>().Should().Be(0.8);
+        row.Default.Should().BeNull();
     }
 
     [Fact]
@@ -186,6 +198,27 @@ public class ApsSnapshotCurvesRewriterTests(ApsSnapshotCurvesRewriterFixture fix
         Json(row.Suggested).Should().ContainKey("predBGs").WhoseValue.Should().BeNull();
         Json(row.Suggested).Should().NotContainKey("tick");
         Json(row.Enacted).Should().NotContainKey("predBGs");
+    }
+
+    [Fact]
+    public void A_default_curve_that_copies_the_iob_curve_goes_and_the_command_is_left_alone()
+    {
+        var row = fixture.Rewritten[ApsSnapshotCurvesRewriterFixture.CopiedDefault];
+
+        row.Default.Should().BeNull();
+        Json(row.Suggested)["bg"]!.GetValue<int>().Should().Be(100);
+    }
+
+    [Fact]
+    public void Trio_keeps_a_default_curve_it_was_given()
+    {
+        fixture.Rewritten[ApsSnapshotCurvesRewriterFixture.OneSided].Default.Should().Be("[120, 115, 110]");
+    }
+
+    [Fact]
+    public void Loop_keeps_its_default_curve()
+    {
+        fixture.Rewritten[ApsSnapshotCurvesRewriterFixture.Loop].Default.Should().Be("[130, 125, 120]");
     }
 
     [Fact]

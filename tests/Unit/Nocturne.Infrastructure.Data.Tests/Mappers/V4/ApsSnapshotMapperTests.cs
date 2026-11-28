@@ -277,4 +277,74 @@ public class ApsSnapshotMapperTests
         var roundTripped = ApsSnapshotMapper.ToDomainModel(entity);
         roundTripped.AidAlgorithm.Should().Be(system);
     }
+
+    private const string Iob = "[120,118,116]";
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(AidAlgorithm.OpenAps)]
+    [InlineData(AidAlgorithm.AndroidAps)]
+    [InlineData(AidAlgorithm.IAPS)]
+    public void A_default_curve_that_copies_the_iob_curve_is_stored_once_and_read_back(AidAlgorithm algorithm)
+    {
+        var model = new ApsSnapshot
+        {
+            Timestamp = DateTime.UtcNow, AidAlgorithm = algorithm, PredictedDefaultJson = Iob, PredictedIobJson = Iob,
+        };
+
+        var entity = ApsSnapshotMapper.ToEntity(model);
+        var updated = new ApsSnapshotEntity { AidAlgorithm = "OpenAps", PredictedDefaultJson = "[1]" };
+        ApsSnapshotMapper.UpdateEntity(updated, model);
+
+        entity.PredictedDefaultJson.Should().BeNull();
+        entity.PredictedIobJson.Should().Be(Iob);
+        updated.PredictedDefaultJson.Should().BeNull();
+        ApsSnapshotMapper.ToDomainModel(entity).PredictedDefaultJson.Should().Be(Iob);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void A_default_curve_that_differs_from_the_iob_curve_is_stored()
+    {
+        var model = new ApsSnapshot
+        {
+            Timestamp = DateTime.UtcNow, AidAlgorithm = AidAlgorithm.AndroidAps,
+            PredictedDefaultJson = "[120,115,110]", PredictedIobJson = Iob,
+        };
+
+        var entity = ApsSnapshotMapper.ToEntity(model);
+
+        entity.PredictedDefaultJson.Should().Be("[120,115,110]");
+        ApsSnapshotMapper.ToDomainModel(entity).PredictedDefaultJson.Should().Be("[120,115,110]");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void Trio_stores_a_default_curve_it_was_given_and_reads_none_from_its_iob_curve()
+    {
+        var given = ApsSnapshotMapper.ToEntity(new ApsSnapshot
+        {
+            Timestamp = DateTime.UtcNow, AidAlgorithm = AidAlgorithm.Trio, PredictedDefaultJson = Iob, PredictedIobJson = Iob,
+        });
+        var none = new ApsSnapshotEntity { AidAlgorithm = "Trio", PredictedIobJson = Iob };
+
+        given.PredictedDefaultJson.Should().Be(Iob);
+        ApsSnapshotMapper.ToDomainModel(none).PredictedDefaultJson.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void A_snapshot_with_a_loop_status_stores_its_default_curve_and_reads_none_from_its_iob_curve()
+    {
+        const string loop = """{"name":"Loop"}""";
+        var given = ApsSnapshotMapper.ToEntity(new ApsSnapshot
+        {
+            Timestamp = DateTime.UtcNow, AidAlgorithm = AidAlgorithm.Loop, LoopJson = loop,
+            PredictedDefaultJson = Iob, PredictedIobJson = Iob,
+        });
+        var none = new ApsSnapshotEntity { AidAlgorithm = "Loop", LoopJson = loop, PredictedIobJson = Iob };
+
+        given.PredictedDefaultJson.Should().Be(Iob);
+        ApsSnapshotMapper.ToDomainModel(none).PredictedDefaultJson.Should().BeNull();
+    }
 }

@@ -8,7 +8,8 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// <summary>
 /// Rewrites stored APS snapshots into the shape <c>ApsSnapshotCurves</c> in the API writes and
 /// reads: curves the <c>predicted_*</c> columns hold leave the command blobs, Loop's copies of
-/// <c>loop.recommended</c>, <c>loop.enacted</c> and <c>loop.predicted.values</c> go, and
+/// <c>loop.recommended</c>, <c>loop.enacted</c> and <c>loop.predicted.values</c> go, a default curve
+/// that copies the IOB curve goes (<see cref="Mappers.V4.ApsSnapshotMapper.DefaultIsIobCurve"/>), and
 /// null-valued keys go.
 /// </summary>
 /// <remarks>
@@ -37,6 +38,11 @@ public static class ApsSnapshotCurvesRewriter
     private static readonly string OrefSuggested = StripCommand("a.suggested_json");
     private static readonly string OrefEnacted = StripCommand("a.enacted_json");
 
+    private const string OrefDefault = """
+        CASE WHEN a.aps_system <> 'Trio' AND a.predicted_default_json = a.predicted_iob_json
+             THEN NULL ELSE a.predicted_default_json END
+        """;
+
     private const string LoopSuggested =
         "CASE WHEN a.suggested_json = a.loop_json -> 'recommended' THEN NULL ELSE a.suggested_json END";
 
@@ -57,12 +63,16 @@ public static class ApsSnapshotCurvesRewriter
             LIMIT @size),
         oref AS (
             UPDATE aps_snapshots a
-            SET suggested_json = {{OrefSuggested}}, enacted_json = {{OrefEnacted}}
+            SET suggested_json = {{OrefSuggested}}, enacted_json = {{OrefEnacted}},
+                predicted_default_json = {{OrefDefault}}
             FROM page
             WHERE a.id = page.id
-              AND a.loop_json IS NULL AND (a.suggested_json ? 'predBGs' OR a.enacted_json ? 'predBGs')
+              AND a.loop_json IS NULL
+              AND (a.suggested_json ? 'predBGs' OR a.enacted_json ? 'predBGs'
+                   OR a.predicted_default_json = a.predicted_iob_json)
               AND (a.suggested_json IS DISTINCT FROM {{OrefSuggested}}
-                   OR a.enacted_json IS DISTINCT FROM {{OrefEnacted}})
+                   OR a.enacted_json IS DISTINCT FROM {{OrefEnacted}}
+                   OR a.predicted_default_json IS DISTINCT FROM {{OrefDefault}})
             RETURNING 1),
         loop AS (
             UPDATE aps_snapshots a

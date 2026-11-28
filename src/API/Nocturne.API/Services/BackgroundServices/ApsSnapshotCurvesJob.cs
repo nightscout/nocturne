@@ -17,7 +17,7 @@ internal sealed class ApsSnapshotCurvesJob(
     Func<NocturneDbContext, Guid, (DateTime At, Guid Id)?, CancellationToken, Task<ApsSnapshotCurvesRewriter.Pass>>? rewrite = null)
     : IScheduledJob
 {
-    internal const string JobName = "aps-snapshot-curves";
+    internal const string JobName = "aps-snapshot-curves-v2";
 
     internal const int PagesPerRun = 20;
 
