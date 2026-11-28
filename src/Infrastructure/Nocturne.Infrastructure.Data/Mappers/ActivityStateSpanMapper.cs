@@ -136,7 +136,7 @@ public static class ActivityStateSpanMapper
             Description = MetadataString(session, "description"),
             Notes = MetadataString(session, "notes"),
             Name = MetadataString(session, "name"),
-            EnteredBy = MetadataString(session, "enteredBy") ?? session.SourceApp ?? "nocturne",
+            EnteredBy = MetadataString(session, UploadedAppFields.EnteredByKey) ?? session.SourceApp ?? "nocturne",
             CreatedAt = session.CreatedAt?.ToString("o", CultureInfo.InvariantCulture),
         };
     }
@@ -248,7 +248,7 @@ public static class ActivityStateSpanMapper
             activity.Description = GetMetadataString(stateSpan.Metadata, "description");
             activity.Notes = GetMetadataString(stateSpan.Metadata, "notes");
             activity.Name = GetMetadataString(stateSpan.Metadata, "name");
-            activity.EnteredBy = GetMetadataString(stateSpan.Metadata, "enteredBy") ?? stateSpan.Source;
+            activity.EnteredBy = GetMetadataString(stateSpan.Metadata, UploadedAppFields.EnteredByKey) ?? stateSpan.Source;
             activity.Intensity = GetMetadataString(stateSpan.Metadata, "intensity");
             activity.DateString = GetMetadataString(stateSpan.Metadata, "dateString");
             activity.CreatedAt = GetMetadataString(stateSpan.Metadata, "createdAt");
@@ -316,7 +316,7 @@ public static class ActivityStateSpanMapper
         // Source holds the connector for connector-published activities, so EnteredBy round-trips
         // through metadata instead. Mirrors BuildSleepMetadata.
         if (!string.IsNullOrEmpty(activity.EnteredBy))
-            metadata["enteredBy"] = activity.EnteredBy;
+            metadata[UploadedAppFields.EnteredByKey] = activity.EnteredBy;
 
         if (!string.IsNullOrEmpty(activity.Intensity))
             metadata["intensity"] = activity.Intensity;
@@ -447,7 +447,7 @@ public static class ActivityStateSpanMapper
         if (!string.IsNullOrEmpty(activity.Name))
             metadata["name"] = activity.Name;
         if (!string.IsNullOrEmpty(activity.EnteredBy))
-            metadata["enteredBy"] = activity.EnteredBy;
+            metadata[UploadedAppFields.EnteredByKey] = activity.EnteredBy;
         if (!string.IsNullOrEmpty(activity.Type))
             metadata["v1ActivityType"] = activity.Type;
 

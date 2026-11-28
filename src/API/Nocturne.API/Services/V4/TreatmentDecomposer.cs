@@ -781,7 +781,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             LegacyId = treatment.Id,
             AdditionalProperties = PreBolusSplit.AddMealId(
                 UploadedEventType(
-                    TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                    UploadedAppFields.KeepUploader(
+                        TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                        treatment),
                     treatment, keepEventType, TreatmentTypes.CarbCorrection),
                 treatment),
             Timestamp = treatment.Mills.ToUtcDateTime(),
@@ -810,7 +812,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         return new V4Models.BGCheck
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+            AdditionalProperties = UploadedAppFields.KeepUploader(
+                TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                treatment),
             Timestamp = treatment.Mills.ToUtcDateTime(),
             Glucose = treatment.Glucose ?? 0,
             GlucoseType = ParseGlucoseType(treatment.GlucoseType),
@@ -828,7 +832,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         return new V4Models.Note
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+            AdditionalProperties = UploadedAppFields.KeepUploader(
+                TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                treatment),
             Timestamp = treatment.Mills.ToUtcDateTime(),
             Text = treatment.Notes ?? string.Empty,
             EventType = treatment.EventType,
@@ -846,7 +852,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         return new V4Models.DeviceEvent
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+            AdditionalProperties = UploadedAppFields.KeepUploader(
+                TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                treatment),
             Timestamp = treatment.Mills.ToUtcDateTime(),
             EventType = deviceEventType,
             Notes = treatment.Notes,
@@ -863,7 +871,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         return new V4Models.BolusCalculation
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+            AdditionalProperties = UploadedAppFields.KeepUploader(
+                TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                treatment),
             Timestamp = treatment.Mills.ToUtcDateTime(),
             BloodGlucoseInput = treatment.BloodGlucoseInput,
             BloodGlucoseInputSource = treatment.BloodGlucoseInputSource,
@@ -946,7 +956,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// comes first because it is the key a temp basal is matched to its loop's snapshots by.
     /// </summary>
     private static string? UploadedDevice(Treatment treatment) =>
-        treatment.EnteredBy ?? UploadedString(treatment, "device");
+        treatment.EnteredBy ?? UploadedString(treatment, UploadedAppFields.DeviceKey);
 
     /// <summary>An uploaded field the treatment has no property for, when it is a string.</summary>
     private static string? UploadedString(Treatment treatment, string key) =>

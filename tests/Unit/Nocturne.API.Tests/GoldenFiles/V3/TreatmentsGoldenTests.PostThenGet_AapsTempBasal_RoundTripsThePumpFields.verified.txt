@@ -37,9 +37,9 @@
         isValid: true,
         isReadOnly: false,
         app: AAPS,
+        device: Pixel,
         basalOrigin: Algorithm,
-        originEvidence: Uploader,
-        device: Pixel
+        originEvidence: Uploader
       }
     }
   }

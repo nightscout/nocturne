@@ -8,10 +8,9 @@ namespace Nocturne.Core.Models;
 /// the projected treatment returns them as uploaded.
 /// </summary>
 /// <remarks>
-/// <c>enteredBy</c> is kept apart from <see cref="V4RecordBase.Device"/>, which holds it or else the
-/// uploaded <c>device</c>, since the projected temp basal serves its device too and could not tell
-/// the two apart. A V4 client's row keeps none and serves the app it names itself by
-/// (<see cref="V4ClientApp"/>).
+/// The uploader fields are kept apart from <see cref="V4RecordBase.Device"/> by
+/// <see cref="UploadedAppFields.KeepUploader"/>. A V4 client's row keeps none and serves the app it
+/// names itself by (<see cref="V4ClientApp"/>).
 /// </remarks>
 public static class TempBasalUploadedFields
 {
@@ -19,7 +18,7 @@ public static class TempBasalUploadedFields
     {
         record = UploadedPumpFields.Keep(record, treatment);
         record = UploadedAppFields.Keep(record, treatment);
-        record = KeptField.Add(record, UploadedAppFields.EnteredByKey, treatment.EnteredBy);
+        record = UploadedAppFields.KeepUploader(record, treatment);
         return KeptField.Add(
             record,
             StateSpanMetadataExtensions.UploadedDurationKey,
@@ -30,8 +29,8 @@ public static class TempBasalUploadedFields
     {
         UploadedPumpFields.Restore(treatment, tempBasal.AdditionalProperties, tempBasal.PumpRecordId);
         UploadedAppFields.Restore(treatment, tempBasal.AdditionalProperties, tempBasal.App);
-        treatment.EnteredBy = KeptField.String(tempBasal.AdditionalProperties, UploadedAppFields.EnteredByKey)
-            ?? V4ClientApp(tempBasal);
+        UploadedAppFields.RestoreUploader(
+            treatment, tempBasal.AdditionalProperties, V4ClientApp(tempBasal), tempBasal.Device);
     }
 
     /// <summary>The app a V4 client named itself by, on a row it wrote; the decomposer keeps a legacy id on every row it writes.</summary>
