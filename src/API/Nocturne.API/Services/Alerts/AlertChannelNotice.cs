@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.Text.Json;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
@@ -163,8 +162,8 @@ internal sealed class AlertChannelNotice(
         {
             ["alertRuleId"] = channel.AlertRuleId.ToString(),
             ["channelId"] = channel.Id.ToString(),
-            ["channelType"] = JsonSerializer.Serialize(channel.ChannelType).Trim('"'),
-            ["state"] = JsonSerializer.Serialize(verdict.State).Trim('"'),
+            ["channelType"] = EnumWireNames<ChannelType>.Of(channel.ChannelType),
+            ["state"] = EnumWireNames<AlertChannelState>.Of(verdict.State),
         };
         if (ruleName is not null)
             metadata["alertRuleName"] = ruleName;

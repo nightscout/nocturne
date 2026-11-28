@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models;
 
-/// <summary>The type of an in-app notification that the web app tells apart from the others.</summary>
+/// <summary>The type of an in-app notification.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<InAppNotificationType>))]
 public enum InAppNotificationType
 {
@@ -69,6 +69,30 @@ public enum InAppNotificationType
     /// <summary>An app's notices.</summary>
     [EnumMember(Value = "external.app"), JsonStringEnumMemberName("external.app")]
     ExternalApp,
+
+    [EnumMember(Value = "tracker.unconfigured"), JsonStringEnumMemberName("tracker.unconfigured")]
+    TrackerUnconfigured,
+
+    [EnumMember(Value = "tracker.alert"), JsonStringEnumMemberName("tracker.alert")]
+    TrackerAlert,
+
+    [EnumMember(Value = "system.statistics_summary"), JsonStringEnumMemberName("system.statistics_summary")]
+    SystemStatisticsSummary,
+
+    [EnumMember(Value = "system.help_response"), JsonStringEnumMemberName("system.help_response")]
+    SystemHelpResponse,
+
+    [EnumMember(Value = "glucose.predicted_low"), JsonStringEnumMemberName("glucose.predicted_low")]
+    GlucosePredictedLow,
+
+    [EnumMember(Value = "alerts.deviceClockAhead"), JsonStringEnumMemberName("alerts.deviceClockAhead")]
+    AlertsDeviceClockAhead,
+
+    [EnumMember(Value = "connector.deviceClockDeviation"), JsonStringEnumMemberName("connector.deviceClockDeviation")]
+    ConnectorDeviceClockDeviation,
+
+    [EnumMember(Value = "connector.declaredZoneChanged"), JsonStringEnumMemberName("connector.declaredZoneChanged")]
+    ConnectorDeclaredZoneChanged,
 }
 
 public static class InAppNotificationTypeExtensions

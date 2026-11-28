@@ -33,8 +33,6 @@ public class DeviceClockService : IDeviceClockService
     /// <summary>Evidence older than this no longer influences segmentation and is pruned.</summary>
     public const int RetentionDays = IDeviceClockService.RetentionDays;
 
-    internal const string SegmentNotificationType = "connector.deviceClockDeviation";
-    internal const string ZoneChangeNotificationType = "connector.declaredZoneChanged";
     private const string NotificationSource = "device-clock";
 
     private readonly INocturneDbContextFactory _contexts;
@@ -266,7 +264,7 @@ public class DeviceClockService : IDeviceClockService
 
             await TryNotifyOwnerAsync(
                 tenantId,
-                ZoneChangeNotificationType,
+                InAppNotificationType.ConnectorDeclaredZoneChanged.ToWireString(),
                 sourceId: $"{connector}:{zone}:{effectiveFrom.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture)}",
                 cancellationToken);
         }
@@ -310,7 +308,7 @@ public class DeviceClockService : IDeviceClockService
 
             var announced = await TryNotifyOwnerAsync(
                 tenantId,
-                SegmentNotificationType,
+                InAppNotificationType.ConnectorDeviceClockDeviation.ToWireString(),
                 sourceId: $"{connector}:{segment.FirstObservedAtUtc.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture)}:{segment.OffsetMinutes}",
                 cancellationToken);
 
@@ -344,7 +342,7 @@ public class DeviceClockService : IDeviceClockService
 
             // Title and subtitle are i18n keys resolved by the frontend copy layer
             // (notification-labels.ts); the backend has no copy layer.
-            var (title, subtitle) = type == SegmentNotificationType
+            var (title, subtitle) = type == InAppNotificationType.ConnectorDeviceClockDeviation.ToWireString()
                 ? (NotificationLabel.DeviceClockDeviation, NotificationLabel.DeviceClockDeviationSubtitle)
                 : (NotificationLabel.DeclaredZoneChanged, NotificationLabel.DeclaredZoneChangedSubtitle);
             await _notifications.CreateNotificationAsync(

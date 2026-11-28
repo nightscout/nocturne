@@ -246,7 +246,7 @@ public class MetadataController : ControllerBase
             {
                 AvailableLabels = Enum.GetValues<NotificationLabel>(),
                 Types = Enum.GetValues<InAppNotificationType>(),
-                Description = "Keys the backend files as a notification's title, subtitle or action label, and the types of notification the web app tells apart",
+                Description = "Keys the backend files as a notification's title, subtitle or action label, and the type of every in-app notification",
             }
         );
     }
@@ -384,7 +384,7 @@ public class NotificationLabelsMetadata
     public NotificationLabel[] AvailableLabels { get; set; } = [];
 
     /// <summary>
-    /// Array of the in-app notification types the web app tells apart
+    /// Every in-app notification type
     /// </summary>
     public InAppNotificationType[] Types { get; set; } = [];
 

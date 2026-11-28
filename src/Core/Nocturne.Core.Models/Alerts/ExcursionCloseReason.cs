@@ -37,20 +37,12 @@ public enum ExcursionCloseReason
 }
 
 /// <summary>
-/// Wire-string mapping for <see cref="ExcursionCloseReason"/>, mirroring the
+/// Wire-string mapping for <see cref="ExcursionCloseReason"/>, read from its
 /// <see cref="EnumMember"/> values. Used by call sites that need to persist
 /// the reason as text (e.g. the <c>alert_instances.resolution_reason</c>
 /// column) rather than rely on JSON serialisation.
 /// </summary>
 public static class ExcursionCloseReasonExtensions
 {
-    public static string ToWireString(this ExcursionCloseReason reason) => reason switch
-    {
-        ExcursionCloseReason.Hysteresis => "hysteresis",
-        ExcursionCloseReason.AutoResolve => "auto",
-        ExcursionCloseReason.Manual => "manual",
-        ExcursionCloseReason.RuleDisabled => "rule-disabled",
-        ExcursionCloseReason.HoldBound => "hold-bound",
-        _ => reason.ToString().ToLowerInvariant(),
-    };
+    public static string ToWireString(this ExcursionCloseReason reason) => EnumWireNames<ExcursionCloseReason>.Of(reason);
 }
