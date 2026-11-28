@@ -24,6 +24,8 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/v4/me/tenants/overview")]
     // Drives the review lens of the same page.
     [InlineData("/api/v4/me/tenants/overview/review")]
+    // Drives the group tabs of the list.
+    [InlineData("/api/v4/me/tenants/overview/groups")]
     // Drives the panel beside the list.
     [InlineData("/api/v4/me/tenants/overview/person")]
     // Names the tenants whose live changes the same page hears about.

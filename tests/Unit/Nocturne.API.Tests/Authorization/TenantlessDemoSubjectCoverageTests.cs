@@ -70,6 +70,7 @@ public class TenantlessDemoSubjectCoverageTests
             ["PlatformController.GetTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetOverview"] = "aggregates over the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetReview"] = "aggregates over the caller's own memberships, which for the demo subject is the demo tenant",
+            ["MyTenantsController.GetGroups"] = "lists the groups the caller is in as staff, which for the demo subject are the synthetic demo clinic's, tabbed on the people list it already reads",
             ["MyTenantsController.GetPerson"] = "reads one of the caller's own memberships, which for the demo subject is the demo tenant",
             ["OverviewAdmissionController.GetOverviewAdmission"] = "lists the ids of the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetMyTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
