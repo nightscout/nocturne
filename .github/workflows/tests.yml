@@ -527,6 +527,48 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # The docs alert simulator runs the alert engine compiled to WebAssembly from crates/. This builds
+  # it as the portal build does and runs the simulator's condition trees through it
+  # (engine.wasm.test.ts), so a change to the simulator's tree builders or to the engine that makes
+  # them disagree fails here. web-static runs the same file without the engine, which skips it; a crates-only
+  # change runs no web-static, so this job runs for either filter.
+  portal-alerts-engine:
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.crates == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: src/Web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-pnpm
+        with:
+          install: src/Web
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: wasm32-unknown-unknown
+      # The key and paths of portal-pages.yml's WebAssembly build, so a pull request restores the
+      # cache main's portal deploy saved, including the wasm-bindgen CLI the build script installs
+      # into crates/target/tools. Sources, not just the lockfile: see the alerts-ffi-parity job.
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+            src/Web/vendor/water-ui/target
+          key: cargo-wasm-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+      - name: Build the alert engine for WebAssembly
+        run: pnpm --filter @nocturne/portal run alerts-engine
+      - name: Simulator trees in the engine
+        env:
+          ALERTS_ENGINE_REQUIRED: "true"
+        run: |
+          pnpm --filter @nocturne/portal exec svelte-kit sync
+          pnpm --filter @nocturne/portal exec vitest run src/lib/components/docs/alert-simulator/engine.wasm.test.ts
+
   # Lints every user-facing string against the ASD-STE100 rules in .vale/styles/Nocturne (the
   # simple-english skill). wuchale extracts the strings from source into locales/en.po first, so the
   # check reads this commit's strings, not the catalog the sync job last committed. Errors fail.
@@ -1048,6 +1090,7 @@ jobs:
       - alerts-swift
       - desktop-rust
       - web-static
+      - portal-alerts-engine
       - web-app-tests
       - ui-copy
       - integration-db
