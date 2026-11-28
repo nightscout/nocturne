@@ -20,8 +20,6 @@ namespace Nocturne.API.Middleware.Handlers;
 /// </summary>
 public class ApiKeyHandler : IAuthHandler
 {
-    internal const string RotationNudgeType = "api-key-rotation";
-
     public int Priority => 400;
 
     public string Name => "ApiKeyHandler";
@@ -162,7 +160,7 @@ public class ApiKeyHandler : IAuthHandler
 
             await notificationService.CreateNotificationAsync(
                 userId: recipient,
-                type: RotationNudgeType,
+                type: InAppNotificationType.ApiKeyRotation.ToWireString(),
                 title: "Rotate your API key",
                 category: NotificationCategory.ActionRequired,
                 urgency: NotificationUrgency.Info,

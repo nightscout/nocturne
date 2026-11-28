@@ -67,7 +67,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = NotificationSubjectNaming.AnonymousLoginRequest,
+            Type = InAppNotificationType.PasskeyAnonymousLoginRequest.ToWireString(),
             Category = NotificationCategory.ActionRequired,
             NamesSubject = true,
             DefaultUrgency = NotificationUrgency.Info,
@@ -107,7 +107,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = NotificationSubjectNaming.MembershipRequested,
+            Type = InAppNotificationType.MembershipRequested.ToWireString(),
             Category = NotificationCategory.ActionRequired,
             NamesSubject = true,
             DefaultUrgency = NotificationUrgency.Info,
@@ -117,7 +117,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = MembershipRequestService.ApprovedNotificationType,
+            Type = InAppNotificationType.MembershipApproved.ToWireString(),
             Category = NotificationCategory.Informational,
             NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
@@ -127,7 +127,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = ShareLinkRotatedNotifier.NotificationType,
+            Type = InAppNotificationType.SharingLinkRotated.ToWireString(),
             Category = NotificationCategory.ActionRequired,
             NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
@@ -174,7 +174,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = MembershipRequestService.DeniedNotificationType,
+            Type = InAppNotificationType.MembershipDenied.ToWireString(),
             Category = NotificationCategory.Informational,
             NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
@@ -248,7 +248,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = ApiKeyHandler.RotationNudgeType,
+            Type = InAppNotificationType.ApiKeyRotation.ToWireString(),
             Category = NotificationCategory.ActionRequired,
             NamesSubject = false,
             Icon = "key"

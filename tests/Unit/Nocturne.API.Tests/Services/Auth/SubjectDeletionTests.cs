@@ -173,8 +173,8 @@ public class SubjectDeletionTests : IDisposable
             new TenantEntity { Id = home.Tenant, Slug = "home", DisplayName = "Home", IsActive = true },
             new TenantEntity { Id = away.Tenant, Slug = "away", DisplayName = "Away", IsActive = true });
         seed.InAppNotifications.AddRange(
-            Notice(home.Notice, home.Tenant, _adminId, NotificationSubjectNaming.AnonymousLoginRequest, _deletedId.ToString()),
-            Notice(away.Notice, away.Tenant, _bystanderId, NotificationSubjectNaming.AnonymousLoginRequest, _deletedId.ToString()),
+            Notice(home.Notice, home.Tenant, _adminId, InAppNotificationType.PasskeyAnonymousLoginRequest.ToWireString(), _deletedId.ToString()),
+            Notice(away.Notice, away.Tenant, _bystanderId, InAppNotificationType.PasskeyAnonymousLoginRequest.ToWireString(), _deletedId.ToString()),
             Notice(Guid.CreateVersion7(), home.Tenant, _deletedId, "system.update_available", "1.2.3"),
             Notice(Guid.CreateVersion7(), away.Tenant, _bystanderId, "sharing.link_rotated", away.Tenant.ToString()));
         await seed.SaveChangesAsync();

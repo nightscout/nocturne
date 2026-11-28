@@ -137,7 +137,7 @@ public class AccessRequestController(
             {
                 await notificationService.ArchiveBySourceAsync(
                     ownerId.ToString(),
-                    NotificationSubjectNaming.AnonymousLoginRequest,
+                    InAppNotificationType.PasskeyAnonymousLoginRequest.ToWireString(),
                     subjectId.ToString(),
                     NotificationArchiveReason.Dismissed,
                     ct);

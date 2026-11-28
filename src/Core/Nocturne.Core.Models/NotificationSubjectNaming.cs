@@ -28,15 +28,6 @@ public enum NoticeSubjectPointer
 /// </remarks>
 public static class NotificationSubjectNaming
 {
-    /// <summary>
-    /// Tells a member who can decide it that a request was filed. The title names the requester and
-    /// the subtitle is the requester's message.
-    /// </summary>
-    public const string MembershipRequested = "membership.requested";
-
-    /// <summary>Tells an owner that a person asked to sign in. The notice is about the person.</summary>
-    public const string AnonymousLoginRequest = "passkey.anonymous_login_request";
-
     /// <summary>The metadata key of the member a notice is about.</summary>
     public const string MemberSubjectIdKey = "memberSubjectId";
 
@@ -46,8 +37,8 @@ public static class NotificationSubjectNaming
     public static IReadOnlyDictionary<string, NoticeSubjectPointer> Pointers { get; } =
         new Dictionary<string, NoticeSubjectPointer>(StringComparer.Ordinal)
         {
-            [MembershipRequested] = NoticeSubjectPointer.MembershipRequestId,
-            [AnonymousLoginRequest] = NoticeSubjectPointer.SubjectId,
+            [InAppNotificationType.MembershipRequested.ToWireString()] = NoticeSubjectPointer.MembershipRequestId,
+            [InAppNotificationType.PasskeyAnonymousLoginRequest.ToWireString()] = NoticeSubjectPointer.SubjectId,
             [InAppNotificationType.AlertChannelNotSending.ToWireString()] = NoticeSubjectPointer.MetadataSubject,
         };
 

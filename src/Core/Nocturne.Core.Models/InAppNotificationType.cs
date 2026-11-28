@@ -82,8 +82,29 @@ public enum InAppNotificationType
     [EnumMember(Value = "system.help_response"), JsonStringEnumMemberName("system.help_response")]
     SystemHelpResponse,
 
+    /// <summary>Tells an owner that a person asked to sign in. The notice is about the person.</summary>
+    [EnumMember(Value = "passkey.anonymous_login_request"), JsonStringEnumMemberName("passkey.anonymous_login_request")]
+    PasskeyAnonymousLoginRequest,
+
     [EnumMember(Value = "glucose.predicted_low"), JsonStringEnumMemberName("glucose.predicted_low")]
     GlucosePredictedLow,
+
+    /// <summary>Tells a member who can decide it that a request was filed. The title names the requester and the subtitle is the requester's message.</summary>
+    [EnumMember(Value = "membership.requested"), JsonStringEnumMemberName("membership.requested")]
+    MembershipRequested,
+
+    [EnumMember(Value = "membership.approved"), JsonStringEnumMemberName("membership.approved")]
+    MembershipApproved,
+
+    [EnumMember(Value = "membership.denied"), JsonStringEnumMemberName("membership.denied")]
+    MembershipDenied,
+
+    /// <summary>A share link that no longer resolves.</summary>
+    [EnumMember(Value = "sharing.link_rotated"), JsonStringEnumMemberName("sharing.link_rotated")]
+    SharingLinkRotated,
+
+    [EnumMember(Value = "api-key-rotation"), JsonStringEnumMemberName("api-key-rotation")]
+    ApiKeyRotation,
 
     [EnumMember(Value = "alerts.deviceClockAhead"), JsonStringEnumMemberName("alerts.deviceClockAhead")]
     AlertsDeviceClockAhead,

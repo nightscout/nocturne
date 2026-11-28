@@ -29,8 +29,9 @@ public class NotificationLabelWireFormatTests
         "system.instance_key_changed", "system.instance_key_changed_platform", "data.rejected_uploads",
         "profile.raw_mmol_values", "meal_matching.suggested_match", "glucose.compression_low_review",
         "external.operator", "external.app", "tracker.unconfigured", "tracker.alert", "system.statistics_summary",
-        "system.help_response", "glucose.predicted_low", "alerts.deviceClockAhead", "connector.deviceClockDeviation",
-        "connector.declaredZoneChanged",
+        "system.help_response", "passkey.anonymous_login_request", "glucose.predicted_low", "membership.requested",
+        "membership.approved", "membership.denied", "sharing.link_rotated", "api-key-rotation",
+        "alerts.deviceClockAhead", "connector.deviceClockDeviation", "connector.declaredZoneChanged",
     ];
 
     [Fact]

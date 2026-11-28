@@ -110,7 +110,7 @@ public class AccessRequestService(
         {
             await notificationService.ArchiveBySourceAsync(
                 ownerId.ToString(),
-                NotificationSubjectNaming.AnonymousLoginRequest,
+                InAppNotificationType.PasskeyAnonymousLoginRequest.ToWireString(),
                 subjectId.ToString(),
                 NotificationArchiveReason.Completed,
                 ct);
