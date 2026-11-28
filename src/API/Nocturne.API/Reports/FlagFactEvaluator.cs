@@ -384,14 +384,16 @@ internal sealed class FlagFactEvaluator(
                 return null;
 
             var figures = new FlagFigures(row, new ReportWindow(from.ToUnixTimeMilliseconds(), now.ToUnixTimeMilliseconds()), now, readLog);
-            return (judged, new ServedRead(figures, [.. judged.Select(i => _conditions[i])], LiveMark(first.ReadKey, now)));
+            return (judged, new ServedRead(figures, [.. judged.Select(i => _conditions[i])], LiveMark(first.ReadKey, readLog, now)));
         }
 
         /// <summary>
-        /// The read-audit mark of live figures judged under <paramref name="key"/>: one row per viewer, person and key
-        /// per <see cref="PeriodKeep"/>, however often the figures are read.
+        /// The read-audit mark of live figures judged under <paramref name="key"/>: one row per viewer, person, key and
+        /// set of categories <paramref name="readLog"/> says were read, per <see cref="PeriodKeep"/>. Figures that read a
+        /// category an earlier judging of the key did not are audited again.
         /// </summary>
-        private string LiveMark(string key, DateTimeOffset now) => $"flag-fact-audited:{_viewer}:live:{key}:{now.UtcTicks / PeriodKeep.Ticks}";
+        private string LiveMark(string key, ReportReadLog readLog, DateTimeOffset now) =>
+            $"flag-fact-audited:{_viewer}:live:{key}:{string.Join(',', readLog.Datasets.Order(StringComparer.Ordinal))}:{now.UtcTicks / PeriodKeep.Ticks}";
 
         private (ServedRead? Read, FlagPersonState State) Kept(
             GlucoseReadTenant person,
@@ -416,7 +418,7 @@ internal sealed class FlagFactEvaluator(
             if (now - keep.ReadAt >= life * RefreshAfter)
                 _warms.Add(new FlagFactReads.Warm(person.Tenant.Id, TenantReader.Of(personScope), first, shape, granted, key, life));
             var mark = first.Fact.Kind == ReportFlagFactKind.Live
-                ? LiveMark(key, now)
+                ? LiveMark(key, figures.ReadLog, now)
                 : $"flag-fact-audited:{_viewer}:{key}:{keep.ReadAt.UtcTicks}";
             return (new ServedRead(figures, shared, mark), FlagPersonState.Judged);
         }

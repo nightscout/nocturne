@@ -17,6 +17,16 @@ public enum DemoServiceState
 }
 
 /// <summary>
+/// Which step of a regeneration failed, if one did.
+/// </summary>
+public enum DemoRegeneration
+{
+    Regenerated,
+    ResetFailed,
+    SeedFailed,
+}
+
+/// <summary>
 /// Background service that provisions the demo tenant, regenerates its historical data when
 /// <see cref="ShouldRegenerateOnStartup"/> says so and on the reset schedule, returns the clinic persona's views and
 /// rules to their seeds on the visitor reset schedule, and continuously generates real-time entries at configured
@@ -82,11 +92,11 @@ public class DemoDataHostedService : BackgroundService
 
         try
         {
-            var lastResetUtc = tenantState.LastResetAt;
+            var reset = new ResetResult(tenantState.LastResetAt, Outcome: null);
             var history = await RetryAsync(TryReadGlucoseHistoryAsync, 5, "Glucose history read", stoppingToken);
-            if (ShouldRegenerateOnStartup(_config, UtcNow, lastResetUtc, history))
+            if (ShouldRegenerateOnStartup(_config, UtcNow, reset.LastResetUtc, history))
             {
-                lastResetUtc = await RegenerateAndRecordResetAsync(stoppingToken);
+                reset = await RegenerateAndRecordResetAsync(stoppingToken);
             }
             else if (history?.Newest is { } newest)
             {
@@ -103,12 +113,33 @@ public class DemoDataHostedService : BackgroundService
             if (tenantState.NextVisitorResetAt is null && nextVisitorResetUtc is { } firstVisitorReset)
                 await RecordNextVisitorResetAsync(firstVisitorReset, stoppingToken);
 
-            await TryGenerateAndPostEntryAsync(stoppingToken);
-            StartSeedingPeople(stoppingToken);
-
             var generationInterval = TimeSpan.FromMinutes(_config.IntervalMinutes);
             var nextGenerationUtc = UtcNow.Add(generationInterval);
-            var nextResetUtc = NextResetDue(_config, lastResetUtc);
+            var nextResetUtc = NextResetAfter(reset);
+
+            async Task RunTickAsync(Func<Task> tick)
+            {
+                try
+                {
+                    await tick();
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation("Demo data generation service is stopping");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error generating demo data");
+                    var failedAt = UtcNow;
+                    var retryAt = failedAt.Add(generationInterval);
+                    nextGenerationUtc = DeferIfDue(nextGenerationUtc, failedAt, retryAt);
+                    nextResetUtc = DeferIfDue(nextResetUtc, failedAt, retryAt);
+                    nextVisitorResetUtc = DeferIfDue(nextVisitorResetUtc, failedAt, retryAt);
+                }
+            }
+
+            await RunTickAsync(() => GenerateAndPostEntryAsync(stoppingToken));
+            StartSeedingPeople(stoppingToken);
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -144,13 +175,13 @@ public class DemoDataHostedService : BackgroundService
                 if (_state != DemoServiceState.Running)
                     continue;
 
-                try
+                await RunTickAsync(async () =>
                 {
                     now = UtcNow;
 
                     if (nextResetUtc is { } resetDue && now >= resetDue)
                     {
-                        nextResetUtc = NextResetDue(_config, await RegenerateAndRecordResetAsync(stoppingToken));
+                        nextResetUtc = NextResetAfter(await RegenerateAndRecordResetAsync(stoppingToken));
                         now = UtcNow;
                         StartSeedingPeople(stoppingToken);
                     }
@@ -166,21 +197,7 @@ public class DemoDataHostedService : BackgroundService
                         await GenerateAndPostEntryAsync(stoppingToken);
                         nextGenerationUtc = now.Add(generationInterval);
                     }
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
-                    _logger.LogInformation("Demo data generation service is stopping");
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error generating demo data");
-                    var failedAt = UtcNow;
-                    var retryAt = failedAt.Add(generationInterval);
-                    nextGenerationUtc = DeferIfDue(nextGenerationUtc, failedAt, retryAt);
-                    nextResetUtc = DeferIfDue(nextResetUtc, failedAt, retryAt);
-                    nextVisitorResetUtc = DeferIfDue(nextVisitorResetUtc, failedAt, retryAt);
-                }
+                });
             }
         }
         finally
@@ -342,15 +359,17 @@ public class DemoDataHostedService : BackgroundService
     }
 
     /// <summary>
-    /// Resets the tenant and seeds the full sample set server-side — glucose,
-    /// treatments, device status, therapy profile, and every lifestyle type —
+    /// Resets the tenant and seeds the full sample set server-side (glucose,
+    /// treatments, device status, therapy profile, and every lifestyle type)
     /// through the demo admin endpoint (the same seeder the dev tools use).
     /// </summary>
-    /// <returns>Whether both the reset and the seed succeeded.</returns>
-    public async Task<bool> RegenerateDataAsync(CancellationToken cancellationToken)
+    /// <returns>
+    /// How far it got. A failed reset seeds nothing, so a new backfill never lands over data the reset did not delete.
+    /// </returns>
+    public async Task<DemoRegeneration> RegenerateDataAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Regenerating demo data - resetting the tenant first");
-        var succeeded = true;
+        var outcome = DemoRegeneration.Regenerated;
 
         // Reset the tenant via API: clears data and any configuration a visitor changed
         try
@@ -359,13 +378,13 @@ public class DemoDataHostedService : BackgroundService
         }
         catch (Exception ex) when (DemoApiFailure.Is(ex, cancellationToken))
         {
-            _logger.LogWarning(ex, "Failed to reset the demo tenant (may not exist yet), continuing with regeneration");
-            succeeded = false;
+            _logger.LogWarning(ex, "Failed to reset the demo tenant, not seeding over its data");
+            return DemoRegeneration.ResetFailed;
         }
 
         var startTime = UtcNow;
 
-        // Seeding failure is non-fatal — realtime ticks keep building a live
+        // Seeding failure is non-fatal: realtime ticks keep building a live
         // chart even without history. The filter keeps real shutdown
         // cancellation propagating, but an HttpClient timeout
         // (TaskCanceledException with an uncancelled stoppingToken) must not
@@ -379,7 +398,7 @@ public class DemoDataHostedService : BackgroundService
             ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(ex, "Failed to seed the demo sample set");
-            succeeded = false;
+            outcome = DemoRegeneration.SeedFailed;
         }
 
         // Continue the realtime stream from the seeded history's latest value.
@@ -389,7 +408,7 @@ public class DemoDataHostedService : BackgroundService
         _logger.LogInformation(
             "Completed demo data regeneration in {Duration}",
             UtcNow - startTime);
-        return succeeded;
+        return outcome;
     }
 
     /// <summary>
@@ -433,19 +452,20 @@ public class DemoDataHostedService : BackgroundService
 
     /// <summary>
     /// Regenerates, then schedules the next periodic reset from the reset time the API stamped
-    /// on the tenant. A failed regeneration records nothing, and the next attempt falls one reset
-    /// interval after this one began.
+    /// on the tenant. A failed regeneration records nothing; <see cref="NextResetAfter"/> decides
+    /// when it is tried again.
     /// </summary>
-    /// <returns>The time the next periodic reset is measured from.</returns>
-    private async Task<DateTime> RegenerateAndRecordResetAsync(CancellationToken cancellationToken)
+    /// <returns>The time the next periodic reset is measured from, and how far the regeneration got.</returns>
+    private async Task<ResetResult> RegenerateAndRecordResetAsync(CancellationToken cancellationToken)
     {
         var startedAt = UtcNow;
-        if (!await RegenerateDataAsync(cancellationToken))
-            return startedAt;
+        var outcome = await RegenerateDataAsync(cancellationToken);
+        if (outcome != DemoRegeneration.Regenerated)
+            return new ResetResult(startedAt, outcome);
 
         var lastResetUtc = (await _apiClient.GetStatusAsync(cancellationToken))?.LastResetAt ?? startedAt;
         if (NextResetDue(_config, lastResetUtc) is not { } nextResetUtc)
-            return lastResetUtc;
+            return new ResetResult(lastResetUtc, outcome);
 
         try
         {
@@ -456,8 +476,20 @@ public class DemoDataHostedService : BackgroundService
             _logger.LogWarning(ex, "Failed to update demo status after reset");
         }
 
-        return lastResetUtc;
+        return new ResetResult(lastResetUtc, outcome);
     }
+
+    /// <summary>
+    /// The next periodic reset, or when periodic resets are off, one generation interval after a reset that failed:
+    /// without it a tenant that never got its backfill stays empty until a restart. A seed that failed after a good
+    /// reset is not retried this way, because the retry would wipe the realtime readings taken since.
+    /// </summary>
+    private DateTime? NextResetAfter(ResetResult reset) =>
+        NextResetDue(_config, reset.LastResetUtc)
+        ?? (reset.Outcome == DemoRegeneration.ResetFailed ? UtcNow.AddMinutes(_config.IntervalMinutes) : null);
+
+    /// <param name="Outcome">How far the regeneration got, or null when the start kept the tenant's data.</param>
+    private readonly record struct ResetResult(DateTime? LastResetUtc, DemoRegeneration? Outcome);
 
     /// <summary>
     /// Runs the visitor reset, then records the next one an interval from now, whether or not this one succeeded, so a
@@ -526,21 +558,6 @@ public class DemoDataHostedService : BackgroundService
 
         var deviceStatus = _generator.GenerateCurrentDeviceStatus(entry, treatments);
         await _apiClient.PostDeviceStatusAsync(deviceStatus, cancellationToken);
-    }
-
-    /// <summary>
-    /// The first reading of a start. A failed call is logged and the loop carries on to the next tick.
-    /// </summary>
-    private async Task TryGenerateAndPostEntryAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await GenerateAndPostEntryAsync(cancellationToken);
-        }
-        catch (Exception ex) when (DemoApiFailure.Is(ex, cancellationToken))
-        {
-            _logger.LogError(ex, "Failed to post the first demo entry");
-        }
     }
 
     private async Task<T?> RetryAsync<T>(
