@@ -22,8 +22,10 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// its own person's latest reading, and each person is read on one connection.
 /// </summary>
 /// <remarks>
-/// The timing measurement (medians of <see cref="Reads"/> reads, warm and cold, for the full and the team rule set, and
-/// the contexts and connections one read opens) runs only when <c>NOCTURNE_PEOPLE_OVERVIEW_TIMING=1</c>. Run it built
+/// The timing measurements run only when <c>NOCTURNE_PEOPLE_OVERVIEW_TIMING=1</c>: for the overview, medians of
+/// <see cref="Reads"/> reads, warm and cold, for the full and the team rule set, and the contexts and connections one read
+/// opens; for the review, medians of <see cref="ReviewReads"/> reads, warm and cold, in every period, and the same counts
+/// for one read of the shortest. Only the warm review is held to a budget. Run them built
 /// in Release: <c>dotnet test tests/Integration/Nocturne.API.Tests -c Release --filter "FullyQualifiedName~PeopleOverviewScaleTests" --logger "console;verbosity=detailed"</c>.
 /// </remarks>
 [Collection(ApiIntegrationShards.Four)]
@@ -34,8 +36,15 @@ public class PeopleOverviewScaleTests(ApiIntegrationTestFixture fixture, ITestOu
     private const int People = 300;
     private const int Reads = 20;
     private const int SitesCreatedAtOnce = 8;
+
+    /// <summary>Four weeks of five-minute readings: both periods of the shortest review are full.</summary>
+    private const int ReviewReadingsEach = 28 * 288;
+
+    /// <summary>Fewer than <see cref="Reads"/>: a cold review reads every person's readings of both periods.</summary>
+    private const int ReviewReads = 5;
     private const string TimingVariable = "NOCTURNE_PEOPLE_OVERVIEW_TIMING";
     private static readonly TimeSpan Budget = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan WarmReviewBudget = TimeSpan.FromSeconds(1);
 
     [Fact]
     public async Task A_cold_read_of_300_people_waits_on_no_figure_and_a_warm_read_gives_each_person_their_own_reading_on_one_connection()
@@ -119,6 +128,40 @@ public class PeopleOverviewScaleTests(ApiIntegrationTestFixture fixture, ITestOu
         results.Should().AllSatisfy(r => r.MedianMs.Should().BeLessThan(Budget.TotalMilliseconds));
     }
 
+    [TimingFact]
+    public async Task The_review_of_300_people_reads_warm_within_a_second_in_every_period()
+    {
+        var owner = await SeedOwnerAsync();
+        var staff = await SeedBareSubjectAsync("Crowd Reviewer");
+        using var staffClient = await SessionAtApexAsync(staff);
+        var sites = await SeedSitesAsync(owner);
+        await FollowDirectlyAsync(staff, sites);
+        await SeedReadingsAsync(sites, readingsEach: ReviewReadingsEach);
+
+        var results = new List<(int Days, string State, double MedianMs, double MaxMs)>();
+        foreach (var days in TenantReviewPeriods.Days)
+        {
+            var cold = await TimeReviewsAsync(staffClient, days, cold: true);
+            var warm = await TimeReviewsAsync(staffClient, days, cold: false);
+            results.Add((days, "cold", Median(cold), cold.Max()));
+            results.Add((days, "warm", Median(warm), warm.Max()));
+        }
+
+        foreach (var (days, state, median, max) in results)
+            Output.WriteLine($"review days={days} {state}: median {median:F1} ms, max {max:F1} ms over {ReviewReads} reads");
+        foreach (var cold in new[] { true, false })
+        {
+            if (cold)
+                ((MemoryCache)Fixture.Services.GetRequiredService<IMemoryCache>()).Clear();
+            var id = await TaggedReviewAsync(staffClient, TenantReviewPeriods.Days[0]);
+            var log = Fixture.Services.GetRequiredService<ContextOpenLog>();
+            Output.WriteLine(
+                $"one {(cold ? "cold" : "warm")} review: {log.OpensOf(id).Count} contexts, {log.ConnectionOpensOf(id).Count} connections opened");
+        }
+
+        results.Where(r => r.State == "warm").Should().AllSatisfy(r => r.MedianMs.Should().BeLessThan(WarmReviewBudget.TotalMilliseconds));
+    }
+
     /// <summary>A fact that runs only when <see cref="TimingVariable"/> is <c>1</c>.</summary>
     private sealed class TimingFactAttribute : FactAttribute
     {
@@ -164,6 +207,48 @@ public class PeopleOverviewScaleTests(ApiIntegrationTestFixture fixture, ITestOu
 
         await reads.WhenIdleAsync();
         return (ms, pending, people);
+    }
+
+    /// <summary><see cref="ReviewReads"/> reads of the review over <paramref name="days"/>, each after an empty cache when <paramref name="cold"/>.</summary>
+    private async Task<List<double>> TimeReviewsAsync(HttpClient client, int days, bool cold)
+    {
+        var memory = (MemoryCache)Fixture.Services.GetRequiredService<IMemoryCache>();
+        await ReviewAsync(client, days);
+
+        var ms = new List<double>();
+        for (var i = 0; i < ReviewReads; i++)
+        {
+            if (cold)
+                memory.Clear();
+
+            var watch = Stopwatch.StartNew();
+            var review = await ReviewAsync(client, days);
+            watch.Stop();
+
+            ms.Add(watch.Elapsed.TotalMilliseconds);
+            review.GetProperty("people").EnumerateArray()
+                .Should().HaveCount(People).And.AllSatisfy(p => p.GetProperty("statistics").ValueKind.Should().Be(JsonValueKind.Object));
+        }
+
+        return ms;
+    }
+
+    private static async Task<JsonElement> ReviewAsync(HttpClient client, int days)
+    {
+        var response = await client.PostAsJsonAsync("/api/v4/me/tenants/overview/review", new { days });
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+    private static async Task<string> TaggedReviewAsync(HttpClient client, int days)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v4/me/tenants/overview/review")
+        {
+            Content = JsonContent.Create(new { days }),
+        };
+        var id = ContextOpenLog.Tag(request);
+        (await client.SendAsync(request)).StatusCode.Should().Be(HttpStatusCode.OK);
+        return id;
     }
 
     /// <summary>
