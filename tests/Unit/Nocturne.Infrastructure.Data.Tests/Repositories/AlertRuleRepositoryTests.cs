@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Time.Testing;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
@@ -428,7 +429,8 @@ public class AlertRuleRepositoryTests
         await using var seed = Db();
         await using var unit = await DbUnitOfWork.OpenAsync(new TestNocturneDbContextFactory(seed));
 
-        var act = () => new AlertRuleRepository(unit, _clock).SetScopeClassAsync(Tenant, RuleScopeClass.Low, [Guid.NewGuid()], CancellationToken.None);
+        var act = () => new AlertRuleRepository(unit, _clock).SetScopeClassAsync(
+            Tenant, RuleScopeClass.Low, [new ClassifiedRule(Guid.NewGuid(), AlertConditionType.Threshold, "{}")], CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }

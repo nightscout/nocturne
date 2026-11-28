@@ -14,7 +14,7 @@ public class RuleScopeClassBackfillJobTests
     private static readonly TenantContext Tenant = new(Guid.CreateVersion7(), "t", "T", true, IsDemo: false);
 
     [Fact]
-    public async Task It_writes_only_the_rules_whose_class_changed_one_statement_a_class_and_is_done()
+    public async Task It_writes_only_the_rules_whose_class_changed_one_call_a_class_with_the_body_it_classified_and_is_done()
     {
         var unchanged = Rule("""{"unchanged":true}""", RuleScopeClass.Low);
         var toLow = Rule("""{"low":1}""", RuleScopeClass.Undirected);
@@ -29,8 +29,8 @@ public class RuleScopeClassBackfillJobTests
         alerts.Setup(a => a.GetRuleSnapshotsAsync(Tenant.TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([unchanged, toLow, alsoToLow, toHigh]);
         var rules = new Mock<IAlertRuleRepository>();
-        rules.Setup(r => r.SetScopeClassAsync(Tenant.TenantId, It.IsAny<RuleScopeClass>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, RuleScopeClass _, IReadOnlyCollection<Guid> ids, CancellationToken _) => ids.Count);
+        rules.Setup(r => r.SetScopeClassAsync(Tenant.TenantId, It.IsAny<RuleScopeClass>(), It.IsAny<IReadOnlyCollection<ClassifiedRule>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, RuleScopeClass _, IReadOnlyCollection<ClassifiedRule> written, CancellationToken _) => written.Count);
 
         await using var provider = new ServiceCollection()
             .AddSingleton(classifier.Object)
@@ -43,11 +43,12 @@ public class RuleScopeClassBackfillJobTests
         outcome.Should().Be(JobOutcome.Done);
         rules.Verify(r => r.SetScopeClassAsync(
             Tenant.TenantId, RuleScopeClass.Low,
-            It.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 2 && ids.Contains(toLow.Id) && ids.Contains(alsoToLow.Id)),
+            It.Is<IReadOnlyCollection<ClassifiedRule>>(written => written.Count == 2
+                && written.Contains(Classified(toLow)) && written.Contains(Classified(alsoToLow))),
             It.IsAny<CancellationToken>()), Times.Once);
         rules.Verify(r => r.SetScopeClassAsync(
             Tenant.TenantId, RuleScopeClass.High,
-            It.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 1 && ids.Contains(toHigh.Id)),
+            It.Is<IReadOnlyCollection<ClassifiedRule>>(written => written.Count == 1 && written.Contains(Classified(toHigh))),
             It.IsAny<CancellationToken>()), Times.Once);
         rules.VerifyNoOtherCalls();
     }
@@ -58,6 +59,9 @@ public class RuleScopeClassBackfillJobTests
         new RuleScopeClassBackfillJob(NullLogger<RuleScopeClassBackfillJob>.Instance).Name
             .Should().NotBe("alert-rule-scope-class-backfill");
     }
+
+    private static ClassifiedRule Classified(AlertRuleSnapshot rule) =>
+        new(rule.Id, rule.ConditionType, rule.ConditionParams);
 
     private static AlertRuleSnapshot Rule(string conditionParams, RuleScopeClass stored) =>
         new(Guid.CreateVersion7(), Tenant.TenantId, "rule", AlertConditionType.Threshold, conditionParams,

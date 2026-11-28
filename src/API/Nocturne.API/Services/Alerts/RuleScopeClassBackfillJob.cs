@@ -15,7 +15,8 @@ namespace Nocturne.API.Services.Alerts;
 /// what <see cref="IRuleScopeClassifier"/> answers is applied to stored rules by a new
 /// <see cref="JobName"/>, which enrols every tenant afresh.
 /// Only rows whose recomputed class differs from the stored one are written, each distinct class in
-/// one statement through <see cref="IAlertRuleRepository.SetScopeClassAsync"/>.
+/// one call to <see cref="IAlertRuleRepository.SetScopeClassAsync"/>, which skips a rule edited since the
+/// job read it.
 /// </remarks>
 /// <seealso cref="RuleScopeClassifier"/>
 internal sealed class RuleScopeClassBackfillJob(ILogger<RuleScopeClassBackfillJob> logger) : IScheduledJob
@@ -33,9 +34,10 @@ internal sealed class RuleScopeClassBackfillJob(ILogger<RuleScopeClassBackfillJo
         var rules = run.Services.GetRequiredService<IAlertRuleRepository>();
 
         var reclassified = (await run.Services.GetRequiredService<IAlertRepository>().GetRuleSnapshotsAsync(tenantId, ct))
-            .Select(r => (r.Id, Computed: classifier.Classify(r.ConditionType, r.ConditionParams), r.ScopeClass))
+            .Select(r => (Rule: new ClassifiedRule(r.Id, r.ConditionType, r.ConditionParams),
+                Computed: classifier.Classify(r.ConditionType, r.ConditionParams), r.ScopeClass))
             .Where(r => r.ScopeClass != r.Computed)
-            .GroupBy(r => r.Computed, r => r.Id);
+            .GroupBy(r => r.Computed, r => r.Rule);
 
         var updated = 0;
         foreach (var group in reclassified)
