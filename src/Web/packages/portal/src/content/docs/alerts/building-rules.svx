@@ -142,8 +142,10 @@ condition, disable the rule or delete it.
 If Nocturne can evaluate the condition but not the auto-resolve conditions or
 the smart snooze conditions, the rule still fires. But the auto-resolve does
 not close the alert, and the smart snooze does not extend. Nocturne sends a
-different notice for this, in the same way. It sends it again only when the
-auto-resolve or smart snooze conditions change.
+different notice for this, through the rule's channels. This notice has the
+**Info** severity, and Do Not Disturb stops it, also for a critical rule. It
+sends it again only when the broken auto-resolve or smart snooze conditions
+change.
 
 ### Webhook messages
 

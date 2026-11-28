@@ -392,7 +392,7 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
         (await run.StandingAsync()).Should().ContainSingle();
         (await run.ExcursionsAsync()).Should().ContainSingle(e => e.AlertRuleId == run.RuleId)
             .Which.UnevaluableConditionVersion.Should().Be(
-                UnevaluableRuleNotice.PartsVersionOf(run.AutoResolving(Valid, SchemaOneAutoResolve)));
+                UnevaluableRuleNotice.PartsVersionOf(run.AutoResolving(Valid, SchemaOneAutoResolve), [AutoResolveIssue]));
     }
 
     [Fact]
@@ -447,6 +447,63 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
         run.VerifySent(Times.Once());
         run.VerifySentPartly(Times.Once());
         (await run.StandingAsync()).Should().ContainSingle().Which.Should().NotBe(partly);
+    }
+
+    [Fact]
+    public async Task Fixing_one_of_two_broken_trees_leaves_the_notice_standing_for_the_other()
+    {
+        var run = await SeedAsync();
+        run.AutoResolveCannotBeEvaluated(SchemaOneAutoResolve);
+        run.Validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), Valid, true, SchemaOneAutoResolve, SchemaOneSnooze))
+            .Returns([AutoResolveIssue, SnoozeIssue]);
+        var process = run.Process();
+        var both = run.AutoResolving(Valid, SchemaOneAutoResolve) with { ClientConfiguration = SchemaOneSnooze };
+        await process.CheckAsync(Enabled(both), CancellationToken.None);
+        var notice = (await run.StandingAsync()).Single();
+
+        await process.CheckAsync(Enabled(both with { ClientConfiguration = "{}" }), CancellationToken.None);
+
+        (await run.StandingAsync()).Should().Equal(notice);
+        run.VerifySentPartly(Times.Once());
+        run.Resolution.Verify(h => h.HandleClosedAsync(It.IsAny<ExcursionTransition>(), run.Tenant, It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task The_partly_notice_of_an_urgent_rule_that_pierces_do_not_disturb_is_sent_as_info()
+    {
+        var run = await SeedAsync();
+        run.AutoResolveCannotBeEvaluated(SchemaOneAutoResolve);
+        var urgent = run.AutoResolving(Valid, SchemaOneAutoResolve) with
+        {
+            Severity = AlertRuleSeverity.Critical,
+            AllowThroughDnd = true,
+        };
+
+        await run.Process().CheckAsync(Enabled(urgent), CancellationToken.None);
+
+        run.Delivery.Verify(d => d.DispatchAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
+            It.Is<AlertPayload>(p => p.Kind == AlertPayloadKind.PartlyUnevaluable && p.Severity == AlertRuleSeverity.Info),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Do_not_disturb_silences_the_partly_notice_of_an_urgent_rule_that_pierces_it()
+    {
+        var run = await SeedAsync();
+        run.AutoResolveCannotBeEvaluated(SchemaOneAutoResolve);
+        run.Dnd = new HashSet<DndScope> { DndScope.All };
+        var urgent = run.AutoResolving(Valid, SchemaOneAutoResolve) with
+        {
+            Severity = AlertRuleSeverity.Critical,
+            AllowThroughDnd = true,
+        };
+
+        await run.Process().CheckAsync(Enabled(urgent), CancellationToken.None);
+
+        run.Delivery.VerifyNoOtherCalls();
+        (await run.InstancesAsync()).Should().ContainSingle().Which.SuppressionReason.Should().Be("dnd:all");
     }
 
     [Fact]

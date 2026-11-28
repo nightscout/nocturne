@@ -5,6 +5,23 @@ const MALFORMED = "Part of this rule's conditions is malformed, so it cannot be 
 const STORED_MALFORMED = "Part of this rule's conditions is malformed, so the rule cannot run as set. Edit its conditions and save it.";
 
 /**
+ * Sentences for a stored issue in a tree other than the rule's own conditions, by the issue's
+ * scope, so the person knows which part to open. The rule still sends alerts.
+ */
+const PART_SENTENCES: Record<string, { lead: string; oldFormat: string; malformed: string }> = {
+	auto_resolve: {
+		lead: "The auto-resolve conditions of this rule cannot run as set.",
+		oldFormat: "The auto-resolve conditions of this rule were saved in an old format. Check them and save the rule again.",
+		malformed: "Edit the auto-resolve conditions and save the rule.",
+	},
+	snooze: {
+		lead: "The smart snooze conditions of this rule cannot run as set.",
+		oldFormat: "The smart snooze conditions of this rule were saved in an old format. Check them and save the rule again.",
+		malformed: "Edit the smart snooze conditions and save the rule.",
+	},
+};
+
+/**
  * Sentences for the reason codes a rule save is rejected with
  * (docs/alerts/engine-semantics.md §1.4). A code arrives with a field or
  * without one; the field-specific form wins.
@@ -99,7 +116,17 @@ export function storedConditionIssuesMessage(
 	issues: RustValidationIssue[] | undefined
 ): string | null {
 	if (issues === undefined || issues.length === 0) return null;
-	return distinct(issues.map((issue) => sentenceFor(issue) ?? STORED_MALFORMED)).join(" ");
+	return distinct(issues.flatMap(storedSentences)).join(" ");
+}
+
+function storedSentences(issue: RustValidationIssue): string[] {
+	const part =
+		issue.scope !== undefined && Object.hasOwn(PART_SENTENCES, issue.scope)
+			? PART_SENTENCES[issue.scope]
+			: undefined;
+	if (part === undefined) return [sentenceFor(issue) ?? STORED_MALFORMED];
+	if (issue.reason === "unsupported_schema") return [part.oldFormat];
+	return [part.lead, sentenceFor(issue) ?? part.malformed];
 }
 
 /** The sentence for one reason code, and the field it is on when there is one. */

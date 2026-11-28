@@ -139,9 +139,13 @@ internal sealed class AlertDeliveryService(
             var anchor = NoChannelAnchor(
                 tenantId, alertInstanceId, payloadJson, timeProvider.GetUtcNow().UtcDateTime, isTest: false);
             if (configured > 0)
-                anchor.LastError = payload.Kind.IsHeld()
-                    ? "No channel of the rule carries a notice that it has waited for usable data"
-                    : "No channel of the rule carries a notice that it cannot be evaluated";
+                anchor.LastError = payload.Kind switch
+                {
+                    _ when payload.Kind.IsHeld() => "No channel of the rule carries a notice that it has waited for usable data",
+                    AlertPayloadKind.PartlyUnevaluable =>
+                        "No channel of the rule carries a notice that its auto-resolve or smart-snooze conditions cannot be evaluated",
+                    _ => "No channel of the rule carries a notice that it cannot be evaluated",
+                };
             db.AlertDeliveries.Add(anchor);
             await db.SaveChangesAsync(ct);
             return;

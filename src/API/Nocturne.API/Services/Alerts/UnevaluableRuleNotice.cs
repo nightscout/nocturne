@@ -24,8 +24,11 @@ namespace Nocturne.API.Services.Alerts;
 /// <see cref="AlertPayloadKind.Unevaluable"/> for the version of the body
 /// (<see cref="VersionOf(AlertRuleSnapshot)"/>). An auto-resolve tree or snooze conditions that
 /// cannot be evaluated leave the rule firing, so with a body that can be they are sent as
-/// <see cref="AlertPayloadKind.PartlyUnevaluable"/> for the version of those trees
-/// (<see cref="PartsVersionOf"/>); with one that cannot, the body's notice stands for both. A rule
+/// <see cref="AlertPayloadKind.PartlyUnevaluable"/> for the version of the trees that cannot
+/// (<see cref="PartsVersionOf"/>); with one that cannot, the body's notice stands for both. Since
+/// such a rule still fires, its notice must wake no one: it is sent at
+/// <see cref="AlertRuleSeverity.Info"/> and never through Do Not Disturb, whatever the rule's own
+/// severity and <see cref="AlertRuleSnapshot.AllowThroughDnd"/> (<see cref="PartlyNoticeRule"/>). A rule
 /// whose stored condition type, severity or scope class no engine member has (<see cref="UnreadableAlertRule"/>)
 /// is skipped too, and is sent the same notice through its channels with no condition type, at
 /// critical severity when the severity is the unreadable part.
@@ -91,24 +94,65 @@ internal sealed class UnevaluableRuleNotice(
     : IUnevaluableRuleNotice
 {
     private const string BodyScope = "condition";
+    private const string AutoResolveScope = "auto_resolve";
+    private const string SnoozeScope = "snooze";
+
+    /// <summary>A half of <see cref="PartsVersionOf"/> for a tree that can be evaluated.</summary>
+    private static readonly string NoPart = new('-', 31);
 
     /// <summary>The version of a rule's condition a notice is sent for.</summary>
     internal static string VersionOf(AlertRuleSnapshot rule) =>
         Hash($"{AlertConditionTypeNames.ToWireString(rule.ConditionType)}\n{rule.ConditionParams}");
 
     /// <summary>
-    /// The version of a rule's auto-resolve tree and smart-snooze conditions a
-    /// <see cref="AlertPayloadKind.PartlyUnevaluable"/> notice is sent for: each as the engine is
-    /// handed it, so an edit elsewhere in the rule or its client configuration does not send it
-    /// again. Snooze conditions that cannot be read count as the whole client configuration.
+    /// The version a <see cref="AlertPayloadKind.PartlyUnevaluable"/> notice is sent for:
+    /// <c>r</c> and 31 hex digits of the auto-resolve tree, then <c>s</c> and 31 of the smart-snooze
+    /// conditions, each hashed only when <paramref name="issues"/> has an issue in its scope and a
+    /// run of <c>-</c> otherwise. So only an edit to a tree that cannot be evaluated changes it: not
+    /// one to the body, to a tree that can be, or to the rest of the client configuration. Snooze
+    /// conditions that cannot be read count as the whole client configuration. Neither letter is a
+    /// hex digit, so it never equals a <see cref="VersionOf(AlertRuleSnapshot)"/>, and it is as long
+    /// as one, which the column holds.
     /// </summary>
-    internal static string PartsVersionOf(AlertRuleSnapshot rule)
+    internal static string PartsVersionOf(AlertRuleSnapshot rule, IReadOnlyList<RustValidationIssue> issues)
     {
-        var snooze = SmartSnoozeConfig.Parse(rule.ClientConfiguration);
-        var autoResolve = rule.AutoResolveEnabled ? rule.AutoResolveParams : null;
-        var snoozeConditions = snooze.SmartSnooze ? snooze.Conditions?.GetRawText() ?? rule.ClientConfiguration : null;
-        return Hash($"parts\n{autoResolve}\n{snoozeConditions}");
+        var autoResolve = issues.Any(i => i.Scope == AutoResolveScope)
+            ? Hash($"auto_resolve\n{rule.AutoResolveParams}")[..31]
+            : NoPart;
+        var snooze = issues.Any(i => i.Scope == SnoozeScope)
+            ? Hash($"snooze\n{SnoozeConditionsOf(rule.ClientConfiguration)}")[..31]
+            : NoPart;
+        return $"r{autoResolve}s{snooze}";
     }
+
+    private static string SnoozeConditionsOf(string clientConfiguration)
+    {
+        var snooze = SmartSnoozeConfig.Parse(clientConfiguration);
+        return snooze.ConditionsUnreadable ? clientConfiguration : snooze.Conditions?.GetRawText() ?? "";
+    }
+
+    /// <summary>
+    /// Whether the notice standing for parts version <paramref name="standing"/> still holds for
+    /// <paramref name="current"/>: every tree that cannot be evaluated now is one it was sent for,
+    /// unchanged. So fixing one of two broken trees leaves the notice for the other standing rather
+    /// than resolving and sending it again; a tree that newly cannot be evaluated sends it again.
+    /// </summary>
+    internal static bool PartsVersionCovers(string standing, string current)
+    {
+        if (standing.Length != current.Length || standing[0] != 'r' || standing[32] != 's')
+            return false;
+        return Holds(standing[1..32], current[1..32]) && Holds(standing[33..], current[33..]);
+
+        static bool Holds(string standingHalf, string currentHalf) => currentHalf == NoPart || currentHalf == standingHalf;
+    }
+
+    /// <summary>
+    /// The rule as its <see cref="AlertPayloadKind.PartlyUnevaluable"/> notice is sent: at the
+    /// lowest severity and never through Do Not Disturb, under the rule's own scope class, so a Do
+    /// Not Disturb window that would silence the rule's warnings silences it too.
+    /// </summary>
+    internal static NoticeRule PartlyNoticeRule(AlertRuleSnapshot rule) =>
+        NoticeRule.Of(rule) with { Severity = AlertRuleSeverity.Info, AllowThroughDnd = false };
 
     /// <summary>The version of an unreadable rule a notice is sent for: whichever of its stored columns changes.</summary>
     internal static string VersionOf(UnreadableAlertRule rule) =>
@@ -137,11 +181,13 @@ internal sealed class UnevaluableRuleNotice(
             if (Issues(rule, tenantId) is not { } issues)
                 continue;
 
-            var (version, kind) = issues.Any(i => i.Scope == BodyScope) ? (VersionOf(rule), AlertPayloadKind.Unevaluable)
-                : issues.Count > 0 ? (PartsVersionOf(rule), AlertPayloadKind.PartlyUnevaluable)
-                : ((string?)null, AlertPayloadKind.Unevaluable);
+            var (version, kind, noticeRule) = issues.Any(i => i.Scope == BodyScope)
+                ? (VersionOf(rule), AlertPayloadKind.Unevaluable, NoticeRule.Of(rule))
+                : issues.Count > 0
+                    ? (PartsVersion(rule, issues, standing), AlertPayloadKind.PartlyUnevaluable, PartlyNoticeRule(rule))
+                    : ((string?)null, AlertPayloadKind.Unevaluable, NoticeRule.Of(rule));
             await SendOnceAsync(
-                NoticeRule.Of(rule),
+                noticeRule,
                 version,
                 kind,
                 at => repository.RecordUnevaluableNoticeAsync(rule, version!, at, ct),
@@ -161,6 +207,18 @@ internal sealed class UnevaluableRuleNotice(
 
         foreach (var orphan in standing.Where(n => !enabledIds.Contains(n.AlertRuleId)))
             await TryResolveAsync(orphan, ExcursionCloseReason.RuleDisabled, ct);
+    }
+
+    /// <summary>
+    /// The version of the rule's standing parts notice when it still holds
+    /// (<see cref="PartsVersionCovers"/>), else the rule's current <see cref="PartsVersionOf"/>.
+    /// </summary>
+    private static string PartsVersion(
+        AlertRuleSnapshot rule, IReadOnlyList<RustValidationIssue> issues, IReadOnlyList<StandingUnevaluableNotice> standing)
+    {
+        var current = PartsVersionOf(rule, issues);
+        return standing.FirstOrDefault(n => n.AlertRuleId == rule.Id && PartsVersionCovers(n.ConditionVersion, current))
+            ?.ConditionVersion ?? current;
     }
 
     /// <summary>
@@ -191,8 +249,8 @@ internal sealed class UnevaluableRuleNotice(
         catch (Exception ex) when (ProviderFailure.Is(ex))
         {
             logger.LogError(ex,
-                "Sending the notice that alert rule {AlertRuleId} for tenant {TenantId} cannot be evaluated failed",
-                rule.Id, tenantId);
+                "Sending the notice that {Part} of alert rule {AlertRuleId} for tenant {TenantId} cannot be evaluated failed",
+                PartOf(kind), rule.Id, tenantId);
         }
     }
 
@@ -273,9 +331,13 @@ internal sealed class UnevaluableRuleNotice(
             tenantId, repository, ruleRepository, deliveryService, contextEnricher, resolutionHandler, logger, ct);
 
         logger.LogInformation(
-            "Notice {InstanceId} ({Kind}) sent that alert rule {AlertRuleId} cannot be evaluated until it is edited",
-            notice.InstanceId, kind, rule.Id);
+            "Notice {InstanceId} sent that {Part} of alert rule {AlertRuleId} cannot be evaluated until it is edited",
+            notice.InstanceId, PartOf(kind), rule.Id);
     }
+
+    /// <summary>What of the rule a notice of <paramref name="kind"/> says cannot be evaluated, for the log.</summary>
+    private static string PartOf(AlertPayloadKind kind) =>
+        kind == AlertPayloadKind.PartlyUnevaluable ? "the auto-resolve or smart-snooze conditions" : "the condition";
 
     private Task ResolveNoticeAsync(Guid excursionId, ExcursionCloseReason reason, CancellationToken ct) =>
         RuleNoticeDispatch.ResolveAsync(
