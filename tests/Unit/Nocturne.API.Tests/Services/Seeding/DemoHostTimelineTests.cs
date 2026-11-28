@@ -82,7 +82,8 @@ public class DemoHostTimelineTests
         {
             var day = first.AddDays(d);
             var (heartRates, steps) = DemoHealthDataGenerator.GenerateDailyActivity(day, "demo-service", Sydney);
-            text.Append(CultureInfo.InvariantCulture, $"{DemoHealthDataGenerator.WorkoutWindowFor(day)};");
+            var (workoutStart, workoutEnd) = DemoHealthDataGenerator.WorkoutWindowFor(day);
+            text.Append(CultureInfo.InvariantCulture, $"{workoutStart:o}|{workoutEnd:o};");
             foreach (var heartRate in heartRates)
                 text.Append(CultureInfo.InvariantCulture, $"{heartRate.Timestamp:o}|{heartRate.Bpm};");
             foreach (var step in steps)
@@ -100,7 +101,7 @@ public class DemoHostTimelineTests
         foreach (var interruption in Enumerable.Range(0, 10).SelectMany(d => DemoLoopInterruptions.On(End.Date.AddDays(-d), End)))
             text.Append(CultureInfo.InvariantCulture, $"{interruption.State}|{interruption.Start:o}|{interruption.End:o};");
 
-        Digest(text).Should().Be("7EF27D19BF88D2BF93BE45C4A5128DC3A0F04D5A6C139D243CF055327875B040");
+        Digest(text).Should().Be("A2867F0C5C4FF0CAAF4AFE4160A3D875262366555494169D439F67DCD94F91E6");
     }
 
     private static string Digest(StringBuilder text) =>
