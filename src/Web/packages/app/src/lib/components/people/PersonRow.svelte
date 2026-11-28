@@ -8,7 +8,7 @@
   import PersonSelect from "./PersonSelect.svelte";
   import PersonTrace from "./PersonTrace.svelte";
   import ReadingAge from "./ReadingAge.svelte";
-  import { ROW_GRID } from "./row-grid.js";
+  import { ROW_GRID, ROW_ITEM } from "./row-grid.js";
 
   interface Props {
     person: TenantOverviewItem;
@@ -21,7 +21,7 @@
   const snapshotAt = $derived(toDate(person.devices?.snapshotAt));
 </script>
 
-<li>
+<li class={ROW_ITEM}>
   <PersonSelect
     {person}
     class="flex flex-wrap items-center gap-x-3 gap-y-1 {ROW_GRID}"

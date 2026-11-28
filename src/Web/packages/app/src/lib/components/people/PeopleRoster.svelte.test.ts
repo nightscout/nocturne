@@ -9,7 +9,7 @@ import {
   type TenantOverviewItem,
 } from "@nocturne/api-client";
 import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
-import PeopleRoster from "./PeopleRoster.svelte";
+import PeopleRoster, { FIRST_ROWS } from "./PeopleRoster.svelte";
 import { makePerson, minutesAgo } from "./people-fixtures.js";
 
 const noAccessTitle = "You do not have access to this person's alerts";
@@ -95,6 +95,40 @@ describe("PeopleRoster order and sections", () => {
       .toBeVisible();
     expect(page.getByRole("heading", { name: /Other people/ }).elements())
       .toHaveLength(0);
+  });
+});
+
+function frame() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+describe("PeopleRoster reveal", () => {
+  it("never mounts fewer rows than before when a poll lands while the rows are still mounting", async () => {
+    const people = crowd(200, ["person3", "person150"]);
+    const screen = renderRoster(people);
+    const counts = [page.getByTestId("person-row").elements().length];
+    expect(counts[0]).toBe(FIRST_ROWS);
+
+    for (let poll = 0; counts.at(-1)! < people.length; poll++) {
+      if (poll < 6) await screen.rerender({ people: structuredClone(people) });
+      await frame();
+      counts.push(page.getByTestId("person-row").elements().length);
+    }
+
+    expect(counts.slice(1).every((count, i) => count >= counts[i])).toBe(true);
+    expect(counts.at(-1)).toBe(people.length);
+  });
+
+  it("mounts a step at a time the new people of an answer the same size as the last", async () => {
+    const first = crowd(150);
+    const screen = renderRoster(first);
+    await expect.poll(() => page.getByTestId("person-row").elements().length, { timeout: 30_000 }).toBe(150);
+
+    const second = Array.from({ length: 150 }, (_, i) => makePerson({ slug: `other${i}` }));
+    await screen.rerender({ people: second });
+
+    expect(page.getByTestId("person-row").elements().length).toBeLessThan(second.length);
+    await expect.poll(() => page.getByTestId("person-row").elements().length, { timeout: 30_000 }).toBe(150);
   });
 });
 

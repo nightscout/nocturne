@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { TenantOverviewItem } from "@nocturne/api-client";
   import GlucoseSparkline from "#lib/components/calendar/GlucoseSparkline.svelte";
+  import WhenNear from "./WhenNear.svelte";
   import { tracePoints, traceThresholds } from "./person-trace.js";
 
   interface Props {
@@ -27,6 +28,8 @@
     class={className}
     data-testid="person-trace"
   >
-    <GlucoseSparkline {entries} day={traceWindow} {thresholds} />
+    <WhenNear class="size-full">
+      <GlucoseSparkline {entries} day={traceWindow} {thresholds} />
+    </WhenNear>
   </div>
 {/if}

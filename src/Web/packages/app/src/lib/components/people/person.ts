@@ -2,6 +2,7 @@ import {
   GlucoseStatus,
   type TenantOverviewItem,
 } from "@nocturne/api-client";
+import { deepEqual } from "#lib/forms/deep-equal.js";
 import { tenantUrl } from "#lib/utils/tenant-host.js";
 
 export function personName(person: TenantOverviewItem): string {
@@ -29,6 +30,18 @@ export const PERSON_POLL_MS = 60_000;
 
 /** The id of the open person's name in the panel, which names the side panel's landmark. */
 export const PERSON_PANEL_HEADING_ID = "person-panel-title";
+
+/**
+ * `next` with each item that equals the item of `previous` under the same key replaced by that item. A read parses
+ * every person anew, so without this every row would render again on each poll, changed or not.
+ */
+export function keepUnchanged<T extends { tenantId?: string }>(previous: T[], next: T[]): T[] {
+  const held = new Map(previous.map((item) => [item.tenantId, item]));
+  return next.map((item) => {
+    const before = held.get(item.tenantId);
+    return before && deepEqual(before, item) ? before : item;
+  });
+}
 
 /** Whether the API gave the person a reason to need attention. */
 export function isFlagged(person: TenantOverviewItem): boolean {

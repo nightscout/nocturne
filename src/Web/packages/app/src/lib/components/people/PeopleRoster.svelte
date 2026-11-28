@@ -1,3 +1,9 @@
+<script lang="ts" module>
+  /** The rows a roster mounts at once, and the most each step mounts, within the frame budget of a {@link Reveal}. */
+  export const FIRST_ROWS = 10;
+  export const ROWS_PER_STEP = 10;
+</script>
+
 <script lang="ts">
   import {
     PeopleSortColumn,
@@ -14,8 +20,9 @@
   import ReviewRow from "./ReviewRow.svelte";
   import ReviewSummary from "./ReviewSummary.svelte";
   import { setPersonSelection } from "./person-selection.js";
-  import { isFlagged } from "./person.js";
-  import { reviewCell, type ReviewState } from "./review-lens.js";
+  import { Reveal, setReveal } from "./reveal.js";
+  import { isFlagged, keepUnchanged } from "./person.js";
+  import { reviewCell, type ReviewCell, type ReviewState } from "./review-lens.js";
   import { REVIEW_ROW_GRID, ROW_GRID } from "./row-grid.js";
 
   interface Props {
@@ -31,6 +38,8 @@
     sort?: PeopleSort | null;
     /** Set when the column headings sort the list: called with the heading's column. */
     onSort?: (column: PeopleSortColumn) => void;
+    /** The id of the heading that names the roster, which takes focus when the row to focus is not mounted yet. */
+    labelledby?: string;
   }
 
   const {
@@ -41,6 +50,7 @@
     review,
     sort = null,
     onSort,
+    labelledby,
   }: Props = $props();
 
   function ariaSort(column: PeopleSortColumn) {
@@ -58,8 +68,9 @@
     select: (person) => onSelect(person),
   });
 
+  /** Focuses the person's row, or the roster while the reveal has not reached that row yet. */
   export function focusRow(slug: string) {
-    root?.querySelector<HTMLElement>(`[data-person="${CSS.escape(slug)}"]`)?.focus();
+    (root?.querySelector<HTMLElement>(`[data-person="${CSS.escape(slug)}"]`) ?? root)?.focus();
   }
 
   /** At this many people or fewer, each person gets the large layout. */
@@ -68,6 +79,38 @@
   const flagged = $derived(people.filter(isFlagged));
   const others = $derived(people.filter((person) => !isFlagged(person)));
   const large = $derived(people.length <= LARGE_LAYOUT_MAX);
+
+  const reveal = new Reveal();
+  setReveal(reveal);
+  $effect(() => () => reveal.destroy());
+
+  // Each lens has its own rows, so a switch mounts them afresh, a step at a time.
+  const lens = $derived(review ? "review" : "now");
+  let revealed = $state<{ lens: string; rows: number } | null>(null);
+  let mounted = new Set<string | undefined>();
+  /**
+   * How many rows are mounted, in section order. An answer whose people are not on screen yet (a search cleared or
+   * changed, a filter swapped) keeps the rows up to the step's worth of new ones and leaves the rest to the steps,
+   * whatever the count was before.
+   */
+  const shownRows = $derived.by(() => {
+    const ordered = [...flagged, ...others];
+    const asked = revealed?.lens === lens ? revealed.rows : FIRST_ROWS;
+    let rows = 0;
+    let fresh = 0;
+    for (const person of ordered.slice(0, asked)) {
+      if (!mounted.has(person.tenantId) && ++fresh > ROWS_PER_STEP) break;
+      rows++;
+    }
+    rows = Math.max(rows, Math.min(asked, FIRST_ROWS));
+    mounted = new Set(ordered.slice(0, rows).map((person) => person.tenantId));
+    return rows;
+  });
+  // The step reads the count when it runs, so a poll or an answer that lands while it waits cannot move it backwards.
+  $effect(() => {
+    if (shownRows < people.length)
+      reveal.scheduleSized(ROWS_PER_STEP, (count) => (revealed = { lens, rows: shownRows + count }));
+  });
   const reviewByTenant = $derived(
     Object.fromEntries(
       (review?.status === "ready" ? (review.response.people ?? []) : []).flatMap(
@@ -76,8 +119,21 @@
     )
   );
 
-  function cellOf(person: TenantOverviewItem, state: ReviewState) {
-    return reviewCell(state, person.tenantId ? reviewByTenant[person.tenantId] : undefined);
+  let heldCells: { tenantId?: string; cell: ReviewCell }[] = [];
+  /** Each person's review cells, the same object while what they show is the same, so a new answer renders only the rows it changed. */
+  const cells = $derived.by(() => {
+    const next = review
+      ? people.map((person) => ({
+          tenantId: person.tenantId,
+          cell: reviewCell(review, person.tenantId ? reviewByTenant[person.tenantId] : undefined),
+        }))
+      : [];
+    heldCells = keepUnchanged(heldCells, next);
+    return new Map(heldCells.map((entry) => [entry.tenantId, entry.cell]));
+  });
+
+  function cellOf(person: TenantOverviewItem): ReviewCell {
+    return cells.get(person.tenantId) ?? { kind: "loading" };
   }
 </script>
 
@@ -109,7 +165,7 @@
 {/snippet}
 
 <!-- Only the first section's headings sort: one sort orders every section. -->
-{#snippet section(title: string | null, section: TenantOverviewItem[], sortable: boolean)}
+{#snippet section(title: string | null, section: TenantOverviewItem[], shown: TenantOverviewItem[], sortable: boolean)}
   <section class="space-y-2">
     {#if title}
       <h2 class="text-sm font-semibold">
@@ -159,11 +215,11 @@
       </div>
     {/if}
     <ul class="divide-y divide-border {large ? 'border-y' : 'border-b'}">
-      {#each section as person (person.tenantId)}
+      {#each shown as person (person.tenantId)}
         {#if review && large}
-          <ReviewSummary {person} cell={cellOf(person, review)} />
+          <ReviewSummary {person} cell={cellOf(person)} />
         {:else if review}
-          <ReviewRow {person} cell={cellOf(person, review)} />
+          <ReviewRow {person} cell={cellOf(person)} />
         {:else if large}
           <PersonSummary {person} />
         {:else}
@@ -174,13 +230,19 @@
   </section>
 {/snippet}
 
-<div class="@container space-y-6" bind:this={root}>
+<div
+  class="@container space-y-6 outline-none"
+  role="region"
+  aria-labelledby={labelledby}
+  tabindex="-1"
+  bind:this={root}
+>
   {#if flagged.length > 0}
-    {@render section("Flagged", flagged, true)}
+    {@render section("Flagged", flagged, flagged.slice(0, shownRows), true)}
     {#if others.length > 0}
-      {@render section("Other people", others, false)}
+      {@render section("Other people", others, others.slice(0, Math.max(0, shownRows - flagged.length)), false)}
     {/if}
   {:else}
-    {@render section(null, others, true)}
+    {@render section(null, others, others.slice(0, shownRows), true)}
   {/if}
 </div>

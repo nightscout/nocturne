@@ -40,6 +40,13 @@ public partial class TenantOverviewService : ITenantOverviewService
     private static readonly TimeSpan PersonWindow = TimeSpan.FromHours(24);
     private const int PersonEntryLimit = 10;
 
+    /// <summary>
+    /// The most people one overview read reads at once. Each holds one pool connection at a time, so one read holds at
+    /// most this many of the pool's connections (100 by default): a dozen viewers reading at once still leave room for
+    /// every other request.
+    /// </summary>
+    private const int PeopleReadAtOnce = 8;
+
     private readonly ITenantMembershipRepository _members;
     private readonly ITeamRepository _teams;
     private readonly IServiceProvider _scope;
@@ -156,7 +163,11 @@ public partial class TenantOverviewService : ITenantOverviewService
             : null;
     }
 
-    /// <summary>Each item, and whether every fact filter of the run matched for it.</summary>
+    /// <summary>
+    /// Each item, and whether every fact filter of the run matched for it. The people are read
+    /// <see cref="PeopleReadAtOnce"/> at a time, each in a scope of their own; once every read is done they are judged on
+    /// the request's own flow, one at a time and in order, as <see cref="Nocturne.API.Reports.FlagFactEvaluator.FlagJudging"/> is written for.
+    /// </summary>
     private async Task<List<(TenantOverviewItem Item, bool MatchesFilters)>> BuildItemsAsync(
         IReadOnlyList<GlucoseReadTenant> glucoseReadTenants,
         IViewerFlagRuleRun? rules,
@@ -164,40 +175,100 @@ public partial class TenantOverviewService : ITenantOverviewService
         bool credentialLimitTo24Hours,
         CancellationToken ct)
     {
-        var items = new List<(TenantOverviewItem, bool)>();
-        foreach (var readable in glucoseReadTenants)
+        var caller = TenantReader.Of(_scope);
+        var scopes = _scope.GetRequiredService<IServiceScopeFactory>();
+        var people = new PersonRead?[glucoseReadTenants.Count];
+        try
         {
-            var tenant = readable.Tenant;
-            var access = ItemAccess.Of(readable, credentialLimitTo24Hours);
-            var historyClamped = access.HistoryClamped;
+            await Parallel.ForEachAsync(
+                Enumerable.Range(0, people.Length),
+                new ParallelOptions { MaxDegreeOfParallelism = PeopleReadAtOnce, CancellationToken = ct },
+                async (i, token) =>
+                {
+                    var readable = glucoseReadTenants[i];
+                    var access = ItemAccess.Of(readable, credentialLimitTo24Hours);
+                    people[i] = await TryBuildAsync<PersonRead?>(
+                        readable.Tenant,
+                        () => ReadPersonInScopeAsync(scopes, caller, readable.Tenant, access, token),
+                        () => null);
+                });
 
-            items.Add(await TryBuildAsync(
-                tenant,
-                async () =>
+            var items = new List<(TenantOverviewItem, bool)>(people.Length);
+            for (var i = 0; i < people.Length; i++)
+            {
+                var readable = glucoseReadTenants[i];
+                var access = ItemAccess.Of(readable, credentialLimitTo24Hours);
+                if (people[i] is not { } person)
                 {
-                    await using var scope = OpenTenantScope(tenant, historyClamped);
-                    return await BuildItemAsync(scope.ServiceProvider, readable, access, rules, ct);
-                },
-                () =>
-                {
-                    var nowUtc = _time.GetUtcNow().UtcDateTime;
-                    var fallbackLastReadingAt = historyClamped ? null : tenant.LastReadingAt;
-                    var fallbackStatus = _classifier.Classify(
-                        null, null, fallbackLastReadingAt, _classifier.Defaults, nowUtc);
-                    return (new TenantOverviewItem(
-                        tenant.Id, tenant.Slug, tenant.DisplayName,
-                        fallbackLastReadingAt, Latest: null, fallbackStatus,
-                        _classifier.Defaults, ActiveAlertCount: null, HighestActiveSeverity: null,
-                        RecentReadings: [], Therapy: null, Devices: null, Trackers: null,
-                        Attention: BuildAttention(
-                            fallbackStatus, latest: null, fallbackLastReadingAt,
-                            activeAlertCount: null, highestSeverity: null, trackers: null,
-                            nowUtc),
-                        FirstGroupId: null), !hasFactFilters);
-                }));
+                    items.Add(FallbackItem(readable.Tenant, access, hasFactFilters));
+                    continue;
+                }
+
+                items.Add(await TryBuildAsync(
+                    readable.Tenant,
+                    () => ItemOfAsync(person.Scope.ServiceProvider, readable, access, person.Reads, rules, ct),
+                    () => FallbackItem(readable.Tenant, access, hasFactFilters)));
+                people[i] = null;
+                await person.Scope.DisposeAsync();
+            }
+
+            return items;
         }
+        finally
+        {
+            foreach (var person in people)
+            {
+                if (person is not null)
+                    await person.Scope.DisposeAsync();
+            }
+        }
+    }
 
-        return items;
+    /// <summary>
+    /// A person's reads, and the scope they were read in, which stays open until the person is judged and is disposed
+    /// straight after.
+    /// </summary>
+    private sealed record PersonRead(AsyncServiceScope Scope, PersonReads Reads);
+
+    /// <summary>
+    /// The reads of <paramref name="tenant"/> in a scope opened for it from <paramref name="scopes"/>, which reads as
+    /// <paramref name="caller"/>; the scope is disposed here when a read fails.
+    /// </summary>
+    private async Task<PersonRead?> ReadPersonInScopeAsync(
+        IServiceScopeFactory scopes, TenantReader caller, TenantRecord tenant, ItemAccess access, CancellationToken ct)
+    {
+        var scope = TenantJobScope.OpenFor(scopes, PersonReader(caller, tenant, access.HistoryClamped), AuditEndpoint);
+        var handedOver = false;
+        try
+        {
+            var read = new PersonRead(scope, await ReadPersonAsync(scope.ServiceProvider, access, ct));
+            handedOver = true;
+            return read;
+        }
+        finally
+        {
+            if (!handedOver)
+                await scope.DisposeAsync();
+        }
+    }
+
+    /// <summary>The item of a person whose reads failed: what the tenant row alone says.</summary>
+    private (TenantOverviewItem, bool) FallbackItem(TenantRecord tenant, ItemAccess access, bool hasFactFilters)
+    {
+        var nowUtc = _time.GetUtcNow().UtcDateTime;
+        var fallbackLastReadingAt = access.HistoryClamped ? null : tenant.LastReadingAt;
+        var fallbackStatus = _classifier.Classify(
+            null, null, fallbackLastReadingAt, _classifier.Defaults, nowUtc);
+        return (new TenantOverviewItem(
+            tenant.Id, tenant.Slug, tenant.DisplayName,
+            fallbackLastReadingAt, Latest: null, fallbackStatus,
+            _classifier.Defaults, ActiveAlertCount: null, HighestActiveSeverity: null,
+            RecentReadings: [], Therapy: null, Devices: null, Trackers: null,
+            Attention: BuildAttention(
+                fallbackStatus, latest: null, fallbackLastReadingAt,
+                activeAlertCount: null, highestSeverity: null, trackers: null,
+                nowUtc),
+            FirstGroupId: null), !hasFactFilters);
     }
 
     public async Task<TenantReviewResponse> GetReviewAsync(
@@ -344,13 +415,13 @@ public partial class TenantOverviewService : ITenantOverviewService
     /// never passed through MemberScopeMiddleware for this tenant, so its clamp here is the one the membership
     /// decides, and every read goes through the scope.
     /// </summary>
-    internal static AsyncServiceScope OpenTenantScope(IServiceProvider scope, TenantRecord tenant, bool historyClamped, string actor)
-    {
-        var reader = TenantReader.Of(scope)
+    internal static AsyncServiceScope OpenTenantScope(IServiceProvider scope, TenantRecord tenant, bool historyClamped, string actor) =>
+        TenantJobScope.OpenFor(scope, PersonReader(TenantReader.Of(scope), tenant, historyClamped), actor);
+
+    private static TenantReader PersonReader(TenantReader caller, TenantRecord tenant, bool historyClamped) =>
+        caller
             .ForTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, tenant.IsDemo))
             .ClampedToDay(historyClamped);
-        return TenantJobScope.OpenFor(scope, reader, actor);
-    }
 
     /// <summary>
     /// Display order: people with a reason for attention first, by their most severe reason, then
@@ -454,14 +525,31 @@ public partial class TenantOverviewService : ITenantOverviewService
 
     /// <summary>The person's item, and whether every fact filter of <paramref name="rules"/> matched for them.</summary>
     private async Task<(TenantOverviewItem Item, bool MatchesFilters)> BuildItemAsync(
-        IServiceProvider services, GlucoseReadTenant readable, ItemAccess access, IViewerFlagRuleRun? rules, CancellationToken ct)
+        IServiceProvider services, GlucoseReadTenant readable, ItemAccess access, IViewerFlagRuleRun? rules, CancellationToken ct) =>
+        await ItemOfAsync(services, readable, access, await ReadPersonAsync(services, access, ct), rules, ct);
+
+    /// <summary>What the overview reads of one person.</summary>
+    private sealed record PersonReads(
+        DateTime NowUtc,
+        SensorGlucose? Latest,
+        IReadOnlyList<SensorGlucose> Recent,
+        int? ActiveAlertCount,
+        AlertRuleSeverity? HighestSeverity,
+        List<V4TrackerStatus>? Trackers,
+        IReadOnlyList<TrackerInstance>? ActiveTrackers,
+        TenantOverviewTherapy? Therapy,
+        TenantOverviewDevices? Devices,
+        PumpSnapshot? Pump,
+        TenantOverviewThresholds Thresholds);
+
+    /// <summary>The person's reads in <paramref name="services"/>, the scope opened for them. Judges nothing.</summary>
+    private async Task<PersonReads> ReadPersonAsync(IServiceProvider services, ItemAccess access, CancellationToken ct)
     {
-        var tenant = readable.Tenant;
-        var historyClamped = access.HistoryClamped;
         var nowUtc = _time.GetUtcNow().UtcDateTime;
         var canonical = services.GetRequiredService<ICanonicalGlucoseService>();
-        var latest = await canonical.GetLatestAsync(ct);
         var recent = await canonical.GetRecentAsync(nowUtc - TraceWindow, ct);
+        // The recent read is newest first with no upper bound, so its first reading is the latest whenever it has one.
+        var latest = recent.Count > 0 ? recent[0] : await canonical.GetLatestAsync(ct);
 
         await using var db = await services
             .GetRequiredService<INocturneDbContextFactory>()
@@ -514,22 +602,37 @@ public partial class TenantOverviewService : ITenantOverviewService
         var thresholds = _classifier.ResolveThresholds(
             await services.GetRequiredService<IAlertRepository>().GetEnabledRulesAsync(ct));
 
+        return new PersonReads(
+            nowUtc, latest, recent, activeAlertCount, highestSeverity, trackers, activeTrackers, therapy, devices, pump, thresholds);
+    }
+
+    /// <summary>
+    /// The person's item from <paramref name="reads"/>, judged by <paramref name="rules"/> in <paramref name="services"/>,
+    /// the scope the reads were read in.
+    /// </summary>
+    private async Task<(TenantOverviewItem Item, bool MatchesFilters)> ItemOfAsync(
+        IServiceProvider services, GlucoseReadTenant readable, ItemAccess access, PersonReads reads, IViewerFlagRuleRun? rules,
+        CancellationToken ct)
+    {
+        var tenant = readable.Tenant;
+        var latest = reads.Latest;
         var reading = latest is null
             ? null
             : new TenantOverviewReading(latest.Mgdl, latest.Delta, latest.Direction, latest.TrendRate, latest.Timestamp);
 
         // tenant.LastReadingAt is denormalised from glucose rows RLS never sees, so a clamped
         // caller must not read an older reading's time off it.
-        var lastReadingAt = historyClamped ? null : tenant.LastReadingAt;
+        var lastReadingAt = access.HistoryClamped ? null : tenant.LastReadingAt;
 
         var status = _classifier.Classify(
-            latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, nowUtc);
+            latest?.Mgdl, latest?.Timestamp, lastReadingAt, reads.Thresholds, reads.NowUtc);
 
-        var attention = BuildAttention(status, reading, lastReadingAt, activeAlertCount, highestSeverity, trackers, nowUtc);
+        var attention = BuildAttention(
+            status, reading, lastReadingAt, reads.ActiveAlertCount, reads.HighestSeverity, reads.Trackers, reads.NowUtc);
         var matchesFilters = true;
         if (rules is not null)
         {
-            var judged = await rules.JudgeAsync(readable, services, latest, activeTrackers, pump, ct);
+            var judged = await rules.JudgeAsync(readable, services, latest, reads.ActiveTrackers, reads.Pump, ct);
             matchesFilters = judged.MatchesFilters;
             attention = attention
                 .Concat(judged.Reasons)
@@ -540,10 +643,10 @@ public partial class TenantOverviewService : ITenantOverviewService
         return (new TenantOverviewItem(
             tenant.Id, tenant.Slug, tenant.DisplayName,
             latest?.Timestamp ?? lastReadingAt,
-            reading, status, thresholds,
-            activeAlertCount, highestSeverity,
-            ThinToBuckets(recent),
-            therapy, devices, trackers,
+            reading, status, reads.Thresholds,
+            reads.ActiveAlertCount, reads.HighestSeverity,
+            ThinToBuckets(reads.Recent),
+            reads.Therapy, reads.Devices, reads.Trackers,
             attention,
             FirstGroupId: null), matchesFilters);
     }

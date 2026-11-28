@@ -8,9 +8,10 @@
   import ReviewBar from "./ReviewBar.svelte";
   import ReviewChange from "./ReviewChange.svelte";
   import ReviewNotice from "./ReviewNotice.svelte";
+  import WhenNear from "./WhenNear.svelte";
   import { onePlacePercent, wholePercent } from "./review-format.js";
   import { isNotReliable, type ReviewCell } from "./review-lens.js";
-  import { REVIEW_ROW_GRID } from "./row-grid.js";
+  import { REVIEW_ROW_GRID, ROW_ITEM } from "./row-grid.js";
 
   interface Props {
     person: TenantOverviewItem;
@@ -28,7 +29,7 @@
   {/if}
 {/snippet}
 
-<li>
+<li class={ROW_ITEM}>
   <PersonSelect
     {person}
     class="flex flex-wrap items-center gap-x-3 gap-y-1 {REVIEW_ROW_GRID}"
@@ -60,12 +61,14 @@
         <ReviewChange change={statistics.timeInRangeChange} days={cell.days} />
       </div>
       <div class="hidden @4xl:block" data-testid="review-distribution">
-        <TIRStackedChart
-          percentages={timeInRange}
-          orientation="horizontal"
-          compact
-          showLabels={false}
-        />
+        <WhenNear class="h-4">
+          <TIRStackedChart
+            percentages={timeInRange}
+            orientation="horizontal"
+            compact
+            showLabels={false}
+          />
+        </WhenNear>
       </div>
       <span class="hidden text-right text-sm tabular-nums @2xl:block" data-testid="review-gmi">
         {@render figure(statistics.gmi, "one")}

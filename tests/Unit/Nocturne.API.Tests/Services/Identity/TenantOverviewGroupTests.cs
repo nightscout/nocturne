@@ -169,21 +169,22 @@ public class TenantOverviewGroupTests
 
     private TenantOverviewService Service()
     {
-        var current = Guid.Empty;
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.Setup(a => a.SetTenant(It.IsAny<TenantContext>())).Callback<TenantContext>(tc => current = tc.TenantId);
-        var canonical = new Mock<ICanonicalGlucoseService>();
-        canonical.Setup(s => s.GetLatestAsync(It.IsAny<CancellationToken>()))
-            .Returns(() => Task.FromResult(_latest.GetValueOrDefault(current)));
-        canonical.Setup(s => s.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-
         var services = new ServiceCollection();
-        services.AddScoped(_ => accessor.Object);
+        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
-        services.AddScoped<INocturneDbContextFactory>(_ => new ScopeContextFactory(_options, () => current));
+        services.AddScoped<INocturneDbContextFactory>(sp => new ScopeContextFactory(
+            _options, () => sp.GetRequiredService<ITenantAccessor>().TenantId));
         services.AddScoped<IAlertRepository>(sp => new AlertRepository(sp.GetRequiredService<INocturneDbContextFactory>()));
-        services.AddScoped(_ => canonical.Object);
+        services.AddScoped(sp =>
+        {
+            var accessor = sp.GetRequiredService<ITenantAccessor>();
+            var canonical = new Mock<ICanonicalGlucoseService>();
+            canonical.Setup(s => s.GetLatestAsync(It.IsAny<CancellationToken>()))
+                .Returns(() => Task.FromResult(_latest.GetValueOrDefault(accessor.TenantId)));
+            canonical.Setup(s => s.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
+            return canonical.Object;
+        });
 
         return new TenantOverviewService(
             new TenantMembershipRepository(TestDbContextFactory.ForOptions(_options), AccountLinkRoutes.Off),

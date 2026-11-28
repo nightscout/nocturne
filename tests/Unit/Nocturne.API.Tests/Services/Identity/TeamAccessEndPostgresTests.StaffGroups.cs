@@ -279,22 +279,22 @@ public partial class TeamAccessEndPostgresTests
     /// <summary>The overview on this database, reading as nobody but the subject it is asked for; only <paramref name="withReading"/> has a reading.</summary>
     private TenantOverviewService Overview(ListLogger<TenantOverviewService> errors, Guid withReading)
     {
-        var current = Guid.Empty;
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.Setup(a => a.SetTenant(It.IsAny<TenantContext>())).Callback<TenantContext>(tc => current = tc.TenantId);
-        var canonical = new Mock<ICanonicalGlucoseService>();
-        canonical.Setup(s => s.GetLatestAsync(It.IsAny<CancellationToken>()))
-            .Returns(() => Task.FromResult(current == withReading
-                ? new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-2) }
-                : null));
-        canonical.Setup(s => s.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
-
         var services = new ServiceCollection();
-        services.AddScoped(_ => accessor.Object);
+        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
-        services.AddScoped<INocturneDbContextFactory>(_ => Contexts(current));
+        services.AddScoped<INocturneDbContextFactory>(sp => Contexts(sp.GetRequiredService<ITenantAccessor>().TenantId));
         services.AddScoped<IAlertRepository>(sp => new AlertRepository(sp.GetRequiredService<INocturneDbContextFactory>()));
-        services.AddScoped(_ => canonical.Object);
+        services.AddScoped(sp =>
+        {
+            var accessor = sp.GetRequiredService<ITenantAccessor>();
+            var canonical = new Mock<ICanonicalGlucoseService>();
+            canonical.Setup(s => s.GetLatestAsync(It.IsAny<CancellationToken>()))
+                .Returns(() => Task.FromResult(accessor.TenantId == withReading
+                    ? new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-2) }
+                    : null));
+            canonical.Setup(s => s.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            return canonical.Object;
+        });
 
         return new TenantOverviewService(
             Members(Guid.Empty),

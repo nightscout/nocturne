@@ -34,8 +34,16 @@ public partial class TenantOverviewService
         var people = await NarrowAsync(subjectId, glucoseReadTenants, query, credentialLimitTo24Hours, ct);
         var run = await BeginRulesAsync(subjectId, rules, query, people, credentialLimitTo24Hours, ct);
         var hasFactFilters = query.AllFilters.Any(f => f.Kind == PeopleFilterKind.Fact);
-        var built = await BuildItemsAsync(people, run, hasFactFilters, credentialLimitTo24Hours, ct);
-        run?.Finish();
+        List<(TenantOverviewItem Item, bool MatchesFilters)> built;
+        try
+        {
+            built = await BuildItemsAsync(people, run, hasFactFilters, credentialLimitTo24Hours, ct);
+        }
+        finally
+        {
+            // The warms the judging found are worth starting even when the read itself fails or is cancelled.
+            run?.Finish();
+        }
 
         var flaggedOnly = query.AllFilters.Any(f => f.Kind == PeopleFilterKind.Flagged);
         var now = _time.GetUtcNow().UtcDateTime;

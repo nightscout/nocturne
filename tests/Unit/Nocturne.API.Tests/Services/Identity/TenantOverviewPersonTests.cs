@@ -107,10 +107,11 @@ public class TenantOverviewPersonTests
         var options = NewOptions();
         var tenantId = SeedMembership(options, subjectId, "family", TreatmentReader);
         var harness = new Harness(options);
+        var latest = new SensorGlucose { Mgdl = 55, Timestamp = Now.AddMinutes(-1) };
         harness.Data[tenantId] = new TenantData
         {
-            Latest = new SensorGlucose { Mgdl = 55, Timestamp = Now.AddMinutes(-1) },
-            Recent = Minutely(Now.AddHours(-3), Now),
+            Latest = latest,
+            Recent = [latest, .. Minutely(Now.AddHours(-3), Now.AddMinutes(-2))],
         };
 
         harness.Rules.Reasons[tenantId] = [RuleReason(NotificationUrgency.Warn, null)];
@@ -428,7 +429,11 @@ public class TenantOverviewPersonTests
         public Harness(DbContextOptions<NocturneDbContext> options)
         {
             var services = new ServiceCollection();
-            services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor(onSet: context => Reads.Add((context.TenantId, "scope"))));
+            services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor(onSet: context =>
+            {
+                lock (Reads)
+                    Reads.Add((context.TenantId, "scope"));
+            }));
             services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
             services.AddScoped<INocturneDbContextFactory>(sp => new ScopeContextFactory(
                 options, () => sp.GetRequiredService<ITenantAccessor>().TenantId));
