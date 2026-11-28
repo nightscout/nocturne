@@ -20,8 +20,8 @@
 </script>
 
 <script lang="ts">
+  import RevealArtwork from "#lib/components/shared/RevealArtwork.svelte";
   import {
-    Artwork,
     hostSurface,
     watchSurface,
     type ArtworkPlayer,
@@ -61,7 +61,7 @@
   });
 </script>
 
-<Artwork
+<RevealArtwork
   artwork={source.artwork}
   icon={source.icon}
   palette={source.palette}

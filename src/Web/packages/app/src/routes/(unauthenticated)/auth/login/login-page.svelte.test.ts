@@ -48,6 +48,7 @@ vi.mock("#lib/components/auth/GuestCodeForm.svelte", () => import("#lib/test-stu
 vi.mock("water-ui", async (importOriginal) => ({
   ...(await importOriginal<typeof import("water-ui")>()),
   Artwork: (await import("#lib/test-stubs/Empty.test-stub.svelte")).default,
+  getEngineHost: () => ({ ready: true, booting: null }),
 }));
 
 import LoginPage from "./+page.svelte";

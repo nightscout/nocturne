@@ -5,7 +5,7 @@
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import KeyRound from "@lucide/svelte/icons/key-round";
-  import { Artwork } from "water-ui";
+  import RevealArtwork from "#lib/components/shared/RevealArtwork.svelte";
   import { fingerprintArtwork } from "#lib/watercolour-icons.js";
   import { getAuthState } from "../auth.remote";
   import { getAuthStatus } from "#lib/api/generated/index.js";
@@ -125,7 +125,7 @@
     {:else}
       <Card.Content>
         <div class="mb-4 flex justify-center">
-          <Artwork
+          <RevealArtwork
             icon={fingerprintArtwork}
             palette="water"
             motion="auto"

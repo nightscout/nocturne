@@ -12,6 +12,9 @@ vi.mock("water-ui", async () => ({
     surfaceWatch.onchange = onchange;
     return () => {};
   },
+  getPresentation: () => "animated",
+  WARM_IDLE_TIMEOUT_MS: 0,
+  getEngineHost: () => ({ ready: true, booting: null }),
 }));
 
 import { fakePlayer } from "#lib/test-stubs/Artwork.test-stub.svelte";

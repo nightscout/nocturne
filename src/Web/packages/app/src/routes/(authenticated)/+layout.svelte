@@ -233,8 +233,8 @@
    * current reading as well as {@link deferredWatercolour}, then for idle.
    *
    * Resolves false where there is no GPU, which needs no handling: that is the case the baked
-   * and static paths exist for. Artwork that needs the engine sooner boots it on demand; the
-   * unauthenticated pages render theirs on mount, so a warm-up there would gain nothing.
+   * and static paths exist for. Artwork mounted before it draws its still and keeps it; the
+   * unauthenticated pages warm the engine through `RevealArtwork` instead.
    */
   const engineWarmDeferral = deferredWatercolour();
   let engineWarmScheduled = false;

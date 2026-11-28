@@ -23,6 +23,7 @@ vi.mock("water-ui", async (importOriginal) => ({
   hostSurface: () => "light",
   watchSurface: () => () => {},
   prefersReducedMotion: () => false,
+  getEngineHost: () => ({ ready: true, booting: null }),
 }));
 
 vi.mock("@simplewebauthn/browser", () => ({ startRegistration: mocks.startRegistration }));

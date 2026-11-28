@@ -12,6 +12,9 @@ vi.mock("water-ui", async () => ({
   hostSurface: () => "light",
   watchSurface: () => () => {},
   prefersReducedMotion: () => false,
+  getPresentation: () => "animated",
+  WARM_IDLE_TIMEOUT_MS: 0,
+  getEngineHost: () => ({ ready: true, booting: null }),
 }));
 
 const hub = $state({ status: undefined as unknown });
