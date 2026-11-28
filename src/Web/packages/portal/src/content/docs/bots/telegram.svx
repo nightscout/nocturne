@@ -60,9 +60,10 @@ Then restart Nocturne.
 
 ## 3. Register the webhook
 
-Telegram pushes updates to a webhook URL you register through its Bot API. Point it at your
-instance, passing the same webhook secret token you configured so Telegram includes it on every
-call:
+Telegram pushes updates to a webhook URL you register through its Bot API. Nocturne does not
+support long polling. Until you register the webhook, the bot gets no messages and does not
+answer commands. Point the webhook at your instance, passing the same webhook secret token you
+configured so Telegram includes it on every call:
 
 ```bash
 curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \

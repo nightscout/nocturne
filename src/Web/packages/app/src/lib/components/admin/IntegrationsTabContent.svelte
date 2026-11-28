@@ -186,15 +186,22 @@
         </CardHeader>
         <CardContent>
           <div class="space-y-4">
-            {#if category === "telegram" && !(platform.configuredFields ?? []).includes("webhookSecretToken")}
+            {#if category === "telegram"}
               <Alert.Root>
                 <TriangleAlert class="h-4 w-4" />
-                <Alert.Title>A webhook secret token is required</Alert.Title>
+                <Alert.Title>Register the webhook</Alert.Title>
                 <Alert.Description>
                   <p>
-                    Telegram webhook calls are refused until one is set. Choose a random value of
-                    letters, digits, <code>_</code> or <code>-</code> (for example from <code>openssl rand -hex 32</code>). Save it here with the bot enabled. Then register the webhook again with the same value:
+                    The bot gets Telegram messages only through a webhook. Nocturne does not support long polling. The bot gets no messages until you register the webhook.
                   </p>
+                  {#if !(platform.configuredFields ?? []).includes("webhookSecretToken")}
+                    <p>
+                      Telegram webhook calls are refused until a webhook secret token is set. Choose a random value of
+                      letters, digits, <code>_</code> or <code>-</code> (for example from <code>openssl rand -hex 32</code>). Save it here with the bot enabled. Then register the webhook with the same value:
+                    </p>
+                  {:else}
+                    <p>Register the webhook with the same webhook secret token that is saved here:</p>
+                  {/if}
                   <code class="block whitespace-pre-wrap break-all">{TELEGRAM_SET_WEBHOOK}</code>
                 </Alert.Description>
               </Alert.Root>

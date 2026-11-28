@@ -47,3 +47,14 @@ export function keepUnchanged<T extends { tenantId?: string }>(previous: T[], ne
 export function isFlagged(person: TenantOverviewItem): boolean {
   return (person.attention?.length ?? 0) > 0;
 }
+
+/** The people the API flagged and the rest, each in the order the API gave them. */
+export function splitFlagged(people: TenantOverviewItem[]): {
+  flagged: TenantOverviewItem[];
+  others: TenantOverviewItem[];
+} {
+  return {
+    flagged: people.filter(isFlagged),
+    others: people.filter((person) => !isFlagged(person)),
+  };
+}

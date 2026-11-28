@@ -42,7 +42,7 @@
     withTabQuery,
     type Unsaved,
   } from "./people-query.js";
-  import { isFlagged } from "./person.js";
+  import { splitFlagged } from "./person.js";
   import { setReadState } from "./read-state.js";
   import WallFlagged from "./WallFlagged.svelte";
   import WallGroupHeading from "./WallGroupHeading.svelte";
@@ -153,7 +153,7 @@
   let columnsHeight = $state<number>();
 
   const step = $derived(wallStep(columnsWidth));
-  const flagged = $derived(people.filter(isFlagged));
+  const flagged = $derived(splitFlagged(people).flagged);
   const candidates = $derived(
     flagged.slice(0, bandCapacity(flagged.length, columnsWidth, rootHeight))
   );
@@ -209,7 +209,7 @@
     new Set(columns.flat().flatMap((slot) => (slot.kind === "person" ? [slot.person] : [])))
   );
   const hidden = $derived(rest.filter((person) => !shown.has(person)));
-  const hiddenFlagged = $derived(hidden.filter(isFlagged).length);
+  const hiddenFlagged = $derived(splitFlagged(hidden).flagged.length);
 
   let fromPeople = false;
   afterNavigate(({ from }) => {

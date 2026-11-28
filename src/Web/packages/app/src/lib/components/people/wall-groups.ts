@@ -1,5 +1,5 @@
 import type { StaffGroup, TenantOverviewItem } from "@nocturne/api-client";
-import { isFlagged } from "./person.js";
+import { splitFlagged } from "./person.js";
 import type { WallSection } from "./wall-layout.js";
 
 /** A heading over the wall's columns: one of the viewer's groups, or none for the people in none of them. */
@@ -18,7 +18,7 @@ export function wallSections(
   people: TenantOverviewItem[],
   groups: StaffGroup[] | undefined
 ): WallSection<TenantOverviewItem, WallHeading>[] {
-  const others = people.filter((person) => !isFlagged(person));
+  const { flagged, others } = splitFlagged(people);
   const runs = [
     ...(groups ?? []).filter((group) => group.id).map((group) => ({
       heading: { group },
@@ -29,7 +29,7 @@ export function wallSections(
   const underHeadings = runs.reduce((count, run) => count + run.people.length, 0);
   const headed = runs.length > 1 && underHeadings === others.length;
   return [
-    { heading: null, people: people.filter(isFlagged) },
+    { heading: null, people: flagged },
     ...(headed ? runs : [{ heading: null, people: others }]),
   ].filter((section) => section.people.length > 0);
 }

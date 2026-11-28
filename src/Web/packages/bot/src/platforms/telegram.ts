@@ -9,7 +9,7 @@ const logger = createLogger();
 /**
  * The Telegram adapter skips verification when it has no secret token, which would leave its
  * anonymous webhook accepting any caller's updates. Without a configured token it gets a random
- * one nobody else holds, so webhook calls are refused while long polling still works.
+ * one nobody else holds, so every webhook call is refused until a token is configured.
  */
 function webhookSecretToken(configured: string | undefined): string {
   if (configured) return configured;
@@ -44,6 +44,9 @@ export const telegram = {
   createAdapter: (credentials) =>
     createTelegramAdapter({
       botToken: credentials?.botToken,
+      // The default mode starts long polling when no webhook is registered, which runs handlers outside
+      // any request, where they have no API client. Updates arrive only through the registered webhook.
+      mode: "webhook",
       // Kept history holds people's messages in the bot's state; see purgeThreadHistory.
       persistThreadHistory: false,
       secretToken: webhookSecretToken(credentials?.webhookSecretToken || process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN),

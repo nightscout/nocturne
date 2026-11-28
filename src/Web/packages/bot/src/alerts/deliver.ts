@@ -14,6 +14,10 @@ import { channelTarget } from "../platforms/registry.js";
 
 const logger = createLogger();
 
+/**
+ * Delivers alerts through an initialised bot. Given one that is not, a WhatsApp send skips the
+ * stored route and goes to the number on the thread.
+ */
 export class AlertDeliveryHandler {
   constructor(
     private bot: Chat,
@@ -110,14 +114,11 @@ export class AlertDeliveryHandler {
   }
 
   /**
-   * Whether the window is known to be closed. A dispatch may be the first to read the bot's state,
-   * so it connects the state alone: initializing the bot would start the adapters, and Telegram's
-   * polling loop would keep this dispatch's request context for the life of the process. A state
-   * that cannot be read leaves the window unknown, and the alert is sent.
+   * Whether the window is known to be closed. A state that cannot be read leaves the window
+   * unknown, and the alert is sent.
    */
   private async knownClosed(window: WhatsAppWindow, threadId: string): Promise<boolean> {
     try {
-      await this.bot.getState().connect();
       return await window.isClosed(threadId, Date.now());
     } catch (err) {
       logger.error("Could not read the WhatsApp window; sending the alert:", err);
