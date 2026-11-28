@@ -53277,3 +53277,27 @@ msgstr "The bot gets Telegram messages only through a webhook. Nocturne does not
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 msgid "Register the webhook"
 msgstr "Register the webhook"
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "The auto-resolve conditions of this rule cannot run as set."
+msgstr "The auto-resolve conditions of this rule cannot run as set."
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "The auto-resolve conditions of this rule were saved in an old format. Check them and save the rule again."
+msgstr "The auto-resolve conditions of this rule were saved in an old format. Check them and save the rule again."
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "Edit the auto-resolve conditions and save the rule."
+msgstr "Edit the auto-resolve conditions and save the rule."
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "The smart snooze conditions of this rule cannot run as set."
+msgstr "The smart snooze conditions of this rule cannot run as set."
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "The smart snooze conditions of this rule were saved in an old format. Check them and save the rule again."
+msgstr "The smart snooze conditions of this rule were saved in an old format. Check them and save the rule again."
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "Edit the smart snooze conditions and save the rule."
+msgstr "Edit the smart snooze conditions and save the rule."

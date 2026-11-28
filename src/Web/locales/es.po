@@ -54216,3 +54216,27 @@ msgstr ""
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 msgid "Register the webhook"
 msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "The auto-resolve conditions of this rule cannot run as set."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "The auto-resolve conditions of this rule were saved in an old format. Check them and save the rule again."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "Edit the auto-resolve conditions and save the rule."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "The smart snooze conditions of this rule cannot run as set."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "The smart snooze conditions of this rule were saved in an old format. Check them and save the rule again."
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "Edit the smart snooze conditions and save the rule."
+msgstr ""
