@@ -228,7 +228,7 @@ public class TandemConnectorService
         var ceiling = ParseWallClockUtc(device.MaxDateOfEvents, time) ?? now;
         var end = request.To is { } until && until < ceiling ? until : ceiling;
 
-        var start = ResolveStart(request, device, time);
+        var start = ResolveStart(request, device, time, config);
         if (start >= end)
         {
             _logger.LogInformation(
@@ -406,13 +406,14 @@ public class TandemConnectorService
     /// missed — never earlier than the pump's first event, which is where <see cref="ClampNotice"/>
     /// reports a caller's bound below.
     /// </summary>
-    private DateTime ResolveStart(SyncRequest request, TandemBffPump device, TandemTimeResolver time)
+    private DateTime ResolveStart(
+        SyncRequest request, TandemBffPump device, TandemTimeResolver time, TandemConnectorConfiguration config)
     {
         DateTime? ResumePoint()
         {
             var candidates = new[] { request.Resume.Point(ResumeFamily.Glucose), request.Resume.Point(ResumeFamily.Treatments) }
                 .Where(d => d.HasValue).Select(d => d!.Value).ToList();
-            return candidates.Count > 0 ? candidates.Min() : ConcreteFirstSyncStart;
+            return candidates.Count > 0 ? candidates.Min() : ConcreteFirstSyncStart(config);
         }
 
         // The pump's own range is how far back this source goes, so an open start begins at its

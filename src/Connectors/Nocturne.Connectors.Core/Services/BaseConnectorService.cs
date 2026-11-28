@@ -100,10 +100,10 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     /// <remarks>
     ///     Not <see cref="ConnectorRegistrationAttribute.DeclaredOn"/>: a connector service may be
     ///     closed over a configuration carrying no registration at all, whose data types default
-    ///     to glucose rather than failing. The inherit rule is the same one.
+    ///     to glucose rather than failing.
     /// </remarks>
     private static readonly ConnectorRegistrationAttribute? Registration =
-        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false);
+        ConnectorRegistrationAttribute.Find(typeof(TConfig));
 
     /// <inheritdoc />
     public virtual async Task<SyncResult> SyncDataAsync(
@@ -126,7 +126,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
                 if (SignsInBeforeSync)
                     await SignedInAsync(config, cancellationToken);
 
-                var from = request.To is null ? request.From : request.From ?? HistoryStart;
+                var from = request.To is null ? request.From : request.From ?? HistoryStart(config);
                 return await RunAsync(
                     from, request.To, request.DataTypes, scheduled: request.IsCatchUp, config, cancellationToken);
             });
@@ -261,7 +261,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         var latestEntryTimestamp = await FetchLatestWatermarkAsync(
             "entry", () => _publisher!.Glucose.GetLatestEntryTimestampAsync(ConnectorSource));
 
-        return CalculateSinceFromTimestamp(latestEntryTimestamp, "entries");
+        return CalculateSinceFromTimestamp(latestEntryTimestamp, "entries", config);
     }
 
     /// <summary>
@@ -273,7 +273,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         var latestTreatmentTimestamp = await FetchLatestWatermarkAsync(
             "treatment", () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(ConnectorSource));
 
-        return CalculateSinceFromTimestamp(latestTreatmentTimestamp, "treatments");
+        return CalculateSinceFromTimestamp(latestTreatmentTimestamp, "treatments", config);
     }
 
     /// <summary>
@@ -285,7 +285,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     {
         var latest = await FetchLatestWatermarkAsync(
             "device status", () => _publisher!.Device.GetLatestDeviceStatusTimestampAsync(ConnectorSource));
-        return TryCalculateCatchUpSince(latest, "device status") ?? HistoryStart;
+        return TryCalculateCatchUpSince(latest, "device status") ?? HistoryStart(config);
     }
 
     /// <summary>
@@ -296,7 +296,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     {
         var latest = await FetchLatestWatermarkAsync(
             "activity", () => _publisher!.Metadata.GetLatestActivityTimestampAsync(ConnectorSource));
-        return TryCalculateCatchUpSince(latest, "activity") ?? HistoryStart;
+        return TryCalculateCatchUpSince(latest, "activity") ?? HistoryStart(config);
     }
 
     /// <summary>
@@ -309,7 +309,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         var latest = await FetchLatestWatermarkAsync(
             type.ToString(), () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(type, ConnectorSource));
 
-        return CalculateSinceFromTimestamp(latest, type.ToString());
+        return CalculateSinceFromTimestamp(latest, type.ToString(), config);
     }
 
     /// <summary>
@@ -322,7 +322,7 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
         var latest = await FetchLatestWatermarkAsync(
             "state span", () => _publisher!.Metadata.GetLatestStateSpanTimestampAsync(ConnectorSource));
 
-        return CalculateSinceFromTimestamp(latest, "state spans");
+        return CalculateSinceFromTimestamp(latest, "state spans", config);
     }
 
     /// <summary>
@@ -460,13 +460,13 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     When no prior data exists, falls back to <see cref="FirstSyncStart"/>, which may be
     ///     <c>null</c> (no lower bound) for connectors that import the source's full history.
     /// </summary>
-    private DateTime? CalculateSinceFromTimestamp(DateTime? latestTimestamp, string dataType)
+    private DateTime? CalculateSinceFromTimestamp(DateTime? latestTimestamp, string dataType, TConfig config)
     {
         var catchUpSince = TryCalculateCatchUpSince(latestTimestamp, dataType);
         if (catchUpSince.HasValue)
             return catchUpSince.Value;
 
-        var fallbackSince = FirstSyncStart;
+        var fallbackSince = FirstSyncStart(config);
         if (fallbackSince.HasValue)
             _logger?.LogInformation(
                 "No existing {DataType} found for {ConnectorSource}, performing initial sync from {Since:yyyy-MM-dd HH:mm:ss} UTC",
@@ -502,22 +502,23 @@ public abstract partial class BaseConnectorService<TConfig> : IConnectorService<
     ///     <see cref="InitialSyncFloor"/> and <see cref="HistoryStart"/>, where <c>null</c> is
     ///     unbounded, so one bound alone stands and two leave the start open.
     /// </summary>
-    protected DateTime? FirstSyncStart => Later(InitialSyncFloor, HistoryStart);
+    protected DateTime? FirstSyncStart(TConfig config) => Later(InitialSyncFloor, HistoryStart(config));
 
     /// <summary>
     ///     <see cref="FirstSyncStart"/> for a source that cannot read from an open start, which
     ///     begins at <see cref="DefaultInitialSyncFloor"/> when both bounds are open.
     /// </summary>
-    protected DateTime ConcreteFirstSyncStart => FirstSyncStart ?? DefaultInitialSyncFloor();
+    protected DateTime ConcreteFirstSyncStart(TConfig config) => FirstSyncStart(config) ?? DefaultInitialSyncFloor();
 
     /// <summary>
     ///     Where a range naming no lower bound starts: the
-    ///     <see cref="ConnectorRegistrationAttribute.HistoryReach"/> the connector declares. <c>null</c> for a source that serves its whole
+    ///     <see cref="BaseConnectorConfiguration.HistoryReach"/> of <paramref name="config"/>. <c>null</c> for a source that serves its whole
     ///     history and reads from an open start; a connector whose whole history needs a concrete
     ///     start overrides it.
     /// </summary>
     /// <remarks><see cref="FirstSyncStart"/> also bounds a scheduled first sync by it.</remarks>
-    protected virtual DateTime? HistoryStart => HistoryStartAt(Clock.GetUtcNow().UtcDateTime);
+    protected virtual DateTime? HistoryStart(TConfig config) =>
+        config.HistoryReach().StartFrom(Clock.GetUtcNow().UtcDateTime);
 
     /// <summary>
     ///     The oldest instant the declared <see cref="ConnectorRegistrationAttribute.HistoryReach"/> covers

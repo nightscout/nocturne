@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.Core.Contracts.V4;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
@@ -517,6 +519,36 @@ public class GlookoSsv2SyncTests
         store.Resume.Keys.Should().NotContain(GlookoConstants.FullWalkAttemptStamp);
     }
 
+    /// <summary>
+    /// SSV2's cursors start at the account's first record, so a range with no start date reads every
+    /// feed from there, sending no start date. The pump-mode graph needs one and reads the
+    /// registration's reach.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(NoLowerBound.Shapes), MemberType = typeof(NoLowerBound))]
+    public async Task Ssv2_AWindowWithNoLowerBound_ReadsEveryFeedFromTheFirstRecord(string shape)
+    {
+        var now = new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+        var handler = new RoutingHandler(path => path.Contains("/api/v2/cgm/egvs")
+            ? EgvPage(["e1"], "2026-02-01T00:00:00.000Z", "g1", lastPage: true)
+            : Json("{\"lastPage\":true}"));
+        var service = BuildService(
+            handler, new InMemoryConnectorStateStore(), CapturePublisher([]), clock: new FakeTimeProvider(now));
+
+        var result = await service.SyncDataAsync(
+            NoLowerBound.Request(shape, now.UtcDateTime, [SyncDataType.Glucose, SyncDataType.StateSpans]),
+            Config(), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        handler.EgvsCursors.Should().Equal(Epoch);
+        handler.RequestedPaths.Where(p => p.StartsWith("/api/v2/", StringComparison.Ordinal))
+            .Should().NotBeEmpty()
+            .And.OnlyContain(p => QueryValue(p, "startDate") == string.Empty);
+        var sixMonthsBack = now.UtcDateTime.AddMonths(-6).ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
+        QueryValue(handler.RequestedPaths.Single(p => p.StartsWith(GlookoConstants.V3GraphDataPath, StringComparison.Ordinal)), "startDate")
+            .Should().Be(sixMonthsBack);
+    }
+
     private static GlookoConnectorConfiguration Config() => new()
     {
         ConnectSource = ConnectSource.Glooko,
@@ -531,14 +563,15 @@ public class GlookoSsv2SyncTests
 
     private static GlookoConnectorService BuildService(
         RoutingHandler handler, IConnectorStateStore state, Mock<IConnectorPublisher> publisher,
-        ILogger<GlookoConnectorService>? logger = null)
+        ILogger<GlookoConnectorService>? logger = null, TimeProvider? clock = null)
     {
         publisher.SetupGet(p => p.State).Returns(state);
-        return BuildService(handler, publisher.Object, logger);
+        return BuildService(handler, publisher.Object, logger, clock);
     }
 
     private static GlookoConnectorService BuildService(
-        RoutingHandler handler, IConnectorPublisher publisher, ILogger<GlookoConnectorService>? logger = null) =>
+        RoutingHandler handler, IConnectorPublisher publisher, ILogger<GlookoConnectorService>? logger = null,
+        TimeProvider? clock = null) =>
         new(
             new HttpClient(handler),
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
@@ -548,6 +581,7 @@ public class GlookoSsv2SyncTests
             publisher,
             mealMatchLinker: null,
             timezoneTimelineService: null,
+            timeProvider: clock,
             endpointPause: TimeSpan.Zero);
 
     private static Mock<IConnectorPublisher> CapturePublisher(List<SensorGlucose> sink)

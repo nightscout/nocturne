@@ -65,7 +65,7 @@ public class ConnectorHistoryReachTests
     [MemberData(nameof(ConnectorServices))]
     public void OnlyAConnectorServingItsWholeHistoryOverridesWhereARangeStarts(Type service)
     {
-        var overrides = service.GetProperty(
+        var overrides = service.GetMethod(
             "HistoryStart", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly) is not null;
         var config = ConnectorInstallers.ClosedBaseOf(service, typeof(BaseConnectorService<>))!.GetGenericArguments()[0];
 

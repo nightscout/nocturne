@@ -114,4 +114,11 @@ public class GlookoConnectorConfiguration : BaseConnectorConfiguration
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.UseSsv2Sync, DefaultValue = "false")]
     public bool UseSsv2Sync { get; set; } = false;
+
+    /// <summary>
+    ///     The whole history on SSV2, whose cursors start at the account's first record. The
+    ///     windowed V2/V3 path reads the registration's <see cref="GlookoConstants.FullWalkMonths"/>.
+    /// </summary>
+    public override ConnectorHistoryReach HistoryReach() =>
+        UseSsv2Sync ? ConnectorHistoryReach.Whole : base.HistoryReach();
 }
