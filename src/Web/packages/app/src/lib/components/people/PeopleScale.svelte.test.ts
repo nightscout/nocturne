@@ -114,7 +114,7 @@ function frame() {
 }
 
 function rows() {
-  return document.querySelectorAll<HTMLElement>('[data-testid="person-row"]');
+  return document.querySelectorAll<HTMLAnchorElement>('[data-testid="person-row"]');
 }
 
 /**
@@ -240,29 +240,84 @@ async function expectMountedAStepAtATime(firstFrame: Promise<number>) {
   expect.soft(mounted, `${sample.scenario}: mounted in the first frame`).toBeLessThanOrEqual(FIRST_ROWS + ROWS_PER_STEP);
 }
 
+const ALL_CHANGES: MutationObserverInit = { subtree: true, childList: true, attributes: true, characterData: true };
+
+/** What a keyed move leaves alone: it is a remove and an insert of the same row, so `childList` stays out. */
+const CHANGES_IN_PLACE: MutationObserverInit = { subtree: true, characterData: true, attributes: true };
+
+/** Watches `people-rows` for the changes in `init`. */
+function watchRoster(init: MutationObserverInit) {
+  const records: MutationRecord[] = [];
+  const observer = new MutationObserver((batch) => records.push(...batch));
+  observer.observe(page.getByTestId("people-rows").element(), init);
+  const watcher = {
+    /** What changed since the last call. */
+    drain() {
+      records.push(...observer.takeRecords());
+      return records.splice(0);
+    },
+    /** What changed since the last call, and no more after it. */
+    stop() {
+      const rest = watcher.drain();
+      observer.disconnect();
+      return rest;
+    },
+  };
+  return watcher;
+}
+
 /**
  * Resolves when the roster has changed in none of three frames in a row, so no reveal step is left to run ahead of
  * the next first-frame check.
  */
 async function rosterQuiet() {
-  let changes = 0;
-  const observer = new MutationObserver((records) => (changes += records.length));
-  observer.observe(page.getByTestId("people-rows").element(), {
-    subtree: true,
-    childList: true,
-    attributes: true,
-    characterData: true,
-  });
+  const watcher = watchRoster(ALL_CHANGES);
   const deadline = performance.now() + 30_000;
   try {
-    for (let quiet = 0; quiet < 3; quiet = changes === 0 ? quiet + 1 : 0) {
+    for (let quiet = 0; quiet < 3; ) {
       if (performance.now() > deadline) throw new Error("The roster kept changing for 30 seconds");
-      changes = 0;
       await frame();
+      quiet = watcher.drain().length === 0 ? quiet + 1 : 0;
     }
   } finally {
-    observer.disconnect();
+    watcher.stop();
   }
+}
+
+/** The people whose rows `mutations` touched: inside a row, or a row added or removed. */
+function touchedRows(mutations: MutationRecord[]) {
+  const touched = new Set<string>();
+  const rowOf = (node: Node) =>
+    (node instanceof Element ? node : node.parentElement)?.closest<HTMLElement>("[data-person]");
+  const note = (row: HTMLElement | null | undefined) => {
+    if (row?.dataset.person) touched.add(row.dataset.person);
+  };
+  for (const mutation of mutations) {
+    note(rowOf(mutation.target));
+    for (const node of [...mutation.addedNodes, ...mutation.removedNodes]) {
+      note(rowOf(node));
+      if (node instanceof Element) node.querySelectorAll<HTMLElement>("[data-person]").forEach(note);
+    }
+  }
+  return touched;
+}
+
+/** A row's link carries the address, which holds the sort, so a sort moves the `href` of every row and nothing else. */
+function withoutLinkMoves(mutations: MutationRecord[]) {
+  return mutations.filter(
+    (mutation) =>
+      !(
+        mutation.attributeName === "href" &&
+        mutation.target instanceof Element &&
+        mutation.target.matches('[data-testid="person-row"]')
+      )
+  );
+}
+
+/** Whether every row's link carries the sort the address holds now. */
+function rowLinksCarryTheSort() {
+  const sort = nav.address.searchParams.get("sort");
+  return sort !== null && [...rows()].every((row) => new URL(row.href, nav.address).searchParams.get("sort") === sort);
 }
 
 /** How many mounted rows are not elements of `before`: a sort moves the rows it has and mounts none again. */
@@ -302,6 +357,7 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
 
     const sorted = flaggedFirstBy(polled, (person) => person.latest?.mgdl ?? 0);
     const rowsBeforeSort = new Set(rows());
+    const sortWatcher = watchRoster(CHANGES_IN_PLACE);
     await record(
       "now",
       rate,
@@ -314,6 +370,9 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
       () => slugsShown()[0] === sorted[0].slug
     );
     expect.soft(rowsMountedSince(rowsBeforeSort), "rows mounted again by the sort").toBe(0);
+    await rosterQuiet();
+    expect.soft([...touchedRows(withoutLinkMoves(sortWatcher.stop()))], "rows the sort changed beyond their link").toEqual([]);
+    expect.soft(rowLinksCarryTheSort(), "every row's link carries the new sort").toBe(true);
 
     reviews = {};
     await rosterQuiet();
@@ -361,6 +420,7 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
 
     const byTimeInRange = flaggedFirstBy(polled, (person) => crowdIndex(person) % 50);
     const rowsBeforeSort = new Set(rows());
+    const sortWatcher = watchRoster(CHANGES_IN_PLACE);
     await record(
       "review",
       rate,
@@ -374,8 +434,10 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
       () => slugsShown()[0] === byTimeInRange[0].slug
     );
     expect.soft(rowsMountedSince(rowsBeforeSort), "rows mounted again by the sort").toBe(0);
-
     await rosterQuiet();
+    expect.soft([...touchedRows(withoutLinkMoves(sortWatcher.stop()))], "rows the sort changed beyond their link").toEqual([]);
+    expect.soft(rowLinksCarryTheSort(), "every row's link carries the new sort").toBe(true);
+
     const pumpCellsMounted = mountedInFirstFrameWhere(() => pumpCells() > 0, pumpCells);
     await record(
       "review",
@@ -430,24 +492,6 @@ describe.each(RATES)("a 300-person roster at %ix CPU", (rate) => {
   });
 });
 
-/** The people whose rows `mutations` touched: inside a row, or a row added or removed. */
-function touchedRows(mutations: MutationRecord[]) {
-  const touched = new Set<string>();
-  const rowOf = (node: Node) =>
-    (node instanceof Element ? node : node.parentElement)?.closest<HTMLElement>("[data-person]");
-  const note = (row: HTMLElement | null | undefined) => {
-    if (row?.dataset.person) touched.add(row.dataset.person);
-  };
-  for (const mutation of mutations) {
-    note(rowOf(mutation.target));
-    for (const node of [...mutation.addedNodes, ...mutation.removedNodes]) {
-      note(rowOf(node));
-      if (node instanceof Element) node.querySelectorAll<HTMLElement>("[data-person]").forEach(note);
-    }
-  }
-  return touched;
-}
-
 describe("a poll answer for a 300-person roster", () => {
   it("changes only the rows of the people whose data changed", { timeout: 120_000 }, async () => {
     const people = crowd(PEOPLE);
@@ -459,23 +503,14 @@ describe("a poll answer for a 300-person roster", () => {
     const unflagged = people.filter((person) => !person.attention?.length);
     const changed = unflagged.slice(0, 10).map((person) => person.slug!);
     const flagged = unflagged.at(-1)!.slug!;
-    const mutations: MutationRecord[] = [];
-    const observer = new MutationObserver((records) => mutations.push(...records));
-    observer.observe(page.getByTestId("people-rows").element(), {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      characterData: true,
-    });
+    const watcher = watchRoster(ALL_CHANGES);
 
     overviews = { ...overviews, [NO_SORT]: answerOf(nextPoll(people, changed, flagged)) };
     poll.tick();
     await expect.poll(() => slugsShown().indexOf(flagged), { timeout: 30_000 }).toBeLessThan(PEOPLE / 3 + 1);
     await frame();
     await frame();
-    mutations.push(...observer.takeRecords());
-    observer.disconnect();
 
-    expect([...touchedRows(mutations)].sort()).toEqual([...changed, flagged].sort());
+    expect([...touchedRows(watcher.stop())].sort()).toEqual([...changed, flagged].sort());
   });
 });
