@@ -1,5 +1,8 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Mappers.V4;
 
@@ -36,7 +39,7 @@ public static class ApsSnapshotMapper
             EnactedBolusVolume = model.EnactedBolusVolume,
             SuggestedJson = model.SuggestedJson,
             EnactedJson = model.EnactedJson,
-            PredictedDefaultJson = model.PredictedDefaultJson,
+            PredictedDefaultJson = StoredDefaultCurve(model),
             PredictedIobJson = model.PredictedIobJson,
             PredictedZtJson = model.PredictedZtJson,
             PredictedCobJson = model.PredictedCobJson,
@@ -77,7 +80,8 @@ public static class ApsSnapshotMapper
             EnactedBolusVolume = entity.EnactedBolusVolume,
             SuggestedJson = entity.SuggestedJson,
             EnactedJson = entity.EnactedJson,
-            PredictedDefaultJson = entity.PredictedDefaultJson,
+            PredictedDefaultJson = entity.PredictedDefaultJson
+                ?? (DefaultIsIobCurve(entity.AidAlgorithm, entity.LoopJson) ? entity.PredictedIobJson : null),
             PredictedIobJson = entity.PredictedIobJson,
             PredictedZtJson = entity.PredictedZtJson,
             PredictedCobJson = entity.PredictedCobJson,
@@ -116,7 +120,7 @@ public static class ApsSnapshotMapper
         entity.EnactedBolusVolume = model.EnactedBolusVolume;
         entity.SuggestedJson = model.SuggestedJson;
         entity.EnactedJson = model.EnactedJson;
-        entity.PredictedDefaultJson = model.PredictedDefaultJson;
+        entity.PredictedDefaultJson = StoredDefaultCurve(model);
         entity.PredictedIobJson = model.PredictedIobJson;
         entity.PredictedZtJson = model.PredictedZtJson;
         entity.PredictedCobJson = model.PredictedCobJson;
@@ -125,5 +129,44 @@ public static class ApsSnapshotMapper
         entity.LoopJson = model.LoopJson;
         entity.OverrideJson = model.OverrideJson;
         entity.AidVersion = model.AidVersion;
+    }
+
+    /// <summary>
+    /// Whether a snapshot's default curve is its IOB curve: true for every snapshot without a Loop status
+    /// but Trio's, since <c>ApsSnapshotCurves.FillColumns</c> fills an empty default from the IOB curve
+    /// for each of them. Such a snapshot stores its default only when it differs from the IOB curve, and
+    /// reads the IOB curve back as its default when it stores none.
+    /// <see cref="ApsSnapshotCurvesRewriter"/> clears the stored copies.
+    /// </summary>
+    internal static bool DefaultIsIobCurve(string aidAlgorithm, string? loopJson) =>
+        aidAlgorithm != nameof(AidAlgorithm.Trio) && string.IsNullOrEmpty(loopJson);
+
+    private static string? StoredDefaultCurve(ApsSnapshot model) =>
+        model.PredictedDefaultJson is { } curve
+            && model.PredictedIobJson is { } iob
+            && DefaultIsIobCurve(model.AidAlgorithm.ToString(), model.LoopJson)
+            && SameJson(curve, iob)
+            ? null
+            : model.PredictedDefaultJson;
+
+    // Compared as JSON, as the rewriter's jsonb equality does: the columns are jsonb, so a curve reads
+    // back in PostgreSQL's formatting whichever text was written.
+    private static bool SameJson(string a, string b)
+    {
+        if (a == b)
+            return true;
+
+        try
+        {
+            return JsonNode.DeepEquals(JsonNode.Parse(a), JsonNode.Parse(b));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 }

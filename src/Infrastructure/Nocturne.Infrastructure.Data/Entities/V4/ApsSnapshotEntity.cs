@@ -127,7 +127,8 @@ public class ApsSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IWriteB
     public string? EnactedJson { get; set; }
 
     /// <summary>
-    /// Default prediction curve as JSON array (jsonb)
+    /// Default prediction curve as JSON array (jsonb). Null when it equals <see cref="PredictedIobJson"/>
+    /// on a snapshot that reads its IOB curve as its default (<see cref="Mappers.V4.ApsSnapshotMapper.DefaultIsIobCurve"/>).
     /// </summary>
     [Column("predicted_default_json", TypeName = "jsonb")]
     public string? PredictedDefaultJson { get; set; }
