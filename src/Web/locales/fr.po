@@ -25640,9 +25640,8 @@ msgstr ""
 #~ msgid "Telegram webhook calls are refused until one is set. Choose a random value of letters, digits, <0/> or <1/> (for example from <2/>), save it here with the bot enabled, then register the webhook again with the same value:"
 #~ msgstr ""
 
-#: src/lib/components/admin/IntegrationsTabContent.svelte
-msgid "A webhook secret token is required"
-msgstr ""
+#~ msgid "A webhook secret token is required"
+#~ msgstr ""
 
 #: src/lib/components/auth/DeviceAppClaimNotice.svelte
 msgid "This request says it is from <0/>, but a device sign-in cannot prove which app started it. Only approve if you started this sign-in yourself on a device you trust."
@@ -33046,9 +33045,8 @@ msgstr ""
 #~ msgid "Resend (email)"
 #~ msgstr ""
 
-#: src/lib/components/admin/IntegrationsTabContent.svelte
-msgid "Telegram webhook calls are refused until one is set. Choose a random value of letters, digits, <0/> or <1/> (for example from <2/>). Save it here with the bot enabled. Then register the webhook again with the same value:"
-msgstr ""
+#~ msgid "Telegram webhook calls are refused until one is set. Choose a random value of letters, digits, <0/> or <1/> (for example from <2/>). Save it here with the bot enabled. Then register the webhook again with the same value:"
+#~ msgstr ""
 
 #: src/lib/components/admin/OidcProviderDialog.svelte
 msgid "Edit identity provider"
@@ -53265,4 +53263,20 @@ msgstr ""
 #: src/lib/components/reports/custom/workspace/workspace.svelte.ts
 msgctxt "caption-clause-without-signals"
 msgid "{0} {1}"
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "Telegram webhook calls are refused until a webhook secret token is set. Choose a random value of letters, digits, <0/> or <1/> (for example from <2/>). Save it here with the bot enabled. Then register the webhook with the same value:"
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "Register the webhook with the same webhook secret token that is saved here:"
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "The bot gets Telegram messages only through a webhook. Nocturne does not support long polling. The bot gets no messages until you register the webhook."
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "Register the webhook"
 msgstr ""
