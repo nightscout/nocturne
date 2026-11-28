@@ -43,7 +43,7 @@ public static class DemoCoverageSeeds
     /// </remarks>
     public static IReadOnlyList<Entry> CgmReadings(DemoTimeStep step)
     {
-        if (step.Loop == DemoLoopState.SensorWarmUp)
+        if (PrimaryReadings(step).Count == 0)
             return [];
 
         if (CompressionArtifactAt(step.Time) is { } artifact)
@@ -57,6 +57,10 @@ public static class DemoCoverageSeeds
             ? [step.Entry, CreateComparisonReading(step.Entry)]
             : [step.Entry];
     }
+
+    /// <summary>The primary reading at <paramref name="step"/> as the sensor reports it, with none while it warms up or is quiet.</summary>
+    public static IReadOnlyList<Entry> PrimaryReadings(DemoTimeStep step) =>
+        step.Loop is DemoLoopState.SensorWarmUp or DemoLoopState.SignalLost ? [] : [step.Entry];
 
     private static double? CompressionArtifactAt(DateTime time)
     {

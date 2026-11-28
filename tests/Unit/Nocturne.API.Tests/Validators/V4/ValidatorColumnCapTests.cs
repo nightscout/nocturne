@@ -134,6 +134,7 @@ public class ValidatorColumnCapTests
         ["CompressionLowController.TriggerDetection"] = NotStored,
         ["ContentContributionsController.AcceptRelayedContribution"] = NotStored,
         ["ContentContributionsController.SubmitContribution"] = NotStored,
+        ["DemoAdminController.SeedExtras"] = NotStored,
         ["GlucoseProcessingSettingsController.SetPreference"] = NotStored,
         ["SetupTherapyController.EnterTherapySettings"] = NotStored,
         ["SystemController.Heartbeat"] = NotStored,

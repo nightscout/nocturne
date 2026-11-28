@@ -62,8 +62,9 @@ internal sealed class SampleDataLiveCursor(SampleDataTimeline timeline, IEnumera
 /// <see cref="SampleDataTimeline"/>), so the history joins the seed without a jump.
 /// </summary>
 /// <remarks>
-/// Run by <see cref="SampleDataLiveFeedService"/>, which is registered only when
-/// <see cref="EnabledKey"/> is set, since a test that seeds sample data expects it to stay as seeded.
+/// Run by <see cref="SampleDataLiveFeedService"/>, which is registered only when <see cref="SampleDataFeedScope"/>
+/// names a tenant to feed, since a test that seeds sample data expects it to stay as seeded. Each demo person is, from
+/// the timeline their seed wrote, shaped by their <see cref="DemoArchetype"/>.
 /// </remarks>
 public sealed class SampleDataLiveFeed
 {
@@ -119,8 +120,6 @@ public sealed class SampleDataLiveFeed
         _logger = logger;
     }
 
-    public static bool IsEnabled(IConfiguration configuration) => configuration.GetValue<bool>(EnabledKey);
-
     /// <summary>
     /// Writes what the scope's tenant's timeline generated since it was last written, up to now.
     /// </summary>
@@ -159,7 +158,11 @@ public sealed class SampleDataLiveFeed
         if (now <= from)
             return cursor;
 
-        var config = SampleDataSeeder.ConfigurationFor(1);
+        var archetype = timeline.ArchetypeKey is { } key ? DemoArchetypes.Find(key) : null;
+        if (timeline.ArchetypeKey is not null && archetype is null)
+            return null;
+
+        var config = SampleDataSeeder.ConfigurationFor(1, archetype);
         if (cursor is null || !cursor.Continues(timeline))
             cursor = new SampleDataLiveCursor(timeline, Steps(timeline, clock, config).GetEnumerator());
 
@@ -175,7 +178,7 @@ public sealed class SampleDataLiveFeed
                 statuses.AddRange(Take([status], s => s.Mills, from, now, cursor.HeldStatuses));
         }
 
-        treatments.AddRange(DeviceChanges(clock, timeline.DataSource, from, now));
+        treatments.AddRange(DeviceChanges(clock, timeline.DataSource, archetype, from, now));
 
         var origin = now - from > LiveGap ? WriteOrigin.Backfill : WriteOrigin.Live;
         foreach (var batch in entries.Chunk(BatchSize))
@@ -192,7 +195,7 @@ public sealed class SampleDataLiveFeed
                 ct);
         }
 
-        await WriteLifestyleAsync(clock, timeline.DataSource, from, now, ct);
+        await WriteLifestyleAsync(clock, timeline.DataSource, archetype, from, now, ct);
 
         await SampleDataTimeline.WriteAsync(db, timeline with { WrittenThrough = now }, _time.GetUtcNow(), ct);
 
@@ -241,10 +244,11 @@ public sealed class SampleDataLiveFeed
         return due;
     }
 
-    private static IEnumerable<Treatment> DeviceChanges(SeedingClock clock, string dataSource, DateTime from, DateTime now)
+    private static IEnumerable<Treatment> DeviceChanges(
+        SeedingClock clock, string dataSource, DemoArchetype? archetype, DateTime from, DateTime now)
     {
         var days = (int)Math.Ceiling((now - from).TotalDays) + 1;
-        return DemoDeviceLifecycle.GenerateSchedule(clock.Demo.ToLocal(now), days, clock.Demo)
+        return DemoDeviceLifecycle.GenerateSchedule(clock.Demo.ToLocal(now), days, clock.Demo, archetype)
             .Where(change => change.TimestampUtc >= from && change.TimestampUtc < now)
             .Select(change => DemoDeviceLifecycle.ToTreatment(change, dataSource));
     }
@@ -254,18 +258,18 @@ public sealed class SampleDataLiveFeed
     /// deterministic sync id, so a record the seed or an earlier advance wrote is updated in place.
     /// </summary>
     private async Task WriteLifestyleAsync(
-        SeedingClock clock, string dataSource, DateTime from, DateTime now, CancellationToken ct)
+        SeedingClock clock, string dataSource, DemoArchetype? archetype, DateTime from, DateTime now, CancellationToken ct)
     {
         var heartRates = new List<HeartRate>();
         var stepCounts = new List<StepCount>();
         var lastDay = clock.Demo.ToLocal(now).Date;
         for (var day = clock.Demo.ToLocal(from).Date; day <= lastDay; day = day.AddDays(1))
         {
-            var (dayHeartRates, daySteps) = DemoHealthDataGenerator.GenerateDailyActivity(day, dataSource, clock.Demo);
+            var (dayHeartRates, daySteps) = DemoHealthDataGenerator.GenerateDailyActivity(day, dataSource, clock.Demo, archetype);
             heartRates.AddRange(dayHeartRates.Where(h => h.Timestamp >= from && h.Timestamp < now));
             stepCounts.AddRange(daySteps.Where(s => s.Timestamp >= from && s.Timestamp < now));
 
-            var sleep = DemoHealthDataGenerator.GenerateSleepSession(day, dataSource, clock.Demo);
+            var sleep = DemoHealthDataGenerator.GenerateSleepSession(day, dataSource, clock.Demo, archetype);
             if (sleep.EndTime >= from && sleep.EndTime < now)
                 await _sleep.UpsertSessionAsync(sleep, ct);
         }

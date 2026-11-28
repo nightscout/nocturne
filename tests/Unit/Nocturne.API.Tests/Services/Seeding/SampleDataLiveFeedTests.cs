@@ -183,6 +183,59 @@ public class SampleDataLiveFeedTests : IDisposable
     }
 
     [Fact]
+    public async Task A_demo_person_is_carried_on_as_their_archetype_generates()
+    {
+        var rory = DemoArchetypes.Find("rory")!;
+        await StoreAsync(Seeded with { ArchetypeKey = rory.Key });
+        _time.Advance(TimeSpan.FromMinutes(40));
+        var now = _time.GetUtcNow();
+
+        await Feed().AdvanceAsync(null, CancellationToken.None);
+
+        var expected = new DemoDataGenerator(
+                Options.Create(rory.ConfigurationFor(1)),
+                new DemoClock(_time, TimeZoneInfo.FindSystemTimeZoneById(Zone)),
+                NullLogger<DemoDataGenerator>.Instance,
+                NullLoggerFactory.Instance)
+            .ContinueTimeline(Seeded.FirstDay, SeedEnd.UtcDateTime)
+            .TakeWhile(s => s.Utc < now.UtcDateTime)
+            .SelectMany(DemoCoverageSeeds.PrimaryReadings)
+            .Where(e => e.Mills >= Mills(SeedEnd) && e.Mills < Mills(now))
+            .Select(e => (e.Mills, e.Sgv))
+            .OrderBy(e => e.Mills)
+            .ToList();
+
+        expected.Should().NotBeEmpty();
+        _entries.Select(e => (e.Entry.Mills, e.Entry.Sgv)).OrderBy(e => e.Mills).Should().Equal(expected);
+    }
+
+    [Fact]
+    public async Task A_quiet_sensor_stays_quiet_as_the_feed_carries_the_person_on()
+    {
+        await StoreAsync(Seeded with { ArchetypeKey = "katie" });
+        _time.Advance(TimeSpan.FromHours(3));
+
+        var cursor = await Feed().AdvanceAsync(null, CancellationToken.None);
+
+        cursor.Should().NotBeNull();
+        _entries.Should().BeEmpty();
+        _statuses.Should().BeEmpty("a person with no loop uploads no loop status");
+        (await StoredAsync())!.WrittenThrough.Should().Be(_time.GetUtcNow().UtcDateTime);
+    }
+
+    [Fact]
+    public async Task A_timeline_naming_no_archetype_the_table_holds_is_dropped()
+    {
+        await StoreAsync(Seeded with { ArchetypeKey = "nobody" });
+        _time.Advance(TimeSpan.FromMinutes(20));
+
+        var cursor = await Feed().AdvanceAsync(null, CancellationToken.None);
+
+        cursor.Should().BeNull();
+        _entries.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Advancing_in_ticks_writes_what_one_advance_over_the_whole_span_writes()
     {
         await StoreAsync(Seeded);
@@ -305,18 +358,6 @@ public class SampleDataLiveFeedTests : IDisposable
     public void The_timeline_row_is_reserved_from_the_settings_collection()
     {
         SettingsKeys.IsReserved(SampleDataTimeline.SettingsKey).Should().BeTrue();
-    }
-
-    [Fact]
-    public void The_feed_is_registered_only_when_configured()
-    {
-        static IConfiguration Config(string? value) => new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { [SampleDataLiveFeed.EnabledKey] = value })
-            .Build();
-
-        SampleDataLiveFeed.IsEnabled(Config(null)).Should().BeFalse();
-        SampleDataLiveFeed.IsEnabled(Config("false")).Should().BeFalse();
-        SampleDataLiveFeed.IsEnabled(Config("true")).Should().BeTrue();
     }
 
     private List<string> Snapshot() =>

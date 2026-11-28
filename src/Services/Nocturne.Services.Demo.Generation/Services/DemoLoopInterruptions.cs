@@ -18,6 +18,12 @@ public enum DemoLoopState
 
     /// <summary>The phone is out of range of the pump, so no cycle runs or uploads.</summary>
     PhoneOutOfRange,
+
+    /// <summary>The person has no loop, so nothing cycles or uploads a status.</summary>
+    NoLoop,
+
+    /// <summary>The sensor stopped reporting: no glucose, and no loop to cycle with.</summary>
+    SignalLost,
 }
 
 /// <summary>
@@ -47,20 +53,20 @@ public static class DemoLoopInterruptions
     /// day's interruptions are all that can cover a time on it.
     /// </summary>
     /// <param name="seedEnd">The local end of the seeded range, which is now for a live seed.</param>
-    public static IReadOnlyList<Interruption> On(DateTime localDay, DateTime seedEnd)
+    public static IReadOnlyList<Interruption> On(DateTime localDay, DateTime seedEnd, DemoArchetype? archetype = null)
     {
         var day = localDay.Date;
         var interruptions = new List<Interruption>();
 
-        if (DemoDeviceLifecycle.ChangeTimeOn(day, TreatmentTypes.SiteChange) is { } siteChange)
+        if (DemoDeviceLifecycle.ChangeTimeOn(day, TreatmentTypes.SiteChange, archetype) is { } siteChange)
             interruptions.Add(new(DemoLoopState.SiteChange, siteChange, siteChange + SiteChangeLength));
-        if (DemoDeviceLifecycle.ChangeTimeOn(day, TreatmentTypes.SensorStart) is { } sensorStart)
+        if (DemoDeviceLifecycle.ChangeTimeOn(day, TreatmentTypes.SensorStart, archetype) is { } sensorStart)
             interruptions.Add(new(DemoLoopState.SensorWarmUp, sensorStart, sensorStart + SensorWarmUpLength));
-        if (ManualModeWindow(day, seedEnd) is { } manual)
+        if (ManualModeWindow(day, seedEnd, archetype) is { } manual)
             interruptions.Add(new(DemoLoopState.Manual, manual.Start, manual.End));
 
-        AddPhoneGap(interruptions, day, "loop-gap", chancePercent: 75);
-        AddPhoneGap(interruptions, day, "loop-gap-2", chancePercent: 45);
+        AddPhoneGap(interruptions, day, "loop-gap", chancePercent: 75, archetype);
+        AddPhoneGap(interruptions, day, "loop-gap-2", chancePercent: 45, archetype);
 
         return [.. interruptions.Where(i => !InQuietEnd(i.Start, i.End, seedEnd))];
     }
@@ -70,20 +76,21 @@ public static class DemoLoopInterruptions
     /// workout. The pump mode spans and the loop read the same window.
     /// </summary>
     /// <param name="seedEnd">See <see cref="On"/>.</param>
-    public static (DateTime Start, DateTime End)? ManualModeWindow(DateTime localDay, DateTime seedEnd)
+    public static (DateTime Start, DateTime End)? ManualModeWindow(
+        DateTime localDay, DateTime seedEnd, DemoArchetype? archetype = null)
     {
         var day = localDay.Date;
-        if (DayScenarios.For(day) == DayScenario.Exercise || DayScenarios.Roll(day, "manual-mode", 100) >= 9)
+        if (DayScenarios.For(day, archetype) == DayScenario.Exercise || DayScenarios.Roll(day, "manual-mode", 100, archetype) >= 9)
             return null;
 
-        var start = day.AddHours(13 + DayScenarios.Roll(day, "manual-start", 4));
+        var start = day.AddHours(13 + DayScenarios.Roll(day, "manual-start", 4, archetype));
         var end = start + ManualModeLength;
         return InQuietEnd(start, end, seedEnd) ? null : (start, end);
     }
 
     /// <param name="seedEnd">See <see cref="On"/>.</param>
-    public static DemoLoopState StateAt(DateTime localTime, DateTime seedEnd) =>
-        On(localTime, seedEnd).FirstOrDefault(i => i.Start <= localTime && localTime < i.End)?.State ?? DemoLoopState.Closed;
+    public static DemoLoopState StateAt(DateTime localTime, DateTime seedEnd, DemoArchetype? archetype = null) =>
+        On(localTime, seedEnd, archetype).FirstOrDefault(i => i.Start <= localTime && localTime < i.End)?.State ?? DemoLoopState.Closed;
 
     /// <summary>
     /// The minutes from <paramref name="localTime"/> to the next interruption, at most
@@ -91,9 +98,9 @@ public static class DemoLoopInterruptions
     /// cancels it, and the loop cannot re-issue it through a gap.
     /// </summary>
     /// <param name="seedEnd">See <see cref="On"/>.</param>
-    public static int MinutesToNext(DateTime localTime, int limit, DateTime seedEnd)
+    public static int MinutesToNext(DateTime localTime, int limit, DateTime seedEnd, DemoArchetype? archetype = null)
     {
-        var next = On(localTime, seedEnd).Concat(On(localTime.AddDays(1), seedEnd))
+        var next = On(localTime, seedEnd, archetype).Concat(On(localTime.AddDays(1), seedEnd, archetype))
             .Where(i => i.Start > localTime)
             .Select(i => (int)(i.Start - localTime).TotalMinutes)
             .DefaultIfEmpty(limit)
@@ -104,14 +111,15 @@ public static class DemoLoopInterruptions
     private static bool InQuietEnd(DateTime start, DateTime end, DateTime seedEnd) =>
         start < seedEnd && end > seedEnd - QuietBeforeEnd;
 
-    private static void AddPhoneGap(List<Interruption> interruptions, DateTime day, string stream, int chancePercent)
+    private static void AddPhoneGap(
+        List<Interruption> interruptions, DateTime day, string stream, int chancePercent, DemoArchetype? archetype)
     {
-        if (DayScenarios.Roll(day, stream, 100) >= chancePercent)
+        if (DayScenarios.Roll(day, stream, 100, archetype) >= chancePercent)
             return;
 
         // Out of the house, from mid-morning to the evening: the phone stays by the pump at home.
-        var start = day.AddHours(10.5).AddMinutes(5 * DayScenarios.Roll(day, $"{stream}:start", 126));
-        var length = TimeSpan.FromMinutes(20 + 5 * DayScenarios.Roll(day, $"{stream}:length", 11));
+        var start = day.AddHours(10.5).AddMinutes(5 * DayScenarios.Roll(day, $"{stream}:start", 126, archetype));
+        var length = TimeSpan.FromMinutes(20 + 5 * DayScenarios.Roll(day, $"{stream}:length", 11, archetype));
         interruptions.Add(new(DemoLoopState.PhoneOutOfRange, start, start + length));
     }
 }

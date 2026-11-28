@@ -19,6 +19,9 @@ public static class DemoClinic
 
     public static readonly IReadOnlyList<string> Groups = [Paediatrics, MyList];
 
+    /// <summary>The days of history each synthetic person is seeded with.</summary>
+    public const int PersonBackfillDays = 30;
+
     /// <summary>The groups the demo host's own person is in.</summary>
     public static readonly IReadOnlyList<string> HostGroups = [MyList];
 

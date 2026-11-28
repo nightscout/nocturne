@@ -93,7 +93,8 @@ public static class DemoLifestyleSeeds
     /// the travel span matching the timezone-timeline trip.
     /// </summary>
     /// <param name="seedEnd">The local end of the seeded range.</param>
-    public static List<SpanSeed> BuildSpans(DateTime localToday, int days, DateTime seedEnd)
+    public static List<SpanSeed> BuildSpans(
+        DateTime localToday, int days, DateTime seedEnd, DemoArchetype? archetype = null)
     {
         var spans = new List<SpanSeed>();
         var windowStart = localToday.AddDays(-days);
@@ -105,44 +106,54 @@ public static class DemoLifestyleSeeds
         for (var d = 0; d <= days; d++)
         {
             var day = windowStart.AddDays(d);
-            var scenario = DayScenarios.For(day);
+            var scenario = DayScenarios.For(day, archetype);
 
             if (scenario == DayScenario.Exercise)
             {
-                var (workoutStart, workoutEnd) = DemoHealthDataGenerator.WorkoutWindowFor(day);
+                var (workoutStart, workoutEnd) = DemoHealthDataGenerator.WorkoutWindowFor(day, archetype);
                 interruptions.Add((workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10), nameof(PumpModeState.Exercise)));
 
                 spans.Add(new SpanSeed(StateSpanCategory.Exercise,
-                    Workouts[DayScenarios.Roll(day, "workout-kind", Workouts.Length)], workoutStart, workoutEnd));
-                spans.Add(new SpanSeed(StateSpanCategory.Override, "Workout Mode",
-                    workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10)));
-                spans.Add(new SpanSeed(
-                    StateSpanCategory.TemporaryTarget, nameof(TemporaryTargetState.Active),
-                    workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10),
-                    new Dictionary<string, object> { ["targetTop"] = 150.0, ["targetBottom"] = 140.0 }));
+                    Workouts[DayScenarios.Roll(day, "workout-kind", Workouts.Length, archetype)], workoutStart, workoutEnd));
+                if (archetype?.RunsLoop != false)
+                {
+                    spans.Add(new SpanSeed(StateSpanCategory.Override, "Workout Mode",
+                        workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10)));
+                    spans.Add(new SpanSeed(
+                        StateSpanCategory.TemporaryTarget, nameof(TemporaryTargetState.Active),
+                        workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10),
+                        new Dictionary<string, object> { ["targetTop"] = 150.0, ["targetBottom"] = 140.0 }));
+                }
             }
-            else if (DemoLoopInterruptions.ManualModeWindow(day, now) is { } manual)
+            else if (DemoLoopInterruptions.ManualModeWindow(day, now, archetype) is { } manual)
             {
                 interruptions.Add((manual.Start, manual.End, nameof(PumpModeState.Manual)));
             }
         }
 
-        var cursor = windowStart;
-        foreach (var (start, end, state) in interruptions.Where(i => i.Start > windowStart).OrderBy(i => i.Start))
+        if (archetype is null || archetype.RunsLoop)
         {
-            if (start > cursor)
-                spans.Add(new SpanSeed(StateSpanCategory.PumpMode, nameof(PumpModeState.Automatic), cursor, start));
-            spans.Add(new SpanSeed(StateSpanCategory.PumpMode, state, start, end));
-            cursor = end;
+            var cursor = windowStart;
+            foreach (var (start, end, state) in interruptions.Where(i => i.Start > windowStart).OrderBy(i => i.Start))
+            {
+                if (start > cursor)
+                    spans.Add(new SpanSeed(StateSpanCategory.PumpMode, nameof(PumpModeState.Automatic), cursor, start));
+                spans.Add(new SpanSeed(StateSpanCategory.PumpMode, state, start, end));
+                cursor = end;
+            }
+            spans.Add(new SpanSeed(StateSpanCategory.PumpMode, nameof(PumpModeState.Automatic), cursor, null));
         }
-        spans.Add(new SpanSeed(StateSpanCategory.PumpMode, nameof(PumpModeState.Automatic), cursor, null));
+        else if (archetype.HasPump)
+        {
+            spans.Add(new SpanSeed(StateSpanCategory.PumpMode, nameof(PumpModeState.Manual), windowStart, null));
+        }
 
         // Illness: contiguous sick-day runs become one span.
         DateTime? sickStart = null;
         for (var d = 0; d <= days + 1; d++)
         {
             var day = windowStart.AddDays(d);
-            var isSick = d <= days && DayScenarios.For(day) == DayScenario.SickDay;
+            var isSick = d <= days && DayScenarios.For(day, archetype) == DayScenario.SickDay;
             if (isSick && sickStart is null)
                 sickStart = day.AddHours(6);
             else if (!isSick && sickStart is not null)

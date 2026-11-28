@@ -178,7 +178,7 @@ public class DemoGenerationTests
     {
         // The dashboard age pills only work if the decomposer recognizes the
         // seeded treatment EventTypes.
-        foreach (var spec in DemoDeviceLifecycle.TrackerSpecs)
+        foreach (var spec in DemoDeviceLifecycle.TrackerSpecsFor(null))
             TreatmentTypeMaps.DeviceEventTypeMap.Should().ContainKey(spec.TriggerEventType);
     }
 
@@ -192,7 +192,7 @@ public class DemoGenerationTests
             DemoDeviceLifecycle.GenerateSchedule(now, 30, DemoTestClock.Host),
             o => o.WithStrictOrdering());
         schedule.Should().BeInAscendingOrder(e => e.TimestampUtc);
-        foreach (var spec in DemoDeviceLifecycle.TrackerSpecs)
+        foreach (var spec in DemoDeviceLifecycle.TrackerSpecsFor(null))
         {
             schedule.Should().Contain(e => e.EventType == spec.TriggerEventType,
                 $"a 30-day window must contain at least one {spec.Name} change");

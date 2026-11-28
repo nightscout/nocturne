@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Demo;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Services.Demo.Services;
 
 namespace Nocturne.API.Controllers.V4.Admin;
 
@@ -215,7 +216,9 @@ public class DemoAdminController : ControllerBase
     /// each reset. Idempotent — every type upserts or rebuilds rather than
     /// duplicates, except entries/treatments which append (the demo resets
     /// before seeding). Per-user types are owned by the demo tenant's Public
-    /// subject, which anonymous visitors browse as.
+    /// subject, which anonymous visitors browse as. With <see cref="DemoSeedExtrasDto.Person"/>,
+    /// seeds that person of the demo clinic from their archetype instead, once: a person who
+    /// already holds a sample timeline is left as the live feed has carried it on.
     /// </summary>
     [HttpPost("seed-extras")]
     [ProducesResponseType(typeof(SampleDataSeedResult), StatusCodes.Status200OK)]
@@ -228,6 +231,19 @@ public class DemoAdminController : ControllerBase
         if (tenant is null)
             return NotFound();
 
+        DemoArchetype? archetype = null;
+        if (request?.Person is { } key)
+        {
+            var person = DemoClinic.People.FirstOrDefault(p => p.Key == key);
+            archetype = person is null ? null : DemoArchetypes.Find(person.Key);
+            if (person is null || archetype is null)
+                return NotFound();
+
+            tenant = await _tenants.FindBySlugAsync(DemoClinic.SlugOf(tenant.Slug, person), ct);
+            if (tenant is not { IsDemo: true, DemoConfig.Kind: DemoTenantKind.Person })
+                return NotFound();
+        }
+
         var publicSubjectId = (await _members.FindPublicMemberAsync(tenant.Id, ct))?.SubjectId;
 
         var seeded = await SampleDataSeeder.SeedInTenantScopeAsync(
@@ -237,7 +253,8 @@ public class DemoAdminController : ControllerBase
             publicSubjectId,
             DataSources.DemoService,
             includeGlucose: request?.IncludeGlucose ?? true,
-            ct);
+            archetype: archetype,
+            ct: ct);
 
         return Ok(seeded);
     }
@@ -284,4 +301,7 @@ public record DemoDeleteResultDto(long DeletedCount);
 
 public record DemoResetResultDto(Guid TenantId);
 
-public record DemoSeedExtrasDto(int Days = 7, bool IncludeGlucose = true);
+/// <param name="Days">The days of history to seed.</param>
+/// <param name="IncludeGlucose">Whether to generate glucose, treatments and device status, or to take them as stored.</param>
+/// <param name="Person">The <see cref="DemoClinicPerson.Key"/> of the demo clinic person to seed; null for the demo host.</param>
+public record DemoSeedExtrasDto(int Days = 7, bool IncludeGlucose = true, string? Person = null);

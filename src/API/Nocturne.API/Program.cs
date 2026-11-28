@@ -179,7 +179,9 @@ builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configurat
 // controller's seed-extras endpoint (demo container, all environments).
 builder.Services.AddScoped<SampleDataSeeder>();
 builder.Services.AddScoped<SampleDataLiveFeed>();
-if (SampleDataLiveFeed.IsEnabled(builder.Configuration))
+var sampleDataFeedScope = SampleDataFeedScope.From(builder.Configuration);
+builder.Services.AddSingleton(sampleDataFeedScope);
+if (sampleDataFeedScope.Any)
     builder.Services.AddHostedService<SampleDataLiveFeedService>();
 
 builder.Services.AddSingleton<ReadAccessLogWriter>();

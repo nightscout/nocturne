@@ -65,6 +65,13 @@ public class DemoModeConfiguration
     public int? RandomSeed { get; set; }
 
     /// <summary>
+    /// The person the generator shapes its data for, with its own seed, scenario weights, therapy and
+    /// behaviour (<see cref="Nocturne.Services.Demo.Services.DemoArchetype.ConfigurationFor"/> sets the rest
+    /// of this configuration to match). Null for the demo host.
+    /// </summary>
+    public Nocturne.Services.Demo.Services.DemoArchetype? Archetype { get; set; }
+
+    /// <summary>
     /// Base basal rate for insulin calculations (U/hr).
     /// </summary>
     public double BasalRate { get; set; } = 1.0;

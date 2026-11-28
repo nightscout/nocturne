@@ -284,7 +284,7 @@ public class DemoDataGenerator : IDemoDataGenerator
 
         while (currentDay <= lastDay)
         {
-            var dayScenario = SelectDayScenario(currentDay);
+            var dayScenario = DayScenarios.For(currentDay, _config.Archetype);
             var scenarioParams = GetScenarioParameters(dayScenario);
             var orefProfile = CreateOrefProfile(scenarioParams);
             var simulator = new OrefPhysiologySimulator(
@@ -300,7 +300,7 @@ public class DemoDataGenerator : IDemoDataGenerator
             if (HasDawnHigh(currentDay, dayScenario))
             {
                 scenarioParams.DawnPhenomenonStrength = DawnHighStrength;
-                mealPlan = LateBreakfast(currentDay, mealPlan);
+                mealPlan = LateBreakfast(currentDay, mealPlan, _config.Archetype);
             }
 
             // Pre-populate the simulator with the day's meals and boluses, and
@@ -329,8 +329,8 @@ public class DemoDataGenerator : IDemoDataGenerator
 
             pending.AddRange(PlanNotes(currentDay).Select(n => (_clock.ToUtc(n.Time), n.Treatment)));
             pending.Sort((a, b) => a.Time.CompareTo(b.Time));
-            var fingerstickTimes = PlanFingersticks(currentDay).Select(_clock.ToUtc).ToList();
-            var calibrations = PlanCalibrations(currentDay).Select(c => c with { Time = _clock.ToUtc(c.Time) }).ToList();
+            var fingerstickTimes = PlanFingersticks(currentDay, _config.Archetype).Select(_clock.ToUtc).ToList();
+            var calibrations = PlanCalibrations(currentDay, _config.Archetype).Select(c => c with { Time = _clock.ToUtc(c.Time) }).ToList();
 
             var effectiveIsf =
                 _config.InsulinSensitivityFactor * scenarioParams.InsulinSensitivityMultiplier;
@@ -359,7 +359,7 @@ public class DemoDataGenerator : IDemoDataGenerator
                 int? tempDuration = null;
                 double? requestedRate = null;
                 (double Rate, double? Requested)? loopTemp = null;
-                var loop = DemoLoopInterruptions.StateAt(currentTime, end);
+                var loop = _config.Archetype?.StateAt(currentTime, end) ?? DemoLoopInterruptions.StateAt(currentTime, end);
 
                 // Consume planned treatments due this step.
                 while (pending.Count > 0 && pending[0].Time < consumeUntil)
@@ -376,8 +376,9 @@ public class DemoDataGenerator : IDemoDataGenerator
                     Math.Abs((b.Time - currentTime).TotalMinutes) < 2.5
                 );
                 var adjustedRate = NormalizeBasalRate(basalAdj.Rate);
-                var adjustedDuration = DemoLoopInterruptions.MinutesToNext(currentTime, basalAdj.Duration, end);
-                if (loop == DemoLoopState.Closed && adjustedDuration > 0 && (adjustedRate > 0 || basalAdj.Duration > 0))
+                var adjustedDuration = DemoLoopInterruptions.MinutesToNext(currentTime, basalAdj.Duration, end, _config.Archetype);
+                if ((loop == DemoLoopState.Closed || SetsPlannedTempsByHand(loop))
+                    && adjustedDuration > 0 && (adjustedRate > 0 || basalAdj.Duration > 0))
                 {
                     stepTreatments.Add(CreateTempBasalTreatment(instant, adjustedRate, adjustedDuration));
                     tempRate = adjustedRate;
@@ -402,6 +403,8 @@ public class DemoDataGenerator : IDemoDataGenerator
 
                 // 400 is the CGM reporting ceiling; MaxGlucose bounds the live random walk.
                 glucose = Math.Max(40, Math.Min(400, glucose));
+                if (_config.Archetype is { } archetype)
+                    glucose = archetype.Shape(currentTime, glucose);
 
                 var hour = currentTime.Hour;
                 var isWakingHours = hour >= 7 && hour < 22;
@@ -517,7 +520,7 @@ public class DemoDataGenerator : IDemoDataGenerator
                          && loopTemp is { } temp
                          && (currentTime.Minute == 0 || currentTime.Minute == 30)
                          && tempRate is null
-                         && DemoLoopInterruptions.MinutesToNext(currentTime, LoopTempMinutes, end) is var minutes and > 0)
+                         && DemoLoopInterruptions.MinutesToNext(currentTime, LoopTempMinutes, end, _config.Archetype) is var minutes and > 0)
                 {
                     stepTreatments.Add(CreateTempBasalTreatment(instant, temp.Rate, minutes));
                     tempRate = temp.Rate;
@@ -542,12 +545,14 @@ public class DemoDataGenerator : IDemoDataGenerator
                 List<Entry> extraEntries = [];
                 while (fingerstickTimes.Count > 0 && fingerstickTimes[0] < consumeUntil)
                 {
-                    extraEntries.Add(CreateFingerstickEntry(fingerstickTimes[0], glucose));
+                    if (loop != DemoLoopState.SignalLost)
+                        extraEntries.Add(CreateFingerstickEntry(fingerstickTimes[0], glucose));
                     fingerstickTimes.RemoveAt(0);
                 }
                 while (calibrations.Count > 0 && calibrations[0].Time < consumeUntil)
                 {
-                    extraEntries.Add(CreateCalibrationEntry(calibrations[0]));
+                    if (loop != DemoLoopState.SignalLost)
+                        extraEntries.Add(CreateCalibrationEntry(calibrations[0]));
                     calibrations.RemoveAt(0);
                 }
 
@@ -593,12 +598,8 @@ public class DemoDataGenerator : IDemoDataGenerator
     }
 
 
-    /// <summary>
-    /// Deterministic per-date selection (see <see cref="DayScenarios"/>): the
-    /// entry and treatment streams iterate days independently, so a random roll
-    /// here would give the same date different scenarios in each stream.
-    /// </summary>
-    private static DayScenario SelectDayScenario(DateTime date) => DayScenarios.For(date);
+    private bool SetsPlannedTempsByHand(DemoLoopState loop) =>
+        loop == DemoLoopState.NoLoop && _config.Archetype?.Therapy == DemoTherapy.Pump;
 
 
     /// <summary>
@@ -1164,9 +1165,9 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// Fingerstick times for a day: a usual morning check plus a frequent
     /// pre-dinner one. Deterministic per date so re-seeds are idempotent.
     /// </summary>
-    private static List<DateTime> PlanFingersticks(DateTime day)
+    private static List<DateTime> PlanFingersticks(DateTime day, DemoArchetype? archetype)
     {
-        var rng = DayScenarios.RngFor(day, "fingerstick");
+        var rng = DayScenarios.RngFor(day, "fingerstick", archetype);
         var times = new List<DateTime>();
         if (rng.NextDouble() < 0.85)
             times.Add(day.AddHours(6).AddMinutes(40 + rng.Next(0, 55)));
@@ -1181,13 +1182,13 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// Two calibrations roughly two hours after a sensor start, mirroring a
     /// sensor warmup ritual. Empty on non-sensor-change days.
     /// </summary>
-    private static List<CalibrationPlan> PlanCalibrations(DateTime day)
+    private static List<CalibrationPlan> PlanCalibrations(DateTime day, DemoArchetype? archetype)
     {
-        var sensorStart = DemoDeviceLifecycle.ChangeTimeOn(day, TreatmentTypes.SensorStart);
+        var sensorStart = DemoDeviceLifecycle.ChangeTimeOn(day, TreatmentTypes.SensorStart, archetype);
         if (sensorStart is null)
             return [];
 
-        var rng = DayScenarios.RngFor(day, "calibration");
+        var rng = DayScenarios.RngFor(day, "calibration", archetype);
         var first = sensorStart.Value.AddMinutes(115 + rng.Next(0, 20));
         return
         [
@@ -1231,7 +1232,7 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// </summary>
     private List<(DateTime Time, Treatment Treatment)> PlanNotes(DateTime day)
     {
-        var rng = DayScenarios.RngFor(day, "notes");
+        var rng = DayScenarios.RngFor(day, "notes", _config.Archetype);
         var planned = new List<(DateTime, Treatment)>();
 
         if (rng.NextDouble() < 0.35)
@@ -1503,9 +1504,9 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// lunch at least three hours after it: a late breakfast moves the next meal later, and no
     /// morning snack is eaten between them.
     /// </summary>
-    private static List<MealEvent> LateBreakfast(DateTime day, List<MealEvent> meals)
+    private static List<MealEvent> LateBreakfast(DateTime day, List<MealEvent> meals, DemoArchetype? archetype)
     {
-        var breakfastAt = day.AddHours(10).AddMinutes(5 * DayScenarios.Roll(day, "late-breakfast", 10));
+        var breakfastAt = day.AddHours(10).AddMinutes(5 * DayScenarios.Roll(day, "late-breakfast", 10, archetype));
         var lunchFrom = breakfastAt.AddHours(3);
         return
         [
@@ -1571,7 +1572,7 @@ public class DemoDataGenerator : IDemoDataGenerator
         var foodFreeUntil = time + LevelCorrectionCarbFreeTime;
         if (meals.Any(m => m.MealTime > time.AddMinutes(-90) && m.MealTime < foodFreeUntil)
             || pending.Any(p => p.Treatment.Insulin > 0 && p.Time < instant + LevelCorrectionCarbFreeTime)
-            || DemoLoopInterruptions.On(time, seedEnd).Concat(DemoLoopInterruptions.On(time.AddDays(1), seedEnd))
+            || DemoLoopInterruptions.On(time, seedEnd, _config.Archetype).Concat(DemoLoopInterruptions.On(time.AddDays(1), seedEnd, _config.Archetype))
                 .Any(i => i.Start < time + LevelCorrectionQuietTime && i.End > time))
             return null;
 

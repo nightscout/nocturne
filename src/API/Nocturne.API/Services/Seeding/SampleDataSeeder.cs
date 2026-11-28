@@ -7,6 +7,7 @@ using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
@@ -48,7 +49,11 @@ public sealed record SampleDataSeedResult(
     int Profiles,
     int Foods,
     int StateSpans,
-    int Notifications);
+    int Notifications)
+{
+    /// <summary>What a seed that found its tenant already seeded writes.</summary>
+    public static SampleDataSeedResult None { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+}
 
 /// <summary>
 /// Populates a tenant with realistic sample data covering every data type the
@@ -94,6 +99,7 @@ public class SampleDataSeeder
     private readonly IProfileActivationRepository _profileActivations;
     private readonly ITempBasalRepository _tempBasals;
     private readonly IInAppNotificationRepository _notifications;
+    private readonly IDemoDataPurge _demoPurge;
     private readonly TimeProvider _time;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<SampleDataSeeder> _logger;
@@ -142,6 +148,7 @@ public class SampleDataSeeder
         IProfileActivationRepository profileActivations,
         ITempBasalRepository tempBasals,
         IInAppNotificationRepository notifications,
+        IDemoDataPurge demoPurge,
         TimeProvider time,
         ILoggerFactory loggerFactory,
         ILogger<SampleDataSeeder> logger)
@@ -167,6 +174,7 @@ public class SampleDataSeeder
         _profileActivations = profileActivations;
         _tempBasals = tempBasals;
         _notifications = notifications;
+        _demoPurge = demoPurge;
         _time = time;
         _loggerFactory = loggerFactory;
         _logger = logger;
@@ -184,11 +192,12 @@ public class SampleDataSeeder
         Guid? ownerSubjectId,
         string dataSource = DevSampleDataSource,
         bool includeGlucose = true,
+        DemoArchetype? archetype = null,
         CancellationToken ct = default)
     {
         await using var scope = TenantJobScope.Open(services, tenant, AuditEndpoint);
         return await scope.ServiceProvider.GetRequiredService<SampleDataSeeder>()
-            .SeedAsync(tenant, days, ownerSubjectId, dataSource, includeGlucose, ct);
+            .SeedAsync(tenant, days, ownerSubjectId, dataSource, includeGlucose, archetype, ct);
     }
 
     /// <summary>
@@ -199,7 +208,10 @@ public class SampleDataSeeder
     /// false, entries/treatments/device status are assumed already present and
     /// alarm history derives from the stored glucose instead of the generated
     /// stream. Re-seeding is idempotent for every type except
-    /// treatments, which append.
+    /// treatments, which append. With an <paramref name="archetype"/>, the tenant is that demo person:
+    /// the data is shaped by its row, and a tenant that already holds a sample timeline is left as
+    /// it is, since the live feed has carried that timeline on. One that holds none has the demo
+    /// service's records removed first, since a seed that stopped part-way left them without one.
     /// </summary>
     public async Task<SampleDataSeedResult> SeedAsync(
         TenantContext tenant,
@@ -207,13 +219,14 @@ public class SampleDataSeeder
         Guid? ownerSubjectId,
         string dataSource = DevSampleDataSource,
         bool includeGlucose = true,
+        DemoArchetype? archetype = null,
         CancellationToken ct = default)
     {
         var gate = SampleDataTimeline.GateFor(tenant.TenantId);
         await gate.WaitAsync(ct);
         try
         {
-            return await SeedUngatedAsync(tenant, days, ownerSubjectId, dataSource, includeGlucose, ct);
+            return await SeedUngatedAsync(tenant, days, ownerSubjectId, dataSource, includeGlucose, archetype, ct);
         }
         finally
         {
@@ -227,6 +240,7 @@ public class SampleDataSeeder
         Guid? ownerSubjectId,
         string dataSource,
         bool includeGlucose,
+        DemoArchetype? archetype,
         CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
@@ -236,7 +250,16 @@ public class SampleDataSeeder
             throw new InvalidOperationException(
                 $"Seed {tenant.Slug} from a scope of its own; see {nameof(SeedInTenantScopeAsync)}.");
 
-        var config = ConfigurationFor(days);
+        if (archetype is not null)
+        {
+            if (await SampleDataTimeline.ReadAsync(db, ct) is not null)
+                return SampleDataSeedResult.None;
+
+            if (includeGlucose && await _demoPurge.HoldsDataAsync(ct))
+                await _demoPurge.PurgeAsync(ct);
+        }
+
+        var config = ConfigurationFor(days, archetype);
         var clock = SeedingClock.Resolve(
             await db.PatientRecords.AsNoTracking().Select(r => r.Timezone).FirstOrDefaultAsync(ct), _time);
         // One end for every generated stream, so the loop and the pump mode spans agree on the quiet
@@ -247,7 +270,7 @@ public class SampleDataSeeder
         // history matches the lows/highs actually visible on the chart.
         var episodeTracker = new DemoAlertSeeds.GlucoseEpisodeTracker(DemoAlertSeeds.Defaults);
 
-        await SeedPatientProfileAsync(db, clock, ct);
+        await SeedPatientProfileAsync(db, clock, archetype, ct);
 
         // Seed the therapy profile before glucose so scheduled-basal context
         // exists from the first record.
@@ -363,7 +386,7 @@ public class SampleDataSeeder
         // The schedule is deterministic, so filter out changes whose
         // DeviceEvent already exists — a re-seed would otherwise insert exact
         // duplicates (treatments have no sync key).
-        var deviceSchedule = DemoDeviceLifecycle.GenerateSchedule(clock.LocalNow, days, clock.Demo);
+        var deviceSchedule = DemoDeviceLifecycle.GenerateSchedule(clock.LocalNow, days, clock.Demo, archetype);
         var existingDeviceEventTimes = (await db.DeviceEvents
                 .AsNoTracking()
                 .Where(d => d.DataSource == dataSource)
@@ -377,17 +400,17 @@ public class SampleDataSeeder
         if (deviceTreatments.Count > 0)
             await _treatmentService.CreateTreatmentsAsync(deviceTreatments, WriteOrigin.Backfill, ct);
 
-        var sleepCount = await SeedSleepAsync(clock, days, dataSource, ct);
-        var (heartRateCount, stepCount) = await SeedActivityAsync(clock, days, dataSource, ct);
+        var sleepCount = await SeedSleepAsync(clock, days, dataSource, archetype, ct);
+        var (heartRateCount, stepCount) = await SeedActivityAsync(clock, days, dataSource, archetype, ct);
         var (trackerDefinitions, trackerInstances) =
-            await SeedTrackersAsync(db, deviceSchedule, ownerSubjectId, ct);
+            await SeedTrackersAsync(db, deviceSchedule, ownerSubjectId, archetype, ct);
         var (alertRules, alertExcursions) =
             await SeedAlertsAsync(db, tenant.TenantId, ownerSubjectId, episodeTracker.Episodes, ct);
-        if (includeGlucose && dataSource == Nocturne.Core.Constants.DataSources.DemoService)
+        if (includeGlucose && dataSource == Nocturne.Core.Constants.DataSources.DemoService && archetype is null)
             await SeedCompressionLowReviewsAsync(clock, days, ct);
 
         var foodCount = await SeedFoodsAsync(db, clock, mealCarbLinks, ownerSubjectId, ct);
-        var stateSpanCount = await SeedStateSpansAsync(clock, days, dataSource, ct);
+        var stateSpanCount = await SeedStateSpansAsync(clock, days, dataSource, archetype, ct);
         await SeedBodyWeightAsync(db, clock, days, dataSource, ct);
         await SeedTimezoneTimelineAsync(db, clock, days, ct);
         await SeedDndWindowAsync(db, clock, ct);
@@ -395,14 +418,14 @@ public class SampleDataSeeder
         var notificationCount = await SeedNotificationsAsync(ownerSubjectId, episodeTracker.Episodes, ct);
         await SeedLabHbA1cAsync(db, clock, dataSource, ct);
 
-        // Last, so the live feed never continues a seed still being written. The demo tenant's own
+        // Last, so the live feed never continues a seed still being written. The demo host's own
         // service streams its realtime data.
-        if (includeGlucose && dataSource != Nocturne.Core.Constants.DataSources.DemoService)
+        if (includeGlucose && (archetype is not null || dataSource != Nocturne.Core.Constants.DataSources.DemoService))
         {
             var firstDay = clock.Demo.ToLocal(seedEnd).AddDays(-config.BackfillDays).Date;
             await SampleDataTimeline.WriteAsync(
                 db,
-                new SampleDataTimeline(firstDay, seedEnd, seedEnd, clock.ZoneId, dataSource),
+                new SampleDataTimeline(firstDay, seedEnd, seedEnd, clock.ZoneId, dataSource, archetype?.Key),
                 _time.GetUtcNow(),
                 ct);
         }
@@ -430,7 +453,9 @@ public class SampleDataSeeder
     internal static StepRecords RecordsOf(
         DemoTimeStep step, SeedingClock clock, DemoModeConfiguration config, string dataSource)
     {
-        var readings = DemoCoverageSeeds.CgmReadings(step);
+        var readings = config.Archetype is null
+            ? DemoCoverageSeeds.CgmReadings(step)
+            : DemoCoverageSeeds.PrimaryReadings(step);
         List<Entry> entries = [.. readings, .. step.ExtraEntries];
         foreach (var entry in entries)
         {
@@ -441,7 +466,8 @@ public class SampleDataSeeder
         foreach (var treatment in step.Treatments)
             treatment.DataSource = dataSource;
 
-        var status = DemoDeviceStatusGenerator.ForStep(step, clock.Demo, config.TargetGlucose, config.BasalRate);
+        var status = DemoDeviceStatusGenerator.ForStep(
+            step, clock.Demo, config.TargetGlucose, config.BasalRate, config.Archetype);
         // Deterministic legacy id, so a re-seed skips the statuses it already wrote.
         status?.Id = status.Mills.ToString("x24");
 
@@ -462,9 +488,9 @@ public class SampleDataSeeder
         DeviceStatus? Status,
         bool HasCgmReading);
 
-    /// <summary>The simulation every seed of <paramref name="days"/> days runs.</summary>
-    internal static DemoModeConfiguration ConfigurationFor(int days) =>
-        new() { BackfillDays = days, RandomSeed = RandomSeed };
+    /// <summary>The simulation every seed of <paramref name="days"/> days of <paramref name="archetype"/> runs.</summary>
+    internal static DemoModeConfiguration ConfigurationFor(int days, DemoArchetype? archetype = null) =>
+        archetype?.ConfigurationFor(days) ?? new() { BackfillDays = days, RandomSeed = RandomSeed };
 
     /// <summary>
     /// Seeds the Nightscout profile document through the profile write service
@@ -492,14 +518,14 @@ public class SampleDataSeeder
     /// so bedtime lands at night in the tenant's zone; stored as UTC.
     /// </summary>
     private async Task<int> SeedSleepAsync(
-        SeedingClock clock, int days, string sourceApp, CancellationToken ct)
+        SeedingClock clock, int days, string sourceApp, DemoArchetype? archetype, CancellationToken ct)
     {
         var count = 0;
         for (var d = 1; d <= days; d++)
         {
             // Night ending on the morning of (today - d + 1).
             var localMorning = clock.LocalToday.AddDays(-(d - 1));
-            var session = DemoHealthDataGenerator.GenerateSleepSession(localMorning, sourceApp, clock.Demo);
+            var session = DemoHealthDataGenerator.GenerateSleepSession(localMorning, sourceApp, clock.Demo, archetype);
 
             // Seeding before ~08:00 local would otherwise write last night's
             // session with an EndTime still in the future.
@@ -519,7 +545,7 @@ public class SampleDataSeeder
     /// Deterministic sync identifiers make re-seeding update in place.
     /// </summary>
     private async Task<(int HeartRates, int Steps)> SeedActivityAsync(
-        SeedingClock clock, int days, string dataSource, CancellationToken ct)
+        SeedingClock clock, int days, string dataSource, DemoArchetype? archetype, CancellationToken ct)
     {
         var heartRates = new List<HeartRate>();
         var stepCounts = new List<StepCount>();
@@ -527,7 +553,7 @@ public class SampleDataSeeder
         for (var d = 0; d < days; d++)
         {
             var (dayHeartRates, daySteps) = DemoHealthDataGenerator.GenerateDailyActivity(
-                clock.LocalToday.AddDays(-d), dataSource, clock.Demo);
+                clock.LocalToday.AddDays(-d), dataSource, clock.Demo, archetype);
             heartRates.AddRange(dayHeartRates.Where(h => h.Timestamp <= clock.UtcNow));
             stepCounts.AddRange(daySteps.Where(s => s.Timestamp <= clock.UtcNow));
         }
@@ -550,7 +576,7 @@ public class SampleDataSeeder
     /// </summary>
     private async Task<(int Definitions, int Instances)> SeedTrackersAsync(
         NocturneDbContext db,
-        List<DeviceChangeEvent> schedule, Guid? ownerSubjectId, CancellationToken ct)
+        List<DeviceChangeEvent> schedule, Guid? ownerSubjectId, DemoArchetype? archetype, CancellationToken ct)
     {
         if (ownerSubjectId is not { } owner)
             return (0, 0);
@@ -561,7 +587,7 @@ public class SampleDataSeeder
         var definitionsCreated = 0;
         var instancesCreated = 0;
 
-        foreach (var spec in DemoDeviceLifecycle.TrackerSpecs)
+        foreach (var spec in DemoDeviceLifecycle.TrackerSpecsFor(archetype))
         {
             var definition = existing.FirstOrDefault(d =>
                 string.Equals(d.Name, spec.Name, StringComparison.OrdinalIgnoreCase));
@@ -839,7 +865,7 @@ public class SampleDataSeeder
     /// data source are wiped and rebuilt (idempotent re-seed).
     /// </summary>
     private async Task<int> SeedStateSpansAsync(
-        SeedingClock clock, int days, string dataSource, CancellationToken ct)
+        SeedingClock clock, int days, string dataSource, DemoArchetype? archetype, CancellationToken ct)
     {
         var localToday = clock.LocalToday;
         await _profileActivations.ReplaceByDataSourceAsync(
@@ -856,7 +882,7 @@ public class SampleDataSeeder
             ],
             ct);
 
-        var spans = DemoLifestyleSeeds.BuildSpans(localToday, days, clock.LocalNow);
+        var spans = DemoLifestyleSeeds.BuildSpans(localToday, days, clock.LocalNow, archetype);
         await _stateSpans.ReplaceBySourceAsync(
             dataSource,
             spans.Select(seed => new StateSpan
@@ -889,6 +915,14 @@ public class SampleDataSeeder
         new(Nocturne.Core.Models.V4.DeviceCategory.GlucoseMeter, "Ascensia", "Contour Next One", null, null),
     ];
 
+    /// <summary>
+    /// The roster of <paramref name="archetype"/>: the host's, less the pump of a person who has none and the
+    /// AID algorithm of one whose pump no loop drives.
+    /// </summary>
+    internal static IEnumerable<DeviceSeed> DevicesFor(DemoArchetype? archetype) => DeviceRoster
+        .Where(seed => seed.Category != Nocturne.Core.Models.V4.DeviceCategory.InsulinPump || archetype?.HasPump != false)
+        .Select(seed => archetype?.RunsLoop == false ? seed with { Aid = null } : seed);
+
     internal static PatientDeviceEntity BuildDevice(DeviceSeed seed, Guid tenantId, DateOnly today) => new()
     {
         Id = Guid.CreateVersion7(),
@@ -909,7 +943,8 @@ public class SampleDataSeeder
     /// creates an empty record through the API's get-or-create, and a re-seed
     /// must not overwrite the user's own edits.
     /// </summary>
-    private async Task SeedPatientProfileAsync(NocturneDbContext db, SeedingClock clock, CancellationToken ct)
+    private async Task SeedPatientProfileAsync(
+        NocturneDbContext db, SeedingClock clock, DemoArchetype? archetype, CancellationToken ct)
     {
         var record = await db.PatientRecords.FirstOrDefaultAsync(ct);
         if (record is null)
@@ -923,7 +958,7 @@ public class SampleDataSeeder
         record.DateOfBirth ??= new DateOnly(1992, 4, 17);
         record.Timezone ??= clock.ZoneId;
 
-        foreach (var seed in DeviceRoster)
+        foreach (var seed in DevicesFor(archetype))
         {
             var existing = await db.PatientDevices
                 .FirstOrDefaultAsync(d => d.Manufacturer == seed.Manufacturer && d.Model == seed.Model, ct);

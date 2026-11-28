@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Connectors;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -120,6 +121,7 @@ public class SampleDataSeederMixedZoneTests : IDisposable
                 _db.ContextFactory.AsNocturneFactory(), Mock.Of<IDuplicateLinker>(), new SystemAuditContext(),
                 NullLogger<TempBasalRepository>.Instance),
             new InAppNotificationRepository(_db.ContextFactory.AsNocturneFactory()),
+            Mock.Of<IDemoDataPurge>(),
             _time,
             NullLoggerFactory.Instance,
             NullLogger<SampleDataSeeder>.Instance);
