@@ -281,7 +281,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     Func<LegacyTreatmentRepositories, IReadOnlyCollection<Guid>, CancellationToken, Task<IEnumerable<TRecord>>>? correlated = null
 ) : ILegacyKeyedTreatmentTable
     where TRecord : class, IV4Record
-    where TEntity : class, ISystemTimestamped, IDuplicateFlagged, ISoftDeletable, IObservationTimestamped
+    where TEntity : class, ISystemTimestamped, IDuplicateFlagged, ISoftDeletable, IObservationTimestamped, ITenantScoped, IIdentified, IWriterStamped
 {
     /// <inheritdoc />
     public string RecordType { get; } = typeof(TRecord).Name;
@@ -350,11 +350,10 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
 
     private IQueryable<TEntity> At(NocturneDbContext context, IReadOnlyCollection<DateTime> instants)
     {
-        var at = instants.ToList();
         return table(context)
             .AsNoTracking()
             .ExcludeDuplicates()
-            .Where(e => at.Contains(e.Timestamp))
+            .AtInstants(instants)
             .InObservationOrder(descending: true);
     }
 
@@ -524,8 +523,7 @@ internal sealed class LegacyStateSpanTable(
 
     private IQueryable<StateSpanEntity> At(NocturneDbContext context, IReadOnlyCollection<DateTime> instants)
     {
-        var at = instants.ToList();
-        return InStartOrder(Visible(context).Where(s => at.Contains(s.StartTimestamp)), descending: true);
+        return InStartOrder(Visible(context).AtInstants(instants), descending: true);
     }
 
     private static IOrderedQueryable<StateSpanEntity> InStartOrder(IQueryable<StateSpanEntity> spans, bool descending) =>
@@ -698,8 +696,7 @@ internal sealed class LegacyProfileActivationTable : ILegacyKeyedTreatmentTable
     private static IQueryable<ProfileActivationEntity> At(
         NocturneDbContext context, IReadOnlyCollection<DateTime> instants)
     {
-        var at = instants.ToList();
-        return InStartOrder(Rows(context).Where(a => at.Contains(a.Timestamp)), descending: true);
+        return InStartOrder(Rows(context).AtInstants(instants), descending: true);
     }
 
     private static IOrderedQueryable<ProfileActivationEntity> InStartOrder(
