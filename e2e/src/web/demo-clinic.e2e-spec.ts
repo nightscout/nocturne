@@ -4,11 +4,7 @@ import { expect, test } from "./fixtures.ts";
 const SESSION = `${demoWebUrl}/api/v4/demo/session`;
 
 test.describe("demo clinic persona", () => {
-  // Seeding the clinic's people runs through the ingestion services, once for each of them.
-  test.setTimeout(300_000);
-
   test.beforeAll(async () => {
-    test.setTimeout(240_000);
     await provisionDemo();
   });
 

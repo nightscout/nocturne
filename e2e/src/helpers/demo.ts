@@ -21,12 +21,10 @@ async function admin(path: string, body?: unknown): Promise<void> {
 }
 
 /**
- * Provisions the demo host and the demo clinic, and seeds the host's person and each of the clinic's
- * people from their archetype, as the demo service does. Idempotent: one demo exists on a stack, and a
- * person who is already seeded is left as they are.
+ * Provisions the demo host and the demo clinic. Idempotent: one demo exists on a stack. The people are not
+ * seeded: the People page lists everyone the clinic follows with or without readings, and thirty days for each
+ * of them outgrows the e2e database's tmpfs.
  */
 export async function provisionDemo(): Promise<void> {
   await admin("provision");
-  await admin("seed-extras", { days: 7 });
-  for (const person of demoPeopleKeys) await admin("seed-extras", { days: 30, includeGlucose: true, person });
 }
