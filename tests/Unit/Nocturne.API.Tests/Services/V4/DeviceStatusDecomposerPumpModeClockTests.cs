@@ -180,6 +180,127 @@ public class DeviceStatusDecomposerPumpModeClockTests : IDisposable
     }
 
     /// <summary>
+    /// A pump clock set an hour back during a suspension dates the resume before the suspension started. The
+    /// uploader dated the resume after the status that opened the suspension, so the suspension ends when the
+    /// uploader dated the resume, not when it arrived. Decomposed again, the resume writes nothing.
+    /// </summary>
+    [Fact]
+    public async Task APumpClockSetBackDuringASuspension_EndsItWhenTheUploaderDatedTheResume()
+    {
+        var arrived = T.AddMinutes(30).AddTicks(1_234_567);
+        await FoldAsync(T.AddHours(-1), Suspension("before", T.AddHours(-1), suspended: false, clock: T.AddHours(-1)));
+        await FoldAsync(T, Suspension("suspend", T, suspended: true, clock: T));
+        await FoldAsync(arrived, Suspension("resume", T.AddMinutes(30), suspended: false, clock: T.AddMinutes(-30)));
+        var ended = (T, (DateTime?)T.AddMinutes(30));
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal([ended]);
+
+        var again = await FoldAsync(T.AddHours(2), Suspension("resume", T.AddMinutes(30), suspended: false, clock: T.AddMinutes(-30)));
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal([ended]);
+        again.CreatedRecords.Concat(again.UpdatedRecords).Concat(again.UnchangedRecords).OfType<StateSpan>()
+            .Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// An uploader whose clock runs an hour behind, and a pump clock set an hour back during a suspension. The
+    /// uploader dates the resume before the suspension started, so that time would end it at its own start;
+    /// it ends when the resume arrived instead. Decomposed again, the resume writes nothing.
+    /// </summary>
+    [Fact]
+    public async Task AnUploaderBehind_APumpClockSetBackDuringASuspension_EndsItWhenTheResumeArrived()
+    {
+        await FoldAsync(T.AddHours(-1), Suspension("before", T.AddHours(-2), suspended: false, clock: T.AddHours(-1)));
+        await FoldAsync(T, Suspension("suspend", T.AddHours(-1), suspended: true, clock: T));
+        await FoldAsync(T.AddMinutes(30), Suspension("resume", T.AddMinutes(-30), suspended: false, clock: T.AddMinutes(-30)));
+        List<(DateTime, DateTime?)> expected = [(T, T.AddMinutes(30))];
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal(expected);
+
+        WritesNoSpan(await FoldAsync(T.AddHours(2), Suspension("resume", T.AddMinutes(-30), suspended: false, clock: T.AddMinutes(-30))));
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal(expected);
+    }
+
+    /// <summary>
+    /// A suspension seen by two statuses, with the pump clock set an hour back before the second. The resume
+    /// is dated before the suspension started and follows the second status, not the one that opened the
+    /// suspension, but it was still dated after that one, so the suspension ends when the uploader dated it.
+    /// Decomposed again, the resume finds that end and backfills no suspension from the second status.
+    /// </summary>
+    [Fact]
+    public async Task APumpClockSetBackDuringASuspensionSeenTwice_EndsItWhenTheUploaderDatedTheResume()
+    {
+        await FoldAsync(T.AddHours(-1), Suspension("before", T.AddHours(-1), suspended: false, clock: T.AddHours(-1)));
+        await FoldAsync(T, Suspension("suspend", T, suspended: true, clock: T));
+        await FoldAsync(T.AddMinutes(10), Suspension("still", T.AddMinutes(10), suspended: true, clock: T.AddMinutes(-50)));
+        await FoldAsync(T.AddMinutes(30), Suspension("resume", T.AddMinutes(30), suspended: false, clock: T.AddMinutes(-30)));
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal([(T, (DateTime?)T.AddMinutes(30))]);
+
+        var again = await FoldAsync(T.AddHours(2), Suspension("resume", T.AddMinutes(30), suspended: false, clock: T.AddMinutes(-30)));
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal([(T, (DateTime?)T.AddMinutes(30))]);
+        again.CreatedRecords.Concat(again.UpdatedRecords).Concat(again.UnchangedRecords).OfType<StateSpan>()
+            .Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A pump 10 minutes fast suspends, its clock is then corrected, and a connector delivers the resume half
+    /// an hour late. The resume was sent after the suspend but the suspension is ahead of it, so it ends at its
+    /// own start, as a span ahead of its transition does, not at the resume's late arrival.
+    /// </summary>
+    [Fact]
+    public async Task AFastPumpCorrectedDuringASuspension_AResumeDeliveredLate_EndsItAtItsOwnStart()
+    {
+        var fast = TimeSpan.FromMinutes(10);
+        await FoldAsync(T.AddHours(-1), Suspension("before", T.AddHours(-1), suspended: false, clock: T.AddHours(-1) + fast));
+        await FoldAsync(T, Suspension("suspend", T, suspended: true, clock: T + fast));
+
+        await FoldAsync(T.AddMinutes(35), Suspension("resume", T.AddMinutes(5), suspended: false, clock: T.AddMinutes(5)));
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal([(T + fast, (DateTime?)(T + fast))]);
+    }
+
+    /// <summary>
+    /// A pump an hour fast suspends and resumes, the resume arriving three hours late. Its clock is corrected
+    /// in between, and a later suspension opens. The late resume is dated after that suspension started, but
+    /// it was sent before the status that opened it, so it leaves that suspension open.
+    /// </summary>
+    [Fact]
+    public async Task AResumeSentBeforeALaterSuspension_DatedAfterItStarted_LeavesItOpen()
+    {
+        var fast = TimeSpan.FromHours(1);
+        var old = T.AddMinutes(-30);
+        await FoldAsync(T.AddHours(-3), Suspension("before", T.AddHours(-3), suspended: false, clock: T.AddHours(-3) + fast));
+        await FoldAsync(T.AddHours(-2), Suspension("earlier", T.AddHours(-2), suspended: true, clock: T.AddHours(-2) + fast));
+        await FoldAsync(T.AddMinutes(-20), Suspension("corrected", T.AddMinutes(-20), suspended: false, clock: T.AddMinutes(-20)));
+        await FoldAsync(T, Suspension("suspend", T, suspended: true, clock: T));
+
+        await FoldAsync(T.AddHours(3), Suspension("resume-late", old, suspended: false, clock: old + fast));
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal(
+            [(T.AddHours(-1), (DateTime?)T.AddMinutes(-20)), (T, (DateTime?)null)]);
+    }
+
+    /// <summary>
+    /// An older resume of a suspension that has already ended arrives three hours late, dated before a later
+    /// suspension. It was sent before the status that opened the later suspension, so that one stays open.
+    /// </summary>
+    [Fact]
+    public async Task AnOldResumeArrivingLate_LeavesALaterSuspensionOpen()
+    {
+        await FoldAsync(T.AddHours(-3), Suspension("before", T.AddHours(-3), suspended: false));
+        await FoldAsync(T.AddHours(-2), Suspension("earlier", T.AddHours(-2), suspended: true));
+        await FoldAsync(T.AddMinutes(-90), Suspension("earlier-resume", T.AddMinutes(-90), suspended: false));
+        await FoldAsync(T, Suspension("suspend", T, suspended: true));
+
+        await FoldAsync(T.AddHours(3), Suspension("resume-late", T.AddMinutes(-100), suspended: false));
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal(
+            [(T.AddHours(-2), (DateTime?)T.AddMinutes(-90)), (T, (DateTime?)null)]);
+    }
+
+    /// <summary>
     /// A pump about the clock tolerance fast: its suspend arrived 4 minutes ahead, within the bound, and its
     /// resume 6 minutes ahead, beyond it. Their leads agree within the tolerance, so they read one clock and
     /// the resume ends the suspension at its own time.
@@ -286,6 +407,107 @@ public class DeviceStatusDecomposerPumpModeClockTests : IDisposable
     }
 
     /// <summary>
+    /// A pump clock set an hour back while in Automatic dates the switch to Manual before Automatic started.
+    /// The switch was dated after the status that opened Automatic, so Automatic ends when the uploader dated
+    /// the switch, not when it arrived, and Manual opens there, not at the pump's time, so the two modes do not
+    /// overlap. Decomposed again, the switch writes nothing.
+    /// </summary>
+    [Fact]
+    public async Task APumpClockSetBackDuringAMode_EndsItWhenTheUploaderDatedTheNextMode_AndOpensTheNextThere()
+    {
+        var arrived = T.AddMinutes(30).AddTicks(1_234_567);
+        var switched = T.AddMinutes(30);
+        await FoldAsync(T.AddHours(-1), Mode("manual", T.AddHours(-1), PumpModeState.Manual, clock: T.AddHours(-1)));
+        await FoldAsync(T, Mode("auto", T, PumpModeState.Automatic, clock: T));
+        await FoldAsync(arrived, Mode("manual-back", T.AddMinutes(30), PumpModeState.Manual, clock: T.AddMinutes(-30)));
+        List<(string?, DateTime, DateTime?)> expected =
+        [
+            ("Manual", T.AddHours(-1), T),
+            ("Automatic", T, switched),
+            ("Manual", switched, null),
+        ];
+
+        (await ModeSpansAsync()).Should().BeEquivalentTo(expected);
+
+        var again = await FoldAsync(T.AddHours(2), Mode("manual-back", T.AddMinutes(30), PumpModeState.Manual, clock: T.AddMinutes(-30)));
+
+        (await ModeSpansAsync()).Should().BeEquivalentTo(expected);
+        again.CreatedRecords.Concat(again.UpdatedRecords).OfType<StateSpan>().Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A pump clock set an hour back during a suspension, and the pump suspends again after its resume, still
+    /// dated by the set-back clock, so before the suspension the resume ended. The second suspension opens
+    /// when the uploader dated it, not at the pump's time, so it is open at the end, sent one status at a time
+    /// or in one batch. Decomposed again, nothing is written.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task APumpClockSetBack_TheNextSuspensionOpensWhenTheUploaderDatedIt(bool oneBatch)
+    {
+        await FoldAsync(T.AddHours(-1), Suspension("before", T.AddHours(-1), suspended: false, clock: T.AddHours(-1)));
+        await FoldAsync(T, Suspension("suspend", T, suspended: true, clock: T));
+        DeviceStatus[] after =
+        [
+            Suspension("resume", T.AddMinutes(30), suspended: false, clock: T.AddMinutes(-30)),
+            Suspension("suspend-again", T.AddMinutes(45), suspended: true, clock: T.AddMinutes(-15)),
+        ];
+        if (oneBatch)
+            await FoldAsync(T.AddMinutes(50), after);
+        else
+        {
+            await FoldAsync(T.AddMinutes(30), after[0]);
+            await FoldAsync(T.AddMinutes(45), after[1]);
+        }
+        List<(DateTime, DateTime?)> expected = [(T, T.AddMinutes(30)), (T.AddMinutes(45), null)];
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal(expected);
+
+        WritesNoSpan(await FoldAsync(T.AddHours(2), after));
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal(expected);
+    }
+
+    /// <summary>
+    /// A pump clock set an hour back while in Automatic, then two switches, to Manual and back, each dated by
+    /// the set-back clock. Each mode starts when the uploader dated its switch, so Manual keeps its own
+    /// period and Automatic is open at the end, sent one status at a time or in one batch. Decomposed again,
+    /// nothing is written.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task APumpClockSetBack_TwoModeSwitches_EachOpensWhenTheUploaderDatedIt(bool oneBatch)
+    {
+        await FoldAsync(T.AddHours(-1), Mode("manual", T.AddHours(-1), PumpModeState.Manual, clock: T.AddHours(-1)));
+        await FoldAsync(T, Mode("auto", T, PumpModeState.Automatic, clock: T));
+        DeviceStatus[] after =
+        [
+            Mode("manual-back", T.AddMinutes(30), PumpModeState.Manual, clock: T.AddMinutes(-30)),
+            Mode("auto-back", T.AddMinutes(45), PumpModeState.Automatic, clock: T.AddMinutes(-15)),
+        ];
+        if (oneBatch)
+            await FoldAsync(T.AddMinutes(50), after);
+        else
+        {
+            await FoldAsync(T.AddMinutes(30), after[0]);
+            await FoldAsync(T.AddMinutes(45), after[1]);
+        }
+        List<(string?, DateTime, DateTime?)> expected =
+        [
+            ("Manual", T.AddHours(-1), T),
+            ("Automatic", T, T.AddMinutes(30)),
+            ("Manual", T.AddMinutes(30), T.AddMinutes(45)),
+            ("Automatic", T.AddMinutes(45), null),
+        ];
+
+        (await ModeSpansAsync()).Should().BeEquivalentTo(expected);
+
+        WritesNoSpan(await FoldAsync(T.AddHours(2), after));
+        (await ModeSpansAsync()).Should().BeEquivalentTo(expected);
+    }
+
+    /// <summary>
     /// A real transition ends a span of the mode it leaves at the transition, and one of that mode
     /// dated a day ahead at that one's own start.
     /// </summary>
@@ -371,13 +593,15 @@ public class DeviceStatusDecomposerPumpModeClockTests : IDisposable
     }
 
     /// <summary>
-    /// A pump 6 or 60 minutes fast suspends, and an older suspended status of that pump, dated before the
-    /// suspension arrived, arrives three hours late. It is an older transition, so it opens no span and leaves
-    /// the suspension open, and the real resume ends it.
+    /// A pump 6 or 60 minutes fast suspends, and an older suspended status of that pump arrives three hours
+    /// late. It was sent before the status that opened the suspension, so it is an older transition, whether
+    /// its pump time is before the suspension arrived or after: it opens no span and leaves the suspension
+    /// open, and the real resume ends it.
     /// </summary>
     [Theory]
     [InlineData(6, 30)]
     [InlineData(60, 90)]
+    [InlineData(60, 30)]
     public async Task AFastPump_AnOlderSuspendArrivingLate_LeavesTheSuspensionForItsOwnResume(int minutesFast, int minutesOld)
     {
         var fast = TimeSpan.FromMinutes(minutesFast);
@@ -393,22 +617,27 @@ public class DeviceStatusDecomposerPumpModeClockTests : IDisposable
     }
 
     /// <summary>
-    /// A pump an hour fast suspends, and a suspended status of that pump half an hour older arrives three
-    /// hours late. Dated after the suspension arrived, it cannot be told from a lagged newest status, so it
-    /// overtakes the suspension, which ends at its own start.
+    /// A pump an hour fast switches to Manual, and a Manual status of that pump half an hour older, its pump
+    /// time after Manual arrived, arrives three hours late. It was sent before the status that opened Manual,
+    /// so it leaves Manual open, and the next switch ends it.
     /// </summary>
     [Fact]
-    public async Task AFastPump_ASuspendArrivingLate_DatedAfterTheSuspensionArrived_EndsItAtItsOwnStart()
+    public async Task AFastPump_AnOlderModeArrivingLate_LeavesTheModeForItsNextTransition()
     {
         var fast = TimeSpan.FromHours(1);
         var old = T.AddMinutes(-30);
-        await FoldAsync(T.AddHours(-2), Suspension("before", T.AddHours(-2), suspended: false, clock: T.AddHours(-2) + fast));
-        await FoldAsync(T, Suspension("suspend", T, suspended: true, clock: T + fast));
+        await FoldAsync(T.AddHours(-2), Mode("auto", T.AddHours(-2), PumpModeState.Automatic, clock: T.AddHours(-2) + fast));
+        await FoldAsync(T, Mode("manual", T, PumpModeState.Manual, clock: T + fast));
 
-        await FoldAsync(T.AddHours(3), Suspension("suspend-late", old, suspended: true, clock: old + fast));
+        await FoldAsync(T.AddHours(3), Mode("manual-late", old, PumpModeState.Manual, clock: old + fast));
+        await FoldAsync(T.AddHours(4), Mode("auto-again", T.AddHours(4), PumpModeState.Automatic, clock: T.AddHours(4) + fast));
 
-        (await SpansAsync(PumpModeState.Suspended)).Should().ContainSingle(s => s.Start == T + fast)
-            .Which.End.Should().Be(T + fast);
+        (await ModeSpansAsync()).Should().BeEquivalentTo(
+        [
+            ("Automatic", T.AddHours(-2) + fast, (DateTime?)(T + fast)),
+            ("Manual", T + fast, (DateTime?)(T.AddHours(4) + fast)),
+            ("Automatic", T.AddHours(4) + fast, (DateTime?)null),
+        ]);
     }
 
     /// <summary>
@@ -537,12 +766,15 @@ public class DeviceStatusDecomposerPumpModeClockTests : IDisposable
         },
     };
 
-    /// <summary>Decomposes <paramref name="status"/> as it arrives at <paramref name="arrivedAt"/>.</summary>
-    private async Task<V4Models.DecompositionResult> FoldAsync(DateTime arrivedAt, DeviceStatus status)
+    /// <summary>Decomposes <paramref name="statuses"/>, one batch, as it arrives at <paramref name="arrivedAt"/>.</summary>
+    private async Task<V4Models.DecompositionResult> FoldAsync(DateTime arrivedAt, params DeviceStatus[] statuses)
     {
         _clock.AdjustTime(new DateTimeOffset(arrivedAt));
-        return await _decomposer.DecomposeBatchAsync([status], null, WriteOrigin.Live);
+        return await _decomposer.DecomposeBatchAsync([.. statuses], null, WriteOrigin.Live);
     }
+
+    private static void WritesNoSpan(V4Models.DecompositionResult result) =>
+        result.CreatedRecords.Concat(result.UpdatedRecords).OfType<StateSpan>().Should().BeEmpty();
 
     /// <summary>Stores a pump snapshot arriving at <paramref name="arrivedAt"/> without folding it.</summary>
     private async Task StoreSnapshotAsync(

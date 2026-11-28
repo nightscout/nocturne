@@ -295,10 +295,12 @@ public class TreatmentDecomposerPumpSuspensionStoreTests : IDisposable
     /// <summary>
     /// A resume uploaded three hours late, dated before a suspension that is open, has a lead far below the
     /// suspension's. That does not put the suspension ahead of it: the suspension was not dated beyond the
-    /// bound as it arrived, so it belongs to a later transition and stays open.
+    /// bound as it arrived, so it belongs to a later transition and stays open. A treatment gives no order
+    /// (<see cref="PumpModeSpanClock"/>), so the resume of a pump clock set back during the suspension, dated
+    /// before it too, leaves it open the same way.
     /// </summary>
     [Fact]
-    public async Task AResumeUploadedLate_DoesNotEndALaterSuspension()
+    public async Task AResumeUploadedLate_OrOfAPumpClockSetBack_DoesNotEndALaterSuspension()
     {
         await DecomposeAsync(PumpEvent("suspend", "Pump Suspend", Now));
         _clock.SetUtcNow(new DateTimeOffset(Now.AddHours(2)));
@@ -333,11 +335,12 @@ public class TreatmentDecomposerPumpSuspensionStoreTests : IDisposable
 
     /// <summary>
     /// A pump an hour fast suspends, and a resume of that pump half an hour older arrives three hours late.
-    /// Dated after the suspension arrived, it cannot be told from a lagged newest resume, so it overtakes the
-    /// suspension, which ends at its own start.
+    /// Dated after the suspension arrived, it cannot be told from a lagged newest resume, since a treatment
+    /// gives no order (<see cref="PumpModeSpanClock"/>), so it overtakes the suspension, which ends at its own
+    /// start.
     /// </summary>
     [Fact]
-    public async Task AFastPump_AResumeArrivingLate_DatedAfterTheSuspensionArrived_EndsItAtItsOwnStart()
+    public async Task AFastPump_AResumeArrivingLate_DatedAfterTheSuspensionArrived_WithNoOrder_EndsItAtItsOwnStart()
     {
         var fast = TimeSpan.FromHours(1);
         await DecomposeAsync(PumpEvent("suspend", "Pump Suspend", Now + fast));
