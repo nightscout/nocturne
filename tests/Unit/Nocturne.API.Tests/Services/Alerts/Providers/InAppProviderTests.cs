@@ -159,6 +159,36 @@ public class InAppProviderTests
     }
 
     [Fact]
+    public async Task SendAsync_PartlyUnevaluableNotice_IsTheUnevaluableTypeWithItsOwnSubtitle_AndIsArchivedAsOne()
+    {
+        string? type = null, title = null, subtitle = null;
+        List<NotificationActionDto>? actions = null;
+        _notification
+            .Setup(n => n.CreateNotificationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string, string, NotificationCategory?, NotificationUrgency?, string?, string?, string?, string?,
+                List<NotificationActionDto>?, ResolutionConditions?, Dictionary<string, object>?, CancellationToken>(
+                (_, t, ti, _, _, _, _, s, _, a, _, _, _) =>
+                {
+                    (type, title, subtitle, actions) = (t, ti, s, a);
+                })
+            .ReturnsAsync(new InAppNotificationDto());
+        var payload = MakePayload(AlertRuleSeverity.Info) with { Kind = AlertPayloadKind.PartlyUnevaluable };
+
+        await _sut.SendAsync(Recipient, payload, CancellationToken.None);
+
+        (type, title, subtitle).Should().Be(
+            (InAppProvider.UnevaluableNotificationType, payload.RuleName, InAppProvider.PartlyUnevaluableSubtitle));
+        actions.Should().BeNullOrEmpty("there is no excursion to acknowledge");
+        InAppProvider.NotificationTypeFor(new ExcursionRuleSnapshot(Guid.NewGuid(), payload.RuleName, IsUnevaluableNotice: true))
+            .Should().Be(type, "resolving the notice archives the notifications of the type it created");
+    }
+
+    [Fact]
     public async Task SendAsync_ReportsTheRecipientReached()
     {
         (await _sut.SendAsync(Recipient, MakePayload(), CancellationToken.None)).Should().BeTrue();

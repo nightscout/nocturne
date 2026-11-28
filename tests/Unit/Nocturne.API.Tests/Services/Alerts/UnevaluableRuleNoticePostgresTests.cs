@@ -37,7 +37,17 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
     private const string OtherBroken = """{"schema_version": 2, "threshold": 55, "direction": "below"}""";
     private const string Valid = """{"schema_version": 2, "operator": "<", "value": 54}""";
 
+    private const string SchemaOneAutoResolve = """{"type": "threshold", "threshold": {"direction": "above", "value": 80}}""";
+    private const string OtherSchemaOneAutoResolve = """{"type": "threshold", "threshold": {"direction": "above", "value": 90}}""";
+    private const string ValidAutoResolve = """{"schema_version": 2, "type": "threshold", "threshold": {"operator": ">", "value": 80}}""";
+    private const string SchemaOneSnooze =
+        """{"audio": {"enabled": true}, "snooze": {"smartSnooze": true, "conditions": [{"type": "trend", "trend": {"bucket": "rising"}}]}}""";
+    private const string SchemaOneSnoozeSilenced =
+        """{"audio": {"enabled": false}, "snooze": {"smartSnooze": true, "conditions": [{"type": "trend", "trend": {"bucket": "rising"}}]}}""";
+
     private static readonly RustValidationIssue BodyIssue = new("condition", "threshold", "field_missing", "value");
+    private static readonly RustValidationIssue AutoResolveIssue = new("auto_resolve", "auto_resolve", "unsupported_schema", "schema_version");
+    private static readonly RustValidationIssue SnoozeIssue = new("snooze", "snooze[0]", "unsupported_schema", "schema_version");
 
     public sealed class Database() : MigratedDatabase("unevaluable_rule_notice");
 
@@ -60,6 +70,8 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
                 await using var db = await contexts.CreateAsync(ct);
                 var stored = await db.AlertRules.SingleAsync(r => r.Id == rule.Id, ct);
                 (stored.ConditionType, stored.ConditionParams) = (rule.ConditionType, rule.ConditionParams);
+                (stored.AutoResolveEnabled, stored.AutoResolveParams, stored.ClientConfiguration) =
+                    (rule.AutoResolveEnabled, rule.AutoResolveParams, rule.ClientConfiguration);
                 await db.SaveChangesAsync(ct);
             }
             return await base.RecordUnevaluableNoticeAsync(rule, conditionVersion, at, ct);
@@ -119,6 +131,18 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
                     It.IsAny<string?>(), It.IsAny<string?>()))
                 .Returns([BodyIssue]);
 
+        public void AutoResolveCannotBeEvaluated(string autoResolve) =>
+            Validator
+                .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), true,
+                    autoResolve, It.IsAny<string?>()))
+                .Returns([AutoResolveIssue]);
+
+        public void SnoozeCannotBeEvaluated(string clientConfiguration) =>
+            Validator
+                .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(),
+                    It.IsAny<string?>(), clientConfiguration))
+                .Returns([SnoozeIssue]);
+
         public async Task ResolveInstancesAsync(ExcursionTransition transition, CancellationToken ct)
         {
             await using var db = Context();
@@ -155,6 +179,9 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
             new(id ?? RuleId, Tenant, "Urgent Low", AlertConditionType.Threshold, body,
                 severity, "{}", 0, false, null);
 
+        public AlertRuleSnapshot AutoResolving(string body, string autoResolve) =>
+            Rule(body) with { AutoResolveEnabled = true, AutoResolveParams = autoResolve };
+
         public UnevaluableRuleNotice Process(ConditionVersionLog? log = null, AlertRepository? repository = null)
         {
             var tenant = SettableTenantAccessor.Resolved(Tenant);
@@ -184,6 +211,15 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
                     It.IsAny<Guid>(),
                     It.Is<IReadOnlyList<AlertRuleChannelSnapshot>>(c => c.Single().AlertRuleId == (ruleId ?? RuleId)),
                     It.Is<AlertPayload>(p => p.Kind == AlertPayloadKind.Unevaluable && p.GlucoseValue == null),
+                    It.IsAny<CancellationToken>()),
+                times, because);
+
+        public void VerifySentPartly(Times times, string because = "") =>
+            Delivery.Verify(d => d.DispatchAsync(
+                    It.IsAny<Guid>(),
+                    It.Is<IReadOnlyList<AlertRuleChannelSnapshot>>(c => c.Single().AlertRuleId == RuleId),
+                    It.Is<AlertPayload>(p => p.Kind == AlertPayloadKind.PartlyUnevaluable && p.GlucoseValue == null
+                                             && p.RuleName == "Urgent Low"),
                     It.IsAny<CancellationToken>()),
                 times, because);
 
@@ -341,6 +377,151 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
     }
 
     [Fact]
+    public async Task A_rule_whose_auto_resolve_cannot_be_evaluated_is_told_once_that_part_of_it_cannot_run()
+    {
+        var run = await SeedAsync();
+        run.AutoResolveCannotBeEvaluated(SchemaOneAutoResolve);
+        var process = run.Process();
+
+        await process.CheckAsync(Enabled(run.AutoResolving(Valid, SchemaOneAutoResolve)), CancellationToken.None);
+        await process.CheckAsync(Enabled(run.AutoResolving(Valid, SchemaOneAutoResolve)), CancellationToken.None);
+        await run.Process().CheckAsync(Enabled(run.AutoResolving(Valid, SchemaOneAutoResolve)), CancellationToken.None);
+
+        run.VerifySentPartly(Times.Once());
+        run.VerifySent(Times.Never(), because: "the rule still fires, so it is not told that it cannot");
+        (await run.StandingAsync()).Should().ContainSingle();
+        (await run.ExcursionsAsync()).Should().ContainSingle(e => e.AlertRuleId == run.RuleId)
+            .Which.UnevaluableConditionVersion.Should().Be(
+                UnevaluableRuleNotice.PartsVersionOf(run.AutoResolving(Valid, SchemaOneAutoResolve), [AutoResolveIssue]));
+    }
+
+    [Fact]
+    public async Task An_edit_that_fixes_only_the_auto_resolve_resolves_its_notice()
+    {
+        var run = await SeedAsync();
+        run.AutoResolveCannotBeEvaluated(SchemaOneAutoResolve);
+        var process = run.Process();
+        await process.CheckAsync(Enabled(run.AutoResolving(Valid, SchemaOneAutoResolve)), CancellationToken.None);
+        var notice = (await run.StandingAsync()).Single();
+
+        await process.CheckAsync(Enabled(run.AutoResolving(Valid, ValidAutoResolve)), CancellationToken.None);
+
+        run.VerifyResolved(notice, ExcursionCloseReason.Manual);
+        (await run.StandingAsync()).Should().BeEmpty("the same process sees the edit, though the body did not change");
+        run.VerifySentPartly(Times.Once());
+    }
+
+    [Fact]
+    public async Task An_edit_to_the_body_alone_does_not_send_it_again_and_another_broken_auto_resolve_does()
+    {
+        var run = await SeedAsync();
+        run.AutoResolveCannotBeEvaluated(SchemaOneAutoResolve);
+        run.AutoResolveCannotBeEvaluated(OtherSchemaOneAutoResolve);
+        const string otherValid = """{"schema_version": 2, "operator": "<", "value": 60}""";
+        var process = run.Process();
+
+        await process.CheckAsync(Enabled(run.AutoResolving(Valid, SchemaOneAutoResolve)), CancellationToken.None);
+        await process.CheckAsync(Enabled(run.AutoResolving(otherValid, SchemaOneAutoResolve)), CancellationToken.None);
+        run.VerifySentPartly(Times.Once());
+
+        await process.CheckAsync(Enabled(run.AutoResolving(otherValid, OtherSchemaOneAutoResolve)), CancellationToken.None);
+        run.VerifySentPartly(Times.Exactly(2));
+        (await run.StandingAsync()).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task A_body_that_cannot_be_evaluated_either_is_told_only_that_the_rule_cannot_run()
+    {
+        var run = await SeedAsync();
+        run.AutoResolveCannotBeEvaluated(SchemaOneAutoResolve);
+        var process = run.Process();
+        await process.CheckAsync(Enabled(run.AutoResolving(Valid, SchemaOneAutoResolve)), CancellationToken.None);
+        var partly = (await run.StandingAsync()).Single();
+        run.Validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), Broken, true, SchemaOneAutoResolve, It.IsAny<string?>()))
+            .Returns([BodyIssue, AutoResolveIssue]);
+
+        await process.CheckAsync(Enabled(run.AutoResolving(Broken, SchemaOneAutoResolve)), CancellationToken.None);
+
+        run.VerifyResolved(partly, ExcursionCloseReason.Manual);
+        run.VerifySent(Times.Once());
+        run.VerifySentPartly(Times.Once());
+        (await run.StandingAsync()).Should().ContainSingle().Which.Should().NotBe(partly);
+    }
+
+    [Fact]
+    public async Task Fixing_one_of_two_broken_trees_leaves_the_notice_standing_for_the_other()
+    {
+        var run = await SeedAsync();
+        run.AutoResolveCannotBeEvaluated(SchemaOneAutoResolve);
+        run.Validator
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), Valid, true, SchemaOneAutoResolve, SchemaOneSnooze))
+            .Returns([AutoResolveIssue, SnoozeIssue]);
+        var process = run.Process();
+        var both = run.AutoResolving(Valid, SchemaOneAutoResolve) with { ClientConfiguration = SchemaOneSnooze };
+        await process.CheckAsync(Enabled(both), CancellationToken.None);
+        var notice = (await run.StandingAsync()).Single();
+
+        await process.CheckAsync(Enabled(both with { ClientConfiguration = "{}" }), CancellationToken.None);
+
+        (await run.StandingAsync()).Should().Equal(notice);
+        run.VerifySentPartly(Times.Once());
+        run.Resolution.Verify(h => h.HandleClosedAsync(It.IsAny<ExcursionTransition>(), run.Tenant, It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task The_partly_notice_of_an_urgent_rule_that_pierces_do_not_disturb_is_sent_as_info()
+    {
+        var run = await SeedAsync();
+        run.AutoResolveCannotBeEvaluated(SchemaOneAutoResolve);
+        var urgent = run.AutoResolving(Valid, SchemaOneAutoResolve) with
+        {
+            Severity = AlertRuleSeverity.Critical,
+            AllowThroughDnd = true,
+        };
+
+        await run.Process().CheckAsync(Enabled(urgent), CancellationToken.None);
+
+        run.Delivery.Verify(d => d.DispatchAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AlertRuleChannelSnapshot>>(),
+            It.Is<AlertPayload>(p => p.Kind == AlertPayloadKind.PartlyUnevaluable && p.Severity == AlertRuleSeverity.Info),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Do_not_disturb_silences_the_partly_notice_of_an_urgent_rule_that_pierces_it()
+    {
+        var run = await SeedAsync();
+        run.AutoResolveCannotBeEvaluated(SchemaOneAutoResolve);
+        run.Dnd = new HashSet<DndScope> { DndScope.All };
+        var urgent = run.AutoResolving(Valid, SchemaOneAutoResolve) with
+        {
+            Severity = AlertRuleSeverity.Critical,
+            AllowThroughDnd = true,
+        };
+
+        await run.Process().CheckAsync(Enabled(urgent), CancellationToken.None);
+
+        run.Delivery.VerifyNoOtherCalls();
+        (await run.InstancesAsync()).Should().ContainSingle().Which.SuppressionReason.Should().Be("dnd:all");
+    }
+
+    [Fact]
+    public async Task A_rule_whose_smart_snooze_cannot_be_evaluated_is_told_once_whatever_else_its_configuration_holds()
+    {
+        var run = await SeedAsync();
+        run.SnoozeCannotBeEvaluated(SchemaOneSnooze);
+        run.SnoozeCannotBeEvaluated(SchemaOneSnoozeSilenced);
+        var process = run.Process();
+
+        await process.CheckAsync(Enabled(run.Rule(Valid) with { ClientConfiguration = SchemaOneSnooze }), CancellationToken.None);
+        await process.CheckAsync(Enabled(run.Rule(Valid) with { ClientConfiguration = SchemaOneSnoozeSilenced }), CancellationToken.None);
+
+        run.VerifySentPartly(Times.Once(), "only the snooze conditions are its version");
+        (await run.StandingAsync()).Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task Retiring_the_rule_by_disabling_or_deleting_it_resolves_it()
     {
         var run = await SeedAsync();
@@ -482,7 +663,7 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
     [Theory]
     [InlineData("auto_resolve")]
     [InlineData("snooze")]
-    public async Task A_tree_other_than_the_body_that_cannot_be_evaluated_sends_nothing(string scope)
+    public async Task A_tree_other_than_the_body_that_cannot_be_evaluated_sends_only_the_notice_that_part_of_the_rule_cannot_run(string scope)
     {
         var run = await SeedAsync();
         run.Validator
@@ -492,8 +673,9 @@ public sealed class UnevaluableRuleNoticePostgresTests(UnevaluableRuleNoticePost
 
         await run.Process().CheckAsync(Enabled(run.Rule(Valid)), CancellationToken.None);
 
-        run.Delivery.VerifyNoOtherCalls();
-        (await run.ExcursionsAsync()).Should().BeEmpty();
+        run.VerifySent(Times.Never(), because: "the rule still fires");
+        run.VerifySentPartly(Times.Once());
+        (await run.ExcursionsAsync()).Should().ContainSingle();
     }
 
     [Fact]

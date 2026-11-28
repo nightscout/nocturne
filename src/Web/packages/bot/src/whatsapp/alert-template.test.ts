@@ -62,7 +62,7 @@ describe("alertTemplateMessage", () => {
     expect(name.endsWith("…")).toBe(true);
   });
 
-  it.each([AlertPayloadKind.Unevaluable, AlertPayloadKind.Held, AlertPayloadKind.HeldClosed])(
+  it.each([AlertPayloadKind.Unevaluable, AlertPayloadKind.PartlyUnevaluable, AlertPayloadKind.Held, AlertPayloadKind.HeldClosed])(
     "has no template for a %s notice, which has no reading to state or alert to acknowledge",
     (kind) => {
       expect(alertTemplateMessage(TEMPLATE, payload({ kind }))).toBeNull();

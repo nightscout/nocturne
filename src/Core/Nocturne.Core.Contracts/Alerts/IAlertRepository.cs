@@ -224,7 +224,8 @@ public interface IAlertRepository
 
     /// <summary>
     /// Records a notice that version <paramref name="conditionVersion"/> of
-    /// <paramref name="rule"/>'s condition cannot be evaluated, unless one already stands for
+    /// <paramref name="rule"/>'s condition, or of its auto-resolve and snooze trees, cannot be
+    /// evaluated, unless one already stands for
     /// that version: an excursion row carrying the version, with no end until it is resolved, and
     /// one instance, unresolved while the notice stands. Serialised per rule across processes, so
     /// one version records one notice however many callers find it at once.
@@ -232,7 +233,8 @@ public interface IAlertRepository
     /// <returns>
     /// The notice standing for the version, new or not, and whether it was dispatched (its
     /// opening owes no work, and it has a delivery row or Do Not Disturb suppressed it); null when
-    /// the rule is not enabled, or its stored condition is no longer the one in <paramref name="rule"/>.
+    /// the rule is not enabled, or its stored body, auto-resolve tree or client configuration is no
+    /// longer the one in <paramref name="rule"/>.
     /// </returns>
     Task<NoticeRecorded?> RecordUnevaluableNoticeAsync(
         AlertRuleSnapshot rule, string conditionVersion, DateTime at, CancellationToken ct);

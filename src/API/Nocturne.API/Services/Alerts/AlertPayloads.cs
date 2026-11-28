@@ -32,8 +32,9 @@ internal static class AlertPayloads
     };
 
     /// <summary>
-    /// The notice that a rule cannot be evaluated: no glucose value or trend. The condition type is
-    /// null for a rule whose stored one is not a member.
+    /// The notice that a rule cannot be evaluated, or with <paramref name="kind"/>
+    /// <see cref="AlertPayloadKind.PartlyUnevaluable"/> that part of it cannot: no glucose value or
+    /// trend. The condition type is null for a rule whose stored one is not a member.
     /// </summary>
     public static AlertPayload Unevaluable(
         string ruleName,
@@ -44,9 +45,10 @@ internal static class AlertPayloads
         Guid instanceId,
         TenantAlertContext? tenant,
         int activeExcursionCount,
-        DateTime now) => new()
+        DateTime now,
+        AlertPayloadKind kind = AlertPayloadKind.Unevaluable) => new()
     {
-        Kind = AlertPayloadKind.Unevaluable,
+        Kind = kind,
         AlertType = conditionType,
         RuleName = ruleName,
         GlucoseValue = null,

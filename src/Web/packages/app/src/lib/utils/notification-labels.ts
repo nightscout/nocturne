@@ -16,6 +16,8 @@ const LABEL_MAP: Record<string, string> = {
   open_alerts: "Open alerts",
   alert_unevaluable_subtitle:
     "This rule cannot run as set, so it sends no alerts. Open the rule, check its settings, and save it.",
+  alert_partly_unevaluable_subtitle:
+    "This rule sends alerts, but its auto-resolve or smart snooze conditions cannot run as set. Open the rule, check its settings, and save it.",
   alert_held_subtitle:
     "This rule has waited 24 hours for usable data, so it cannot send alerts until usable data comes back. Open the rule to see the cause.",
   alert_held_closed_subtitle:

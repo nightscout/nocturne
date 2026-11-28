@@ -66,8 +66,9 @@ describe("the app's and the bot's alert text", () => {
     }
   });
 
-  it("gives the same text for a rule that cannot run and a rule that is held", () => {
+  it("gives the same text for a rule that cannot run, partly cannot run, or is held", () => {
     expect(CARD_TEXT.unevaluable).toBe(resolveNotificationLabel("alert_unevaluable_subtitle"));
+    expect(CARD_TEXT.partlyUnevaluable).toBe(resolveNotificationLabel("alert_partly_unevaluable_subtitle"));
     expect(CARD_TEXT.held + ALLOWED_DIFFERENCES.heldSubtitleSuffix).toBe(
       resolveNotificationLabel("alert_held_subtitle"),
     );
