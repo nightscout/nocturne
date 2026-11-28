@@ -6,6 +6,7 @@
   import { cn } from "#lib/utils/index.js";
   import { relativeAge } from "#lib/utils/formatting.js";
   import {
+    InAppNotificationType,
     type InAppNotificationDto,
     NotificationUrgency,
   } from "@nocturne/api-client";
@@ -25,7 +26,7 @@
   // An alert's ack action mutes it for this member only unless they hold
   // alerts.readwrite, so it is labelled for what the server will do.
   const mutesOnly = $derived(
-    notification.type === "alert.firing" &&
+    notification.type === InAppNotificationType.AlertFiring &&
       !satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite")
   );
 
@@ -65,7 +66,7 @@
   const Icon = $derived(resolveNotificationIcon(notification.icon, notification.category));
   const urgencyClasses = $derived(getUrgencyClasses(notification.urgency));
   const isRead = $derived(notification.readAt != null);
-  const channelNotice = $derived(notification.type === "alerts.channelNotSending");
+  const channelNotice = $derived(notification.type === InAppNotificationType.AlertChannelNotSending);
   const noticeRuleId = $derived(notification.metadata?.["alertRuleId"]?.toString());
   const subtitle = $derived(
     (channelNotice ? channelNoticeSubtitle(notification.metadata) : null) ??
@@ -74,15 +75,15 @@
   const releaseVersion = $derived(notification.metadata?.["Version"]?.toString());
   const renamedFrom = $derived(notification.metadata?.["oldName"]?.toString());
   const renamedTo = $derived(notification.metadata?.["newName"]?.toString());
-  const staffWaiting = $derived(notification.type === "team.staff_waiting");
-  const staffJoined = $derived(notification.type === "team.staff_joined");
+  const staffWaiting = $derived(notification.type === InAppNotificationType.TeamStaffWaiting);
+  const staffJoined = $derived(notification.type === InAppNotificationType.TeamStaffJoined);
   const staffTeam = $derived(notification.metadata?.["team"]?.toString());
   const staffTeamId = $derived(notification.metadata?.["teamId"]?.toString());
   const staffCount = $derived(Number(notification.metadata?.["count"]) || 0);
   // A notice from outside Nocturne: its title and body are the sender's own plain text, shown
   // as written, under the sender's name.
   const external = $derived(
-    notification.type === "external.operator" || notification.type === "external.app"
+    notification.type === InAppNotificationType.ExternalOperator || notification.type === InAppNotificationType.ExternalApp
   );
   const senderName = $derived(notification.metadata?.["senderName"]?.toString());
   const linkUrl = $derived.by(() => {
@@ -113,11 +114,11 @@
       <span class={cn("text-sm truncate", isRead ? "font-normal" : "font-semibold")}>
         {#if external}
           {notification.title}
-        {:else if notification.type === "system.update_available" && releaseVersion}
+        {:else if notification.type === InAppNotificationType.SystemUpdateAvailable && releaseVersion}
           Nocturne {releaseVersion} is available
-        {:else if notification.type === "system.release_installed" && releaseVersion}
+        {:else if notification.type === InAppNotificationType.SystemReleaseInstalled && releaseVersion}
           Nocturne is now on version {releaseVersion}
-        {:else if notification.type === "team.renamed" && renamedFrom && renamedTo}
+        {:else if notification.type === InAppNotificationType.TeamRenamed && renamedFrom && renamedTo}
           The team {renamedFrom} is now named {renamedTo}.
         {:else}
           {resolveNotificationLabel(notification.title) || "Notification"}
@@ -130,7 +131,7 @@
     {#if external}
       {#if senderName}
         <p class="text-xs mt-0.5 opacity-75">
-          {#if notification.type === "external.app"}
+          {#if notification.type === InAppNotificationType.ExternalApp}
             From {senderName} · connected app
           {:else}
             From {senderName}
@@ -140,7 +141,7 @@
       {#if notification.subtitle}
         <p class="text-xs mt-0.5 whitespace-pre-line break-words">{notification.subtitle}</p>
       {/if}
-    {:else if notification.type === "system.update_available"}
+    {:else if notification.type === InAppNotificationType.SystemUpdateAvailable}
       <p class="text-xs mt-0.5 opacity-75">
         <InstallTiming
           mode={notification.metadata?.["AutoUpdateMode"]?.toString()}
@@ -148,13 +149,13 @@
           checkIntervalSeconds={Number(notification.metadata?.["CheckIntervalSeconds"]) || null}
         />
       </p>
-    {:else if notification.type === "system.release_installed"}
+    {:else if notification.type === InAppNotificationType.SystemReleaseInstalled}
       <p class="text-xs mt-0.5 opacity-75">See what changed in this version.</p>
-    {:else if notification.type === "system.instance_key_changed" || notification.type === "system.instance_key_changed_platform"}
+    {:else if notification.type === InAppNotificationType.SystemInstanceKeyChanged || notification.type === InAppNotificationType.SystemInstanceKeyChangedPlatform}
       <div class="text-xs mt-0.5 opacity-75 space-y-0.5">
         <InstanceKeyChanged
           metadata={notification.metadata}
-          platform={notification.type === "system.instance_key_changed_platform"}
+          platform={notification.type === InAppNotificationType.SystemInstanceKeyChangedPlatform}
         />
       </div>
     {:else if staffWaiting && staffTeam && staffCount === 1}

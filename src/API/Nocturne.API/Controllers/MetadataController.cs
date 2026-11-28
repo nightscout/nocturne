@@ -228,6 +228,28 @@ public class MetadataController : ControllerBase
             }
         );
     }
+
+    /// <summary>
+    /// Get the notification label keys and in-app notification types metadata
+    /// This endpoint ensures NSwag generates TypeScript enums for NotificationLabel and
+    /// InAppNotificationType, which the web app's label map and notification components are checked against
+    /// </summary>
+    /// <returns>Notification labels metadata</returns>
+    [HttpGet("notification-labels")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(NotificationLabelsMetadata), 200)]
+    public ActionResult<NotificationLabelsMetadata> GetNotificationLabels()
+    {
+        return Ok(
+            new NotificationLabelsMetadata
+            {
+                AvailableLabels = Enum.GetValues<NotificationLabel>(),
+                Types = Enum.GetValues<InAppNotificationType>(),
+                Description = "Keys the backend files as a notification's title, subtitle or action label, and the types of notification the web app tells apart",
+            }
+        );
+    }
 }
 
 /// <summary>
@@ -347,6 +369,27 @@ public class PermissionAtomsMetadata
 
     /// <summary>
     /// Description of the permission atoms
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Metadata about notification labels for NSwag generation
+/// </summary>
+public class NotificationLabelsMetadata
+{
+    /// <summary>
+    /// Array of every key the backend files as a notification's title, subtitle or action label
+    /// </summary>
+    public NotificationLabel[] AvailableLabels { get; set; } = [];
+
+    /// <summary>
+    /// Array of the in-app notification types the web app tells apart
+    /// </summary>
+    public InAppNotificationType[] Types { get; set; } = [];
+
+    /// <summary>
+    /// Description of the notification labels
     /// </summary>
     public string Description { get; set; } = string.Empty;
 }

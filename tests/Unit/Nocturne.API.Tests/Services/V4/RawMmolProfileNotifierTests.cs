@@ -86,7 +86,7 @@ public class RawMmolProfileNotifierTests : IDisposable
         _log.Entries.Where(e => e.Level == LogLevel.Error).Select(e => $"{e.Message}: {e.Exception}");
 
     private List<InAppNotificationEntity> Filed() =>
-        _db.InAppNotifications.Where(n => n.Type == RawMmolProfileNotifier.NotificationType).ToList();
+        _db.InAppNotifications.Where(n => n.Type == InAppNotificationType.ProfileRawMmolValues.ToWireString()).ToList();
 
     [Fact]
     public async Task ListedSchedules_FileOneNotificationToTheOwner_LinkingToTheProfilePage()
@@ -135,7 +135,7 @@ public class RawMmolProfileNotifierTests : IDisposable
         await _notifier.NotifyAllAsync();
 
         _db.InAppNotifications.IgnoreQueryFilters()
-            .Where(n => n.Type == RawMmolProfileNotifier.NotificationType)
+            .Where(n => n.Type == InAppNotificationType.ProfileRawMmolValues.ToWireString())
             .Select(n => n.SourceId).ToList().Should().BeEquivalentTo(TenantId.ToString(), OtherTenantId.ToString());
     }
 

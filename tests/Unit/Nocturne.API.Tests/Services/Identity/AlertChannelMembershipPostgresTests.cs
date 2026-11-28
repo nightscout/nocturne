@@ -360,7 +360,7 @@ public class AlertChannelMembershipPostgresTests(AlertChannelMembershipPostgresT
         var notifications = new Mock<Nocturne.Core.Contracts.Notifications.IInAppNotificationService>();
         notifications.Setup(n => n.GetActiveNotificationsAsync(owner, It.IsAny<CancellationToken>())).ReturnsAsync([]);
         notifications.Setup(n => n.CreateNotificationUnlessActiveAsync(
-                owner, NotificationSubjectNaming.AlertChannelNotSending, It.IsAny<string>(), It.IsAny<string>(),
+                owner, InAppNotificationType.AlertChannelNotSending.ToWireString(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<Nocturne.Core.Models.NotificationCategory?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
             .Callback((string _, string _, string _, string sourceId, Nocturne.Core.Models.NotificationCategory? _, string? _,

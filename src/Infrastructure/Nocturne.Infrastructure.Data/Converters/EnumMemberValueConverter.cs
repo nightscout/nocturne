@@ -1,13 +1,13 @@
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.Serialization;
+using Nocturne.Core.Models;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Nocturne.Infrastructure.Data.Converters;
 
 /// <summary>
 /// EF Core value converter that maps enum values to/from their
-/// <see cref="EnumMemberAttribute.Value"/> strings. Falls back to
+/// <see cref="System.Runtime.Serialization.EnumMemberAttribute.Value"/> strings. Falls back to
 /// <c>ToString()</c> if the attribute is missing.
 /// </summary>
 /// <param name="tolerant">
@@ -27,20 +27,7 @@ internal sealed class EnumMemberValueConverter<TEnum>(bool tolerant = false)
     /// </summary>
     public static readonly TEnum Unreadable = (TEnum)Enum.ToObject(typeof(TEnum), -1);
 
-    private static readonly Dictionary<TEnum, string> ToStringMap = BuildToStringMap();
     private static readonly Dictionary<string, TEnum> FromStringMap = BuildFromStringMap();
-
-    private static Dictionary<TEnum, string> BuildToStringMap()
-    {
-        var map = new Dictionary<TEnum, string>();
-        foreach (var field in typeof(TEnum).GetFields(BindingFlags.Public | BindingFlags.Static))
-        {
-            var value = (TEnum)field.GetValue(null)!;
-            var attr = field.GetCustomAttribute<EnumMemberAttribute>();
-            map[value] = attr?.Value ?? value.ToString();
-        }
-        return map;
-    }
 
     private static Dictionary<string, TEnum> BuildFromStringMap()
     {
@@ -48,22 +35,13 @@ internal sealed class EnumMemberValueConverter<TEnum>(bool tolerant = false)
         foreach (var field in typeof(TEnum).GetFields(BindingFlags.Public | BindingFlags.Static))
         {
             var value = (TEnum)field.GetValue(null)!;
-            // Add both the member name and the EnumMember value so lookups
-            // succeed even when attribute reflection fails at runtime.
             map.TryAdd(field.Name, value);
-            var attr = field.GetCustomAttribute<EnumMemberAttribute>();
-            if (attr?.Value is { } attrValue)
-                map.TryAdd(attrValue, value);
+            map.TryAdd(EnumWireNames<TEnum>.Of(value), value);
         }
-        // Also include whatever ToStringMap resolved (covers edge cases where
-        // ToStringMap and FromStringMap disagree about attribute availability).
-        foreach (var kv in ToStringMap)
-            map.TryAdd(kv.Value, kv.Key);
         return map;
     }
 
-    private static string ToProvider(TEnum value) =>
-        ToStringMap.TryGetValue(value, out var s) ? s : value.ToString();
+    private static string ToProvider(TEnum value) => EnumWireNames<TEnum>.Of(value);
 
     public bool IsUnreadable(object? value) => tolerant && value is TEnum e && !Enum.IsDefined(e);
 

@@ -101,7 +101,7 @@ public partial class TeamAccessEndPostgresTests
         (await ReasonAsync(site, waiting, access)).Should().BeNull();
         (await StatusAsync(access, holding), await StatusAsync(access, first), await StatusAsync(access, waiting))
             .Should().Be((TeamSiteStaffStatus.Approved, TeamSiteStaffStatus.Approved, TeamSiteStaffStatus.Pending));
-        LiveFor(site.Owner, TeamStaffAnnouncer.JoinedType).Should().ContainSingle().Which.Source.Should().Be(team.Id.ToString());
+        LiveFor(site.Owner, InAppNotificationType.TeamStaffJoined.ToWireString()).Should().ContainSingle().Which.Source.Should().Be(team.Id.ToString());
         CountOf(Waiting(site.Owner)).Should().Be(1);
     }
 

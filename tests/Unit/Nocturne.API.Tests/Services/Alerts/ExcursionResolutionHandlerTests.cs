@@ -162,7 +162,7 @@ public class ExcursionResolutionHandlerTests
     }
 
     [Fact]
-    public async Task HandleClosed_RuleLookupFailure_ArchivesBothKindsOfInAppNotification()
+    public async Task HandleClosed_RuleLookupFailure_ArchivesEveryAlertKindOfInAppNotificationAndNoOther()
     {
         _repository.Setup(r => r.GetInstancesForExcursionAsync(_excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
@@ -176,12 +176,16 @@ public class ExcursionResolutionHandlerTests
             _tenantId,
             CancellationToken.None);
 
-        foreach (var type in new[] { "alert.firing", "alert.unevaluable" })
+        string[] alertTypes = ["alert.firing", "alert.unevaluable", "alert.held"];
+        foreach (var type in alertTypes)
         {
             _notification.Verify(n => n.ArchiveBySourceAsync(
                 "member", type, _excursionId.ToString(), NotificationArchiveReason.ConditionMet,
                 It.IsAny<CancellationToken>()), Times.Once, "a notice's notification is cleared even when its rule cannot be read");
         }
+        _notification.Verify(n => n.ArchiveBySourceAsync(
+            It.IsAny<string>(), It.Is<string>(type => !alertTypes.Contains(type)), It.IsAny<string>(),
+            It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -268,13 +272,13 @@ public class ExcursionResolutionHandlerTests
 
         _notification.Verify(n => n.ArchiveBySourceAsync(
             "user-a",
-            Nocturne.API.Services.Alerts.Providers.InAppProvider.NotificationType,
+            InAppNotificationType.AlertFiring.ToWireString(),
             _excursionId.ToString(),
             NotificationArchiveReason.ConditionMet,
             It.IsAny<CancellationToken>()), Times.Once);
         _notification.Verify(n => n.ArchiveBySourceAsync(
             "user-b",
-            Nocturne.API.Services.Alerts.Providers.InAppProvider.NotificationType,
+            InAppNotificationType.AlertFiring.ToWireString(),
             _excursionId.ToString(),
             NotificationArchiveReason.ConditionMet,
             It.IsAny<CancellationToken>()), Times.Once);

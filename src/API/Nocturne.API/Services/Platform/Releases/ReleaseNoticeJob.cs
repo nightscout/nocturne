@@ -40,10 +40,6 @@ public class ReleaseNoticeJob(
 
     public const string Source = "release-check";
 
-    public const string UpdateAvailableType = "system.update_available";
-
-    public const string ReleaseInstalledType = "system.release_installed";
-
     public const string ReleaseNotesActionId = "release_notes";
 
     public const string AvailableKind = "available";
@@ -67,11 +63,11 @@ public class ReleaseNoticeJob(
         if (!status.IsReleaseBuild)
             return;
 
-        var notices = new List<(string Kind, string Type, string Version)>();
+        var notices = new List<(string Kind, InAppNotificationType Type, string Version)>();
         if (status.Current is { } current)
-            notices.Add((InstalledKind, ReleaseInstalledType, current.Version));
+            notices.Add((InstalledKind, InAppNotificationType.SystemReleaseInstalled, current.Version));
         if (status.Latest is { } latest)
-            notices.Add((AvailableKind, UpdateAvailableType, latest.Version));
+            notices.Add((AvailableKind, InAppNotificationType.SystemUpdateAvailable, latest.Version));
         if (notices.Count == 0)
             return;
 
@@ -90,7 +86,7 @@ public class ReleaseNoticeJob(
 
     private async Task NotifyOwnersAsync(
         ActiveTenant tenant,
-        IReadOnlyList<(string Kind, string Type, string Version)> notices,
+        IReadOnlyList<(string Kind, InAppNotificationType Type, string Version)> notices,
         AutoUpdateStatusDto autoUpdate,
         CancellationToken cancellationToken)
     {
@@ -116,7 +112,7 @@ public class ReleaseNoticeJob(
                 {
                     await NotifyOwnerAsync(scope.ServiceProvider, owner, type, version, autoUpdate, cancellationToken);
                     logger.LogInformation("Sent the {Type} notice for {Version} to an owner of tenant {TenantId}",
-                        type, version, tenant.Id);
+                        type.ToWireString(), version, tenant.Id);
                 }
                 catch
                 {
@@ -128,7 +124,7 @@ public class ReleaseNoticeJob(
     }
 
     private static async Task NotifyOwnerAsync(
-        IServiceProvider services, string ownerId, string type, string version,
+        IServiceProvider services, string ownerId, InAppNotificationType type, string version,
         AutoUpdateStatusDto autoUpdate, CancellationToken cancellationToken)
     {
         var notifications = services.GetRequiredService<IInAppNotificationService>();
@@ -141,7 +137,7 @@ public class ReleaseNoticeJob(
         }
 
         var metadata = new Dictionary<string, object> { ["Version"] = version };
-        if (type == UpdateAvailableType)
+        if (type == InAppNotificationType.SystemUpdateAvailable)
         {
             metadata["AutoUpdateMode"] = autoUpdate.Mode.ToString();
             if (autoUpdate.NextCheckAt is { } next)
@@ -152,8 +148,8 @@ public class ReleaseNoticeJob(
 
         await notifications.CreateNotificationAsync(
             userId: ownerId,
-            type: type,
-            title: type == UpdateAvailableType ? "update_available" : "release_installed",
+            type: type.ToWireString(),
+            title: (type == InAppNotificationType.SystemUpdateAvailable ? NotificationLabel.UpdateAvailable : NotificationLabel.ReleaseInstalled).ToWireString(),
             sourceId: version,
             metadata: metadata,
             cancellationToken: cancellationToken);
@@ -164,12 +160,13 @@ public class ReleaseNoticeJob(
     /// installed notices and the available notices for versions it has reached, but not one for a
     /// newer release, which still applies.
     /// </summary>
-    internal static bool Supersedes(string type, string version, string olderType, string? olderVersion)
+    internal static bool Supersedes(InAppNotificationType type, string version, string olderType, string? olderVersion)
     {
-        if (type == UpdateAvailableType)
-            return olderType == UpdateAvailableType;
+        var updateAvailable = InAppNotificationType.SystemUpdateAvailable.ToWireString();
+        if (type == InAppNotificationType.SystemUpdateAvailable)
+            return olderType == updateAvailable;
 
-        if (olderType != UpdateAvailableType)
+        if (olderType != updateAvailable)
             return true;
 
         return !ReleaseVersion.TryParse(olderVersion, out var older)

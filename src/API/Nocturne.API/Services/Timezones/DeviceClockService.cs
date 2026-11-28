@@ -344,14 +344,16 @@ public class DeviceClockService : IDeviceClockService
 
             // Title and subtitle are i18n keys resolved by the frontend copy layer
             // (notification-labels.ts); the backend has no copy layer.
-            var titleKey = type == SegmentNotificationType ? "device_clock_deviation" : "declared_zone_changed";
+            var (title, subtitle) = type == SegmentNotificationType
+                ? (NotificationLabel.DeviceClockDeviation, NotificationLabel.DeviceClockDeviationSubtitle)
+                : (NotificationLabel.DeclaredZoneChanged, NotificationLabel.DeclaredZoneChangedSubtitle);
             await _notifications.CreateNotificationAsync(
                 userId: ownerId,
                 type: type,
-                title: titleKey,
+                title: title.ToWireString(),
                 category: NotificationCategory.Informational,
                 source: NotificationSource,
-                subtitle: titleKey + "_subtitle",
+                subtitle: subtitle.ToWireString(),
                 sourceId: sourceId,
                 cancellationToken: cancellationToken);
             return true;

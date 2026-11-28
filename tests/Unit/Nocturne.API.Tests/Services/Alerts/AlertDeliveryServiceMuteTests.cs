@@ -7,6 +7,7 @@ using Nocturne.API.Services.Chat;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -203,7 +204,7 @@ public class AlertDeliveryServiceMuteTests
         NotificationFor(Guid subjectId) =>
         n => n.CreateNotificationAsync(
             subjectId.ToString(),
-            InAppProvider.NotificationType,
+            InAppNotificationType.AlertFiring.ToWireString(),
             It.IsAny<string>(),
             It.IsAny<NotificationCategory?>(),
             It.IsAny<NotificationUrgency?>(),

@@ -12,12 +12,6 @@ namespace Nocturne.Core.Contracts.Treatments;
 public interface IMealMatchingService
 {
     /// <summary>
-    /// Notification type for a suggested match. Registered in <c>BuiltInNotificationTemplates</c>,
-    /// which supplies its category, icon and source.
-    /// </summary>
-    const string SuggestedMatchNotificationType = "meal_matching.suggested_match";
-
-    /// <summary>
     /// Process newly imported food entries and create match notifications.
     /// </summary>
     /// <param name="userId">The user ID for notification delivery.</param>

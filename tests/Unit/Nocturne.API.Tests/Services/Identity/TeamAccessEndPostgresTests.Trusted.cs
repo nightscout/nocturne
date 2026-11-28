@@ -247,19 +247,19 @@ public partial class TeamAccessEndPostgresTests
         (await SetStaffRuleAsync(site, team, TeamStaffRule.TeamDecides)).Should().Be(OwnerDecision.Decided);
         (await SetStaffRuleAsync(site, team, TeamStaffRule.OwnerApproves)).Should().Be(OwnerDecision.Decided);
         await JoinStaffAsync(team, 2);
-        LiveFor(site.Owner, TeamStaffAnnouncer.JoinedType).Should().ContainSingle();
+        LiveFor(site.Owner, InAppNotificationType.TeamStaffJoined.ToWireString()).Should().ContainSingle();
         CountOf(Waiting(site.Owner)).Should().Be(2);
 
         (await SetStaffRuleAsync(site, team, TeamStaffRule.TeamTrusted)).Should().Be(OwnerDecision.Decided);
 
         _notices.Live.Should().BeEmpty();
-        _notices.All.Where(n => n.Type == TeamStaffAnnouncer.JoinedType)
+        _notices.All.Where(n => n.Type == InAppNotificationType.TeamStaffJoined.ToWireString())
             .Should().ContainSingle().Which.Archived.Should().Be(NotificationArchiveReason.ConditionMet);
 
         (await SetStaffRuleAsync(site, team, TeamStaffRule.OwnerApproves)).Should().Be(OwnerDecision.Decided);
 
         CountOf(Waiting(site.Owner)).Should().Be(2);
-        LiveFor(site.Owner, TeamStaffAnnouncer.JoinedType).Should().BeEmpty();
+        LiveFor(site.Owner, InAppNotificationType.TeamStaffJoined.ToWireString()).Should().BeEmpty();
     }
 
     [Fact]

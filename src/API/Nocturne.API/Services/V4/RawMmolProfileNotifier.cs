@@ -15,7 +15,7 @@ namespace Nocturne.API.Services.V4;
 /// migration that leaves them.
 /// </summary>
 /// <remarks>
-/// The detector runs on every start, so a notification of <see cref="NotificationType"/> the owner was
+/// The detector runs on every start, so a notification of <see cref="InAppNotificationType.ProfileRawMmolValues"/> the owner was
 /// ever sent for the tenant, read or archived, stops another. That holds only while archived rows
 /// stay: <see cref="NotificationCleanupJob"/> purges them after 30 days and has no type filter, so
 /// an owner who archived this notification is told again on the first start after that.
@@ -25,9 +25,6 @@ public sealed class RawMmolProfileNotifier(
     ActiveTenantSnapshot activeTenants,
     ILogger<RawMmolProfileNotifier> logger)
 {
-    /// <summary>Notification type for schedules that still hold mmol/L values.</summary>
-    public const string NotificationType = "profile.raw_mmol_values";
-
     private const string AuditEndpoint = "service:raw-mmol-profile-notifier";
 
     /// <summary>Notifies the owner of every active tenant the detector finds schedules for. Never throws.</summary>
@@ -84,17 +81,17 @@ public sealed class RawMmolProfileNotifier(
 
             var sourceId = tenant.Id.ToString();
             if (await provider.GetRequiredService<IInAppNotificationRepository>()
-                    .AnyBySourceAsync(owner, NotificationType, sourceId, cancellationToken))
+                    .AnyBySourceAsync(owner, InAppNotificationType.ProfileRawMmolValues.ToWireString(), sourceId, cancellationToken))
                 return;
 
             // Title, subtitle and action label are i18n keys resolved by notification-labels.ts.
             await provider.GetRequiredService<IInAppNotificationService>().CreateNotificationAsync(
                 userId: owner,
-                type: NotificationType,
-                title: "raw_mmol_profile_values",
-                subtitle: "raw_mmol_profile_values_subtitle",
+                type: InAppNotificationType.ProfileRawMmolValues.ToWireString(),
+                title: NotificationLabel.RawMmolProfileValues.ToWireString(),
+                subtitle: NotificationLabel.RawMmolProfileValuesSubtitle.ToWireString(),
                 sourceId: sourceId,
-                actions: [new NotificationActionDto { ActionId = "review", Label = "review", Icon = "eye", Variant = "default" }],
+                actions: [new NotificationActionDto { ActionId = "review", Label = NotificationLabel.Review.ToWireString(), Icon = "eye", Variant = "default" }],
                 cancellationToken: cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)

@@ -8,6 +8,7 @@ using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
 
@@ -121,7 +122,7 @@ public class NotificationsControllerExecuteActionScopeTests
     public async Task DeviceNotifyOnly_OnAnAlertNotification_Dispatches()
     {
         var id = Guid.CreateVersion7();
-        NotificationIsOfType(id, InAppProvider.NotificationType);
+        NotificationIsOfType(id, InAppNotificationType.AlertFiring.ToWireString());
         ActionSucceeds(id, InAppProvider.AckActionId);
 
         var result = await CreateController(DeviceNotifyOnly)
@@ -149,7 +150,7 @@ public class NotificationsControllerExecuteActionScopeTests
 
     [Theory]
     [InlineData(MealMatchType, "dismiss")]
-    [InlineData(InAppProvider.NotificationType, InAppProvider.AckActionId)]
+    [InlineData("alert.firing", InAppProvider.AckActionId)]
     public async Task AlertsReadWrite_DispatchesEveryNotificationType(string type, string actionId)
     {
         var id = Guid.CreateVersion7();

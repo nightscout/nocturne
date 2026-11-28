@@ -37,7 +37,7 @@ public class MealMatchActionHandler(
     ILogger<MealMatchActionHandler> logger
 ) : INotificationActionHandler
 {
-    public string NotificationType => IMealMatchingService.SuggestedMatchNotificationType;
+    public string NotificationType => InAppNotificationType.MealMatchingSuggestedMatch.ToWireString();
 
     public async Task<NotificationActionResult> HandleAsync(
         Guid notificationId,

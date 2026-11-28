@@ -202,7 +202,7 @@ public class RejectedUploadRecorderTests
         (await _recorder.ClearAsync(ids)).Should().Be(1);
 
         _notifications.Verify(n => n.ArchiveBySourceAsync(
-            "owner", RejectedUploadRecorder.NotificationType, It.IsAny<string>(), NotificationArchiveReason.Completed, It.IsAny<CancellationToken>()),
+            "owner", InAppNotificationType.DataRejectedUploads.ToWireString(), It.IsAny<string>(), NotificationArchiveReason.Completed, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -210,7 +210,7 @@ public class RejectedUploadRecorderTests
 
     private void VerifyNotified(Times times) =>
         _notifications.Verify(n => n.CreateNotificationAsync(
-            "owner", RejectedUploadRecorder.NotificationType, "rejected_uploads", It.IsAny<NotificationCategory?>(),
+            "owner", InAppNotificationType.DataRejectedUploads.ToWireString(), "rejected_uploads", It.IsAny<NotificationCategory?>(),
             It.IsAny<NotificationUrgency?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(), It.IsAny<Dictionary<string, object>?>(),
             It.IsAny<CancellationToken>()),

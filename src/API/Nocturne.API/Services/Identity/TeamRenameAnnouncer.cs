@@ -25,12 +25,7 @@ public sealed partial class TeamRenameAnnouncer(
     TimeProvider time,
     ILogger<TeamRenameAnnouncer> logger)
 {
-    public const string NotificationType = "team.renamed";
-
     public const string Source = "teams";
-
-    /// <summary>The title, a key the web words with <see cref="OldNameKey"/> and <see cref="NewNameKey"/>.</summary>
-    public const string TitleKey = "team_renamed";
 
     /// <summary>The name the approver knew.</summary>
     public const string OldNameKey = "oldName";
@@ -72,12 +67,12 @@ public sealed partial class TeamRenameAnnouncer(
             for (var attempt = 0; attempt < Attempts; attempt++)
             {
                 var live = (await notifications.GetActiveNotificationsAsync(user, CancellationToken.None))
-                    .FirstOrDefault(n => n.Type == NotificationType && n.SourceId == source);
+                    .FirstOrDefault(n => n.Type == InAppNotificationType.TeamRenamed.ToWireString() && n.SourceId == source);
                 var known = live?.Metadata?.GetValueOrDefault(OldNameKey)?.ToString() ?? oldName;
                 if (live is not null)
                 {
                     await notifications.ArchiveBySourceAsync(
-                        user, NotificationType, source,
+                        user, InAppNotificationType.TeamRenamed.ToWireString(), source,
                         known == approver.TeamName ? NotificationArchiveReason.ConditionMet : NotificationArchiveReason.Superseded,
                         CancellationToken.None);
                 }
@@ -86,7 +81,7 @@ public sealed partial class TeamRenameAnnouncer(
                     return;
 
                 if (await notifications.CreateNotificationUnlessActiveAsync(
-                        user, NotificationType, TitleKey, source,
+                        user, InAppNotificationType.TeamRenamed.ToWireString(), NotificationLabel.TeamRenamed.ToWireString(), source,
                         metadata: new Dictionary<string, object> { [OldNameKey] = known, [NewNameKey] = approver.TeamName },
                         cancellationToken: CancellationToken.None))
                     return;

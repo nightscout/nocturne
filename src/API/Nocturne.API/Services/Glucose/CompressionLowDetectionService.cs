@@ -35,8 +35,6 @@ public class CompressionLowDetectionService
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CompressionLowDetectionService> _logger;
 
-    public const string NotificationType = "glucose.compression_low_review";
-
     public static string NotificationSourceId(DateOnly nightOf) => nightOf.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     internal const double MinDropRateMgDlPerMin = 2.0;
@@ -422,16 +420,16 @@ public class CompressionLowDetectionService
         // The metadata contains the count and nightOf for interpolation.
         await notificationService.CreateNotificationAsync(
             userId: userId,
-            type: NotificationType,
-            title: "compression_low_detected",
-            subtitle: "compression_low_detected_subtitle",
+            type: InAppNotificationType.GlucoseCompressionLowReview.ToWireString(),
+            title: NotificationLabel.CompressionLowDetected.ToWireString(),
+            subtitle: NotificationLabel.CompressionLowDetectedSubtitle.ToWireString(),
             sourceId: NotificationSourceId(nightOf),
             actions: new List<NotificationActionDto>
             {
                 new()
                 {
                     ActionId = "review",
-                    Label = "review",
+                    Label = NotificationLabel.Review.ToWireString(),
                     Icon = "eye",
                     Variant = "default"
                 }

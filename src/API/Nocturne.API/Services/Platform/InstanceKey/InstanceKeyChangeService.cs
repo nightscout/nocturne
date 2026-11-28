@@ -36,10 +36,6 @@ public class InstanceKeyChangeService(
 
     public const string Source = "instance-key";
 
-    public const string TenantNoticeType = "system.instance_key_changed";
-
-    public const string PlatformNoticeType = "system.instance_key_changed_platform";
-
     public const string TenantKind = "instance_key";
 
     public const string PlatformKind = "instance_key_platform";
@@ -145,9 +141,9 @@ public class InstanceKeyChangeService(
 
         var actions = new List<NotificationActionDto>();
         if (found.Connectors.Count > 0)
-            actions.Add(Action(OpenConnectorsActionId));
+            actions.Add(Action(OpenConnectorsActionId, NotificationLabel.OpenConnectors));
         if (found.AlertChannels.Count > 0)
-            actions.Add(Action(OpenAlertsActionId));
+            actions.Add(Action(OpenAlertsActionId, NotificationLabel.OpenAlerts));
 
         var metadata = new Dictionary<string, object>
         {
@@ -158,7 +154,7 @@ public class InstanceKeyChangeService(
         foreach (var owner in owners)
         {
             await NotifyAsync(
-                scope.ServiceProvider, tenant.Id, owner, TenantKind, TenantNoticeType, generation, found.IsEmpty,
+                scope.ServiceProvider, tenant.Id, owner, TenantKind, InAppNotificationType.SystemInstanceKeyChanged, generation, found.IsEmpty,
                 found.AlertChannels.Count > 0 ? NotificationUrgency.Urgent : NotificationUrgency.Warn,
                 actions, metadata, cancellationToken);
         }
@@ -187,7 +183,7 @@ public class InstanceKeyChangeService(
                 AuditEndpoint);
 
             await NotifyAsync(
-                scope.ServiceProvider, admin.TenantId, admin.SubjectId.ToString(), PlatformKind, PlatformNoticeType,
+                scope.ServiceProvider, admin.TenantId, admin.SubjectId.ToString(), PlatformKind, InAppNotificationType.SystemInstanceKeyChangedPlatform,
                 generation, found.Count == 0, urgency, null, metadata, cancellationToken);
         }
 
@@ -195,7 +191,7 @@ public class InstanceKeyChangeService(
     }
 
     private async Task NotifyAsync(
-        IServiceProvider services, Guid tenantId, string ownerId, string kind, string type, Guid generation,
+        IServiceProvider services, Guid tenantId, string ownerId, string kind, InAppNotificationType type, Guid generation,
         bool clear, NotificationUrgency urgency, List<NotificationActionDto>? actions,
         Dictionary<string, object> metadata, CancellationToken cancellationToken)
     {
@@ -203,7 +199,7 @@ public class InstanceKeyChangeService(
         var sourceId = generation.ToString();
         var active = (await services.GetRequiredService<IInAppNotificationRepository>()
                 .GetActiveBySourceAsync(ownerId, Source, cancellationToken))
-            .Where(n => n.Type == type)
+            .Where(n => n.Type == type.ToWireString())
             .ToList();
 
         if (clear)
@@ -226,8 +222,8 @@ public class InstanceKeyChangeService(
 
             await notifications.CreateNotificationAsync(
                 userId: ownerId,
-                type: type,
-                title: type == TenantNoticeType ? "instance_key_changed" : "instance_key_changed_platform",
+                type: type.ToWireString(),
+                title: (type == InAppNotificationType.SystemInstanceKeyChanged ? NotificationLabel.InstanceKeyChanged : NotificationLabel.InstanceKeyChangedPlatform).ToWireString(),
                 urgency: urgency,
                 sourceId: sourceId,
                 actions: actions,
@@ -264,10 +260,10 @@ public class InstanceKeyChangeService(
         return admins;
     }
 
-    private static NotificationActionDto Action(string actionId) => new()
+    private static NotificationActionDto Action(string actionId, NotificationLabel label) => new()
     {
         ActionId = actionId,
-        Label = actionId,
+        Label = label.ToWireString(),
         Icon = "key-round",
         Variant = "default",
     };

@@ -17,9 +17,6 @@ public class DeviceNotificationMirror
     /// <summary>The notification to surface on the device.</summary>
     public InAppNotificationDto Notification { get; set; } = new();
 
-    /// <summary>The in-app type that the alert engine uses; excluded from the mirror (alerts use device_action).</summary>
-    public const string AlertFiringType = "alert.firing";
-
     /// <summary>
     /// Whether an in-app notification should mirror to devices: never an alert (those go via
     /// device_action), never one whose title or subtitle is a label key (see <see cref="IsLabelKey"/>),
@@ -28,7 +25,7 @@ public class DeviceNotificationMirror
     /// Bare informational notifications are not mirrored.
     /// </summary>
     public static bool Qualifies(InAppNotificationDto notification)
-        => notification.Type != AlertFiringType
+        => notification.Type != InAppNotificationType.AlertFiring.ToWireString()
            && !IsLabelKey(notification.Title)
            && !IsLabelKey(notification.Subtitle)
            && (notification.Urgency >= NotificationUrgency.Warn

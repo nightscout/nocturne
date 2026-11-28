@@ -29,7 +29,7 @@ public partial class TeamAccessEndPostgresTests
     private IEnumerable<RecordingNotices.Notice> LiveFor(Guid user, string type) =>
         _notices.Live.Where(n => n.User == user.ToString() && n.Type == type);
 
-    private RecordingNotices.Notice? Waiting(Guid owner) => LiveFor(owner, TeamStaffAnnouncer.WaitingType).SingleOrDefault();
+    private RecordingNotices.Notice? Waiting(Guid owner) => LiveFor(owner, InAppNotificationType.TeamStaffWaiting.ToWireString()).SingleOrDefault();
 
     private static int CountOf(RecordingNotices.Notice? notice) => int.Parse(notice!.Metadata![TeamStaffAnnouncer.CountKey].ToString()!);
 
@@ -47,7 +47,7 @@ public partial class TeamAccessEndPostgresTests
         var (site, team, _, first) = await WaitingStaffAsync("notice-count", new TeamStaffNarrowing(null, false, null));
         var more = await JoinStaffAsync(team, 10);
         var notice = Waiting(site.Owner)!;
-        (notice.Tenant, notice.Source, notice.Title).Should().Be((site.Tenant, team.Id.ToString(), TeamStaffAnnouncer.WaitingTitleKey));
+        (notice.Tenant, notice.Source, notice.Title).Should().Be((site.Tenant, team.Id.ToString(), NotificationLabel.TeamStaffWaiting.ToWireString()));
         CountOf(notice).Should().Be(11);
         notice.Metadata!.Keys.Should().BeEquivalentTo(TeamStaffAnnouncer.TeamKey, TeamStaffAnnouncer.TeamIdKey, TeamStaffAnnouncer.CountKey);
 
@@ -57,7 +57,7 @@ public partial class TeamAccessEndPostgresTests
 
         (await DeclineStaffAsync(site, team, site.Owner, first)).Should().Be(OwnerDecision.Decided);
         Waiting(site.Owner).Should().BeNull();
-        _notices.All.Where(n => n.Type == TeamStaffAnnouncer.WaitingType).Should().OnlyContain(n => n.Archived != null);
+        _notices.All.Where(n => n.Type == InAppNotificationType.TeamStaffWaiting.ToWireString()).Should().OnlyContain(n => n.Archived != null);
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public partial class TeamAccessEndPostgresTests
         await FollowAsync(team, site, Gives(site, [site.ViewerRole], staffRule: TeamStaffRule.OwnerApproves));
 
         CountOf(Waiting(site.Owner)).Should().Be(3);
-        LiveFor(site.Owner, TeamStaffAnnouncer.JoinedType).Should().BeEmpty();
+        LiveFor(site.Owner, InAppNotificationType.TeamStaffJoined.ToWireString()).Should().BeEmpty();
     }
 
     [Fact]
@@ -121,8 +121,8 @@ public partial class TeamAccessEndPostgresTests
 
         await FollowAsync(team, site);
 
-        var joined = LiveFor(site.Owner, TeamStaffAnnouncer.JoinedType).Should().ContainSingle().Subject;
-        (joined.Source, joined.Title).Should().Be((team.Id.ToString(), TeamStaffAnnouncer.JoinedTitleKey));
+        var joined = LiveFor(site.Owner, InAppNotificationType.TeamStaffJoined.ToWireString()).Should().ContainSingle().Subject;
+        (joined.Source, joined.Title).Should().Be((team.Id.ToString(), NotificationLabel.TeamStaffJoined.ToWireString()));
         Waiting(site.Owner).Should().BeNull();
     }
 
@@ -138,7 +138,7 @@ public partial class TeamAccessEndPostgresTests
         await JoinStaffAsync(team);
 
         _notices.Live.Should().ContainSingle().Which.Should().Match<RecordingNotices.Notice>(n =>
-            n.User == site.Owner.ToString() && n.Type == TeamStaffAnnouncer.JoinedType && n.Source == team.Id.ToString());
+            n.User == site.Owner.ToString() && n.Type == InAppNotificationType.TeamStaffJoined.ToWireString() && n.Source == team.Id.ToString());
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public partial class TeamAccessEndPostgresTests
         await SetStaffRuleAsync(site, team, TeamStaffRule.TeamDecides);
 
         Waiting(site.Owner).Should().BeNull();
-        LiveFor(site.Owner, TeamStaffAnnouncer.JoinedType).Should().ContainSingle();
+        LiveFor(site.Owner, InAppNotificationType.TeamStaffJoined.ToWireString()).Should().ContainSingle();
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public partial class TeamAccessEndPostgresTests
         }
 
         Waiting(site.Owner).Should().BeNull();
-        _notices.All.Where(n => n.Type == TeamStaffAnnouncer.WaitingType).Should().OnlyContain(n => n.Archived == NotificationArchiveReason.ConditionMet);
+        _notices.All.Where(n => n.Type == InAppNotificationType.TeamStaffWaiting.ToWireString()).Should().OnlyContain(n => n.Archived == NotificationArchiveReason.ConditionMet);
     }
 
     [Fact]
@@ -265,7 +265,7 @@ public partial class TeamAccessEndPostgresTests
         await ReplaceRoleAsync(site, stepping, await OwnerRoleAsync(site), site.ViewerRole);
 
         CountOf(Waiting(site.Owner)).Should().Be(1);
-        LiveFor(stepping, TeamStaffAnnouncer.WaitingType).Should().BeEmpty("they are no longer an owner");
+        LiveFor(stepping, InAppNotificationType.TeamStaffWaiting.ToWireString()).Should().BeEmpty("they are no longer an owner");
     }
 
     [Fact]
@@ -365,7 +365,7 @@ public partial class TeamAccessEndPostgresTests
         var team = await TeamAsync("Clinic");
         var access = await FollowAsync(team, site, Gives(site, [site.ViewerRole, site.CaretakerRole]));
         var staff = await JoinStaffAsync(team);
-        LiveFor(site.Owner, TeamStaffAnnouncer.JoinedType).Should().ContainSingle();
+        LiveFor(site.Owner, InAppNotificationType.TeamStaffJoined.ToWireString()).Should().ContainSingle();
         foreach (var notice in _notices.Live)
             notice.Archived = NotificationArchiveReason.Dismissed;
 
@@ -428,7 +428,7 @@ public partial class TeamAccessEndPostgresTests
         await ahead.WaitAsync(Eventually.DefaultPatience);
         await behind.WaitAsync(Eventually.DefaultPatience);
 
-        CountOf(LiveFor(site.Owner, TeamStaffAnnouncer.WaitingType).Should().ContainSingle().Subject).Should().Be(1);
+        CountOf(LiveFor(site.Owner, InAppNotificationType.TeamStaffWaiting.ToWireString()).Should().ContainSingle().Subject).Should().Be(1);
     }
 
     [Fact]
@@ -447,7 +447,7 @@ public partial class TeamAccessEndPostgresTests
         await rename.AnnounceAsync(team.Id, team.Name);
 
         _notices.Live.Where(n => n.User == site.Owner.ToString()).Select(n => n.Type).Should().BeEquivalentTo(
-            TeamStaffAnnouncer.WaitingType, TeamRenameAnnouncer.NotificationType);
+            InAppNotificationType.TeamStaffWaiting.ToWireString(), InAppNotificationType.TeamRenamed.ToWireString());
     }
 
     [Fact]

@@ -39,21 +39,11 @@ public sealed partial class TeamStaffAnnouncer(
     TimeProvider time,
     ILogger<TeamStaffAnnouncer> logger)
 {
-    /// <summary>The type of the notice that staff wait, with the count in its metadata.</summary>
-    public const string WaitingType = "team.staff_waiting";
-
-    /// <summary>The type of the notice that a team's staff newly reach the site.</summary>
-    public const string JoinedType = "team.staff_joined";
-
-    /// <summary>The source of <see cref="WaitingType"/>.</summary>
+    /// <summary>The source of <see cref="InAppNotificationType.TeamStaffWaiting"/>.</summary>
     public const string WaitingSource = "team-staff";
 
-    /// <summary>The source of <see cref="JoinedType"/>.</summary>
+    /// <summary>The source of <see cref="InAppNotificationType.TeamStaffJoined"/>.</summary>
     public const string JoinedSource = "team-staff-joined";
-
-    public const string WaitingTitleKey = "team_staff_waiting";
-
-    public const string JoinedTitleKey = "team_staff_joined";
 
     /// <summary>The team's current name.</summary>
     public const string TeamKey = "team";
@@ -139,10 +129,10 @@ public sealed partial class TeamStaffAnnouncer(
                     await FileWaitingAsync(notifications, owner.ToString(), team, waiting?.TeamName, count);
                 if (recount && waiting is { Trusted: true })
                     await notifications.ArchiveBySourceAsync(
-                        owner.ToString(), JoinedType, SourceOf(team), NotificationArchiveReason.ConditionMet, CancellationToken.None);
+                        owner.ToString(), InAppNotificationType.TeamStaffJoined.ToWireString(), SourceOf(team), NotificationArchiveReason.ConditionMet, CancellationToken.None);
                 if (joined && waiting is { Trusted: false })
                     await notifications.CreateNotificationUnlessActiveAsync(
-                        owner.ToString(), JoinedType, JoinedTitleKey, SourceOf(team),
+                        owner.ToString(), InAppNotificationType.TeamStaffJoined.ToWireString(), NotificationLabel.TeamStaffJoined.ToWireString(), SourceOf(team),
                         metadata: new Dictionary<string, object> { [TeamKey] = waiting.TeamName, [TeamIdKey] = team },
                         cancellationToken: CancellationToken.None);
             }
@@ -156,11 +146,11 @@ public sealed partial class TeamStaffAnnouncer(
     {
         var source = SourceOf(team);
         var live = (await notifications.GetActiveNotificationsAsync(user, CancellationToken.None))
-            .FirstOrDefault(n => n.Type == WaitingType && n.SourceId == source);
+            .FirstOrDefault(n => n.Type == InAppNotificationType.TeamStaffWaiting.ToWireString() && n.SourceId == source);
         if (count == 0)
         {
             if (live is not null)
-                await notifications.ArchiveBySourceAsync(user, WaitingType, source, NotificationArchiveReason.ConditionMet, CancellationToken.None);
+                await notifications.ArchiveBySourceAsync(user, InAppNotificationType.TeamStaffWaiting.ToWireString(), source, NotificationArchiveReason.ConditionMet, CancellationToken.None);
             return;
         }
 
@@ -169,11 +159,11 @@ public sealed partial class TeamStaffAnnouncer(
             if (int.TryParse(live.Metadata?.GetValueOrDefault(CountKey)?.ToString(), out var standing) && standing == count)
                 return;
 
-            await notifications.ArchiveBySourceAsync(user, WaitingType, source, NotificationArchiveReason.Superseded, CancellationToken.None);
+            await notifications.ArchiveBySourceAsync(user, InAppNotificationType.TeamStaffWaiting.ToWireString(), source, NotificationArchiveReason.Superseded, CancellationToken.None);
         }
 
         await notifications.CreateNotificationUnlessActiveAsync(
-            user, WaitingType, WaitingTitleKey, source,
+            user, InAppNotificationType.TeamStaffWaiting.ToWireString(), NotificationLabel.TeamStaffWaiting.ToWireString(), source,
             metadata: new Dictionary<string, object>
             {
                 [TeamKey] = teamName ?? string.Empty,

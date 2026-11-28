@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
@@ -74,8 +75,8 @@ public sealed class ShareLinkRotatedNotifier : IShareLinkRotatedNotifier
                 .CreateNotificationAsync(
                     userId: ownerSubjectId,
                     type: NotificationType,
-                    title: "share_link_rotated",
-                    subtitle: "share_link_rotated_subtitle",
+                    title: NotificationLabel.ShareLinkRotated.ToWireString(),
+                    subtitle: NotificationLabel.ShareLinkRotatedSubtitle.ToWireString(),
                     sourceId: tenantId.ToString(),
                     cancellationToken: cancellationToken);
         }

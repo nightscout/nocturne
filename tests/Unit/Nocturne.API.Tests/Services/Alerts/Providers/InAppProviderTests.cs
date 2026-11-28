@@ -55,7 +55,7 @@ public class InAppProviderTests
 
         _notification.Verify(n => n.CreateNotificationAsync(
             Recipient,
-            InAppProvider.NotificationType,
+            InAppNotificationType.AlertFiring.ToWireString(),
             "Low glucose",
             NotificationCategory.Alert,
             NotificationUrgency.Warn,
@@ -147,7 +147,7 @@ public class InAppProviderTests
             MakePayload(AlertRuleSeverity.Critical) with { Kind = AlertPayloadKind.Unevaluable },
             CancellationToken.None);
 
-        type.Should().Be(InAppProvider.UnevaluableNotificationType);
+        type.Should().Be(InAppNotificationType.AlertUnevaluable.ToWireString());
         DeviceNotificationMirror.Qualifies(new InAppNotificationDto
         {
             Type = type!,
@@ -182,7 +182,7 @@ public class InAppProviderTests
         await _sut.SendAsync(Recipient, payload, CancellationToken.None);
 
         (type, title, subtitle).Should().Be(
-            (InAppProvider.UnevaluableNotificationType, payload.RuleName, InAppProvider.PartlyUnevaluableSubtitle));
+            (InAppNotificationType.AlertUnevaluable.ToWireString(), payload.RuleName, NotificationLabel.AlertPartlyUnevaluableSubtitle.ToWireString()));
         actions.Should().BeNullOrEmpty("there is no excursion to acknowledge");
         InAppProvider.NotificationTypeFor(new ExcursionRuleSnapshot(Guid.NewGuid(), payload.RuleName, IsUnevaluableNotice: true))
             .Should().Be(type, "resolving the notice archives the notifications of the type it created");

@@ -76,7 +76,7 @@ public class AlertChannelNoticeTests
         notifications.Setup(n => n.GetActiveNotificationsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string owner, CancellationToken _) => _active[owner].ToList());
         notifications.Setup(n => n.CreateNotificationUnlessActiveAsync(
-                It.IsAny<string>(), NotificationSubjectNaming.AlertChannelNotSending, It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string>(), InAppNotificationType.AlertChannelNotSending.ToWireString(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<NotificationCategory?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string owner, string type, string title, string sourceId, NotificationCategory? _, string? _,
@@ -88,7 +88,7 @@ public class AlertChannelNoticeTests
                 return true;
             });
         notifications.Setup(n => n.ArchiveBySourceAsync(
-                It.IsAny<string>(), NotificationSubjectNaming.AlertChannelNotSending, It.IsAny<string>(),
+                It.IsAny<string>(), InAppNotificationType.AlertChannelNotSending.ToWireString(), It.IsAny<string>(),
                 NotificationArchiveReason.ConditionMet, It.IsAny<CancellationToken>()))
             .ReturnsAsync((string owner, string _, string sourceId, NotificationArchiveReason _, CancellationToken _) =>
             {

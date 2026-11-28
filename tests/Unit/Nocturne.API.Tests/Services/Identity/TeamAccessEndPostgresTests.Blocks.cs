@@ -163,13 +163,13 @@ public partial class TeamAccessEndPostgresTests
         (await BlockAsync(site, site.Owner, staff)).Should().Be(OwnerDecision.Decided);
         var other = await TeamAsync("Camp");
         var otherAccess = await FollowAsync(other, site);
-        var joinedBefore = _notices.All.Count(n => n.Type == TeamStaffAnnouncer.JoinedType);
+        var joinedBefore = _notices.All.Count(n => n.Type == InAppNotificationType.TeamStaffJoined.ToWireString());
 
         await JoinStaffAsync(other, staff);
 
         (await StatusAsync(otherAccess, staff)).Should().Be(TeamSiteStaffStatus.Approved);
         (await KindsAsync(site, staff)).Should().BeEmpty();
-        _notices.All.Count(n => n.Type == TeamStaffAnnouncer.JoinedType).Should().Be(joinedBefore, "a stopped person newly reaches nothing");
+        _notices.All.Count(n => n.Type == InAppNotificationType.TeamStaffJoined.ToWireString()).Should().Be(joinedBefore, "a stopped person newly reaches nothing");
 
         (await Service(Guid.Empty, staff).RemoveStaffAsync(team.Id, staff, staff, Ct)).Should().BeTrue();
         await JoinStaffAsync(team, staff);
@@ -192,14 +192,14 @@ public partial class TeamAccessEndPostgresTests
         var (site, team, _, staff) = await WaitingStaffAsync("block-waiting", new TeamStaffNarrowing(null, false, null));
         await JoinStaffAsync(team);
         CountOf(Waiting(site.Owner)).Should().Be(2);
-        var joined = _notices.All.Count(n => n.Type == TeamStaffAnnouncer.JoinedType);
+        var joined = _notices.All.Count(n => n.Type == InAppNotificationType.TeamStaffJoined.ToWireString());
 
         (await BlockAsync(site, site.Owner, staff)).Should().Be(OwnerDecision.Decided);
         CountOf(Waiting(site.Owner)).Should().Be(1);
 
         (await UnblockAsync(site, site.Owner, staff)).Should().Be(OwnerDecision.Decided);
         CountOf(Waiting(site.Owner)).Should().Be(2);
-        _notices.All.Count(n => n.Type == TeamStaffAnnouncer.JoinedType).Should().Be(joined, "a stop files no notice of its own");
+        _notices.All.Count(n => n.Type == InAppNotificationType.TeamStaffJoined.ToWireString()).Should().Be(joined, "a stop files no notice of its own");
     }
 
     [Fact]

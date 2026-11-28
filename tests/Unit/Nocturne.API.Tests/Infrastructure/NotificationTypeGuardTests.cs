@@ -34,9 +34,11 @@ public class NotificationTypeGuardTests
     private static readonly Dictionary<string, string[]> PassedThroughATuple = new()
     {
         ["src/API/Nocturne.API/Services/Platform/Releases/ReleaseNoticeJob.cs: ReleaseNoticeJob.NotifyOwnerAsync"] =
-            ["ReleaseNoticeJob.UpdateAvailableType", "ReleaseNoticeJob.ReleaseInstalledType"],
+            ["InAppNotificationType.SystemUpdateAvailable", "InAppNotificationType.SystemReleaseInstalled"],
+        ["src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyChangeService.cs: InstanceKeyChangeService.NotifyAsync"] =
+            ["InAppNotificationType.SystemInstanceKeyChanged", "InAppNotificationType.SystemInstanceKeyChangedPlatform"],
         ["src/API/Nocturne.API/Services/Notifications/External/ExternalNotificationService.cs: ExternalNotificationService.CreateAsync"] =
-            ["ExternalNotificationSender.OperatorType", "ExternalNotificationSender.AppType"],
+            ["InAppNotificationType.ExternalOperator", "InAppNotificationType.ExternalApp"],
     };
 
     private static readonly IReadOnlyList<NotificationTemplate> Templates =
@@ -99,6 +101,19 @@ public class NotificationTypeGuardTests
 
         Unregistered(sources, ["kept.type"], new()).Should().Equal(
             "literal.type", "lost.type", "first.type");
+    }
+
+    [Fact]
+    public void AnEnumMembersWireStringIsReadAndReportedUnlessRegistered()
+    {
+        var sources = Sources(
+            "enum T { [EnumMember(Value = \"kept.type\")] Kept, [EnumMember(Value = \"lost.type\")] Lost } "
+            + "class A { void M(IInAppNotificationService n) { "
+            + "n.CreateNotificationAsync(\"u\", T.Kept.ToWireString(), \"t\"); "
+            + "n.CreateNotificationAsync(\"u\", T.Lost.ToWireString(), \"t\"); } }");
+
+        Unregistered(sources, ["kept.type"], new()).Should().Equal("lost.type");
+        Unreadable(sources, [], new()).Should().BeEmpty();
     }
 
     [Fact]
@@ -228,8 +243,26 @@ public class NotificationTypeGuardTests
         private const int MaxDepth = 6;
 
         private readonly Dictionary<(string Owner, string Name), string> _constants;
+        private readonly Dictionary<(string Enum, string Member), string> _wireNames;
 
-        public TypeReader(IReadOnlyList<SourceFile> sources) =>
+        public TypeReader(IReadOnlyList<SourceFile> sources)
+        {
+            _wireNames = sources
+                .SelectMany(file => file.Tree.GetRoot().DescendantNodes().OfType<EnumMemberDeclarationSyntax>())
+                .Select(member => (
+                    Key: (Enum: ((EnumDeclarationSyntax)member.Parent!).Identifier.ValueText, Member: member.Identifier.ValueText),
+                    Value: member.AttributeLists
+                        .SelectMany(list => list.Attributes)
+                        .Where(attribute => attribute.Name.ToString() == "EnumMember")
+                        .SelectMany(attribute => attribute.ArgumentList?.Arguments ?? [])
+                        .Where(argument => argument.NameEquals?.Name.Identifier.ValueText == "Value"
+                                           && argument.Expression is LiteralExpressionSyntax)
+                        .Select(argument => ((LiteralExpressionSyntax)argument.Expression).Token.ValueText)
+                        .FirstOrDefault()))
+                .Where(entry => entry.Value is not null)
+                .GroupBy(entry => entry.Key)
+                .ToDictionary(g => g.Key, g => g.First().Value!);
+
             _constants = sources
                 .SelectMany(file => file.Tree.GetRoot().DescendantNodes().OfType<FieldDeclarationSyntax>()
                     .Where(field => field.Modifiers.Any(SyntaxKind.ConstKeyword))
@@ -241,13 +274,14 @@ public class NotificationTypeGuardTests
                             Value: ((LiteralExpressionSyntax)v.Initializer!.Value).Token.ValueText))))
                 .GroupBy(c => c.Key)
                 .ToDictionary(g => g.Key, g => g.First().Value);
+        }
 
         public string Constant(string reference)
         {
             var parts = reference.Split('.');
-            return _constants.TryGetValue((parts[0], parts[1]), out var value)
-                ? value
-                : throw new InvalidOperationException($"{reference} is not a string constant under src.");
+            return _constants.TryGetValue((parts[0], parts[1]), out var value) ? value
+                : _wireNames.TryGetValue((parts[0], parts[1]), out var wire) ? wire
+                : throw new InvalidOperationException($"{reference} is not a string constant or an enum member with a wire value under src.");
         }
 
         public IEnumerable<string?> Read(ExpressionSyntax expression, int depth = 0)
@@ -269,6 +303,15 @@ public class NotificationTypeGuardTests
                     return ReadName(name, depth);
                 case MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax owner } member:
                     return [_constants.GetValueOrDefault((owner.Identifier.ValueText, member.Name.Identifier.ValueText))];
+                case InvocationExpressionSyntax
+                {
+                    Expression: MemberAccessExpressionSyntax
+                    {
+                        Name.Identifier.ValueText: "ToWireString",
+                        Expression: MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax enumName } member,
+                    },
+                }:
+                    return [_wireNames.GetValueOrDefault((enumName.Identifier.ValueText, member.Name.Identifier.ValueText))];
                 case InvocationExpressionSyntax { Expression: IdentifierNameSyntax method }:
                     return ReadReturns(method, depth);
                 default:

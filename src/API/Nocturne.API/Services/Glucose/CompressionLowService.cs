@@ -285,7 +285,7 @@ public class CompressionLowService : ICompressionLowService
 
             await _notificationService.ArchiveBySourceAsync(
                 userId: ownerId,
-                type: CompressionLowDetectionService.NotificationType,
+                type: InAppNotificationType.GlucoseCompressionLowReview.ToWireString(),
                 sourceId: CompressionLowDetectionService.NotificationSourceId(nightOf),
                 reason: NotificationArchiveReason.Completed,
                 cancellationToken: cancellationToken);

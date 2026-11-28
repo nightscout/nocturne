@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { InAppNotificationDto } from "#lib/api/index.js";
+import {
+  InAppNotificationType,
+  NotificationLabel,
+  type InAppNotificationDto,
+} from "@nocturne/api-client";
 
 const created = vi.hoisted(() => ({ close: vi.fn(), create: vi.fn() }));
 vi.mock("#lib/audio/alarm-sounds.js", () => ({
@@ -9,7 +13,7 @@ vi.mock("#lib/websocket/websocket-client.svelte.js", () => ({ WebSocketClient: c
 
 import { closeAlertNotification, raiseAlertNotification } from "./alert-notifications.svelte";
 
-const alert = (id: string, type = "alert.firing") =>
+const alert = (id: string, type: string = InAppNotificationType.AlertFiring) =>
   ({ id, type, title: "Urgent low", subtitle: "52" }) as InAppNotificationDto;
 
 describe("alert notifications", () => {
@@ -30,9 +34,9 @@ describe("alert notifications", () => {
   it("raises the notice that a rule cannot run, with its text", () => {
     raiseAlertNotification({
       id: "n",
-      type: "alert.unevaluable",
+      type: InAppNotificationType.AlertUnevaluable,
       title: "Urgent low",
-      subtitle: "alert_unevaluable_subtitle",
+      subtitle: NotificationLabel.AlertUnevaluableSubtitle,
     } as InAppNotificationDto);
 
     expect(created.create).toHaveBeenCalledWith(
