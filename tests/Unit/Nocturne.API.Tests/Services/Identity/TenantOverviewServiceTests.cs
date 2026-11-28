@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Linq.Expressions;
 using Moq;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Identity;
@@ -604,7 +605,8 @@ public partial class TenantOverviewServiceTests
             canonical.Setup(s => s.GetLatestAsync(It.IsAny<CancellationToken>()))
                 .Returns(() =>
                 {
-                    clampSeen[accessor.TenantId] = category.IsHistoryClamped;
+                    lock (clampSeen)
+                        clampSeen[accessor.TenantId] = category.IsHistoryClamped;
                     return Task.FromResult<SensorGlucose?>(null);
                 });
             canonical.Setup(s => s.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -1042,37 +1044,100 @@ public partial class TenantOverviewServiceTests
         public TrackerInstance[]? Trackers { get; init; }
     }
 
+    /// <summary>
+    /// The calls the scopes' fakes made, for <c>Verify</c>. It answers nothing, so it has no <c>Setup</c>: an answer set
+    /// on it would never reach a scope.
+    /// </summary>
+    private sealed class CallLog<T>
+        where T : class
+    {
+        private readonly Mock<T> _calls = new();
+
+        public T Object => _calls.Object;
+
+        public void Verify<TResult>(Expression<Func<T, TResult>> call, Times times) => _calls.Verify(call, times);
+
+        public void Verify<TResult>(Expression<Func<T, TResult>> call, Func<Times> times) => _calls.Verify(call, times);
+    }
+
     private sealed class Fakes
     {
-        public Mock<ICanonicalGlucoseService> Canonical { get; } = new();
-        public Mock<IIobCobReader> IobCob { get; } = new();
-        public Mock<IPumpSnapshotRepository> Pumps { get; } = new();
-        public Mock<ITrackerRepository> Trackers { get; } = new();
+        public CallLog<ICanonicalGlucoseService> Canonical { get; } = new();
+        public CallLog<IIobCobReader> IobCob { get; } = new();
+        public CallLog<IPumpSnapshotRepository> Pumps { get; } = new();
+        public CallLog<ITrackerRepository> Trackers { get; } = new();
         public Dictionary<Guid, TenantData> Data { get; } = [];
         public TenantData Default { get; set; } = new();
 
+        /// <summary>Stands in for the recent glucose read of every scope when set, given the scope's tenant.</summary>
+        public Func<Guid, Task<IReadOnlyList<SensorGlucose>>>? ReadRecent { get; set; }
+
         public TenantData For(Guid tenantId) => Data.GetValueOrDefault(tenantId) ?? Default;
 
-        public void Register(IServiceCollection services, Func<Guid?> tenantId, SensorGlucose? latest, Guid? failingTenantId)
+        /// <summary>
+        /// Each scope gets fakes that answer for the tenant its accessor holds, as production reads the scope's tenant.
+        /// Every call is also made on the call logs above, for the tests that verify calls; what a scope answers is set
+        /// through <see cref="Data"/>, <see cref="Default"/> and <see cref="ReadRecent"/>.
+        /// </summary>
+        public void Register(IServiceCollection services, SensorGlucose? latest, Guid? failingTenantId)
         {
-            Canonical.Setup(s => s.GetLatestAsync(It.IsAny<CancellationToken>()))
-                .Returns(() => tenantId() == failingTenantId
-                    ? Task.FromException<SensorGlucose?>(new InvalidOperationException("boom"))
-                    : Task.FromResult(For(tenantId()!.Value).Latest ?? latest));
-            Canonical.Setup(s => s.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-                .Returns(() => Task.FromResult<IReadOnlyList<SensorGlucose>>(For(tenantId()!.Value).Recent ?? []));
-            IobCob.Setup(r => r.ReadTotalAsync(It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-                .Returns(() => Task.FromResult(
-                    For(tenantId()!.Value).OnBoard ?? OnBoard(0, 0, insulin: false, carbs: false)));
-            Pumps.Setup(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-                .Returns(() => Task.FromResult(For(tenantId()!.Value).Pump));
-            Trackers.Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
-                .Returns(() => Task.FromResult<IReadOnlyList<TrackerInstance>>(For(tenantId()!.Value).Trackers ?? []));
-
-            services.AddScoped(_ => Canonical.Object);
-            services.AddScoped(_ => IobCob.Object);
-            services.AddScoped(_ => Pumps.Object);
-            services.AddScoped(_ => Trackers.Object);
+            services.AddScoped(sp =>
+            {
+                var accessor = sp.GetRequiredService<ITenantAccessor>();
+                var canonical = new Mock<ICanonicalGlucoseService>();
+                canonical.Setup(s => s.GetLatestAsync(It.IsAny<CancellationToken>()))
+                    .Returns((CancellationToken ct) =>
+                    {
+                        Canonical.Object.GetLatestAsync(ct);
+                        return accessor.TenantId == failingTenantId
+                            ? Task.FromException<SensorGlucose?>(new InvalidOperationException("boom"))
+                            : Task.FromResult(For(accessor.TenantId).Latest ?? latest);
+                    });
+                canonical.Setup(s => s.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                    .Returns((DateTime since, CancellationToken ct) =>
+                    {
+                        Canonical.Object.GetRecentAsync(since, ct);
+                        return ReadRecent?.Invoke(accessor.TenantId)
+                            ?? Task.FromResult<IReadOnlyList<SensorGlucose>>(For(accessor.TenantId).Recent ?? []);
+                    });
+                return canonical.Object;
+            });
+            services.AddScoped(sp =>
+            {
+                var accessor = sp.GetRequiredService<ITenantAccessor>();
+                var iobCob = new Mock<IIobCobReader>();
+                iobCob.Setup(r => r.ReadTotalAsync(It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                    .Returns((long at, bool live, CancellationToken ct) =>
+                    {
+                        IobCob.Object.ReadTotalAsync(at, live, ct);
+                        return Task.FromResult(For(accessor.TenantId).OnBoard ?? OnBoard(0, 0, insulin: false, carbs: false));
+                    });
+                return iobCob.Object;
+            });
+            services.AddScoped(sp =>
+            {
+                var accessor = sp.GetRequiredService<ITenantAccessor>();
+                var pumps = new Mock<IPumpSnapshotRepository>();
+                pumps.Setup(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                    .Returns((DateTime? asOf, CancellationToken ct) =>
+                    {
+                        Pumps.Object.GetLatestAsync(asOf, ct);
+                        return Task.FromResult(For(accessor.TenantId).Pump);
+                    });
+                return pumps.Object;
+            });
+            services.AddScoped(sp =>
+            {
+                var accessor = sp.GetRequiredService<ITenantAccessor>();
+                var trackers = new Mock<ITrackerRepository>();
+                trackers.Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
+                    .Returns((CancellationToken ct) =>
+                    {
+                        Trackers.Object.GetActiveInstancesAsync(ct);
+                        return Task.FromResult<IReadOnlyList<TrackerInstance>>(For(accessor.TenantId).Trackers ?? []);
+                    });
+                return trackers.Object;
+            });
         }
     }
 
@@ -1112,13 +1177,12 @@ public partial class TenantOverviewServiceTests
         TimeProvider? clock = null,
         IViewerFlagRules? flagRules = null)
     {
-        TenantContext? current = null;
-
         var services = new ServiceCollection();
-        (fakes ?? new Fakes()).Register(services, () => current?.TenantId, latest, failingTenantId);
-        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor(onSet: tc => current = tc));
+        (fakes ?? new Fakes()).Register(services, latest, failingTenantId);
+        services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
         services.AddScoped<ICategoryReadContext>(_ => new Nocturne.Infrastructure.Data.Services.CategoryReadContext());
-        services.AddScoped<INocturneDbContextFactory>(_ => new ScopeContextFactory(options, () => current!.TenantId));
+        services.AddScoped<INocturneDbContextFactory>(sp => new ScopeContextFactory(
+            options, () => sp.GetRequiredService<ITenantAccessor>().TenantId));
         services.AddScoped<IAlertRepository>(sp => new AlertRepository(sp.GetRequiredService<INocturneDbContextFactory>()));
         services.AddScoped<IPatientRecordRepository>(sp => new PatientRecordRepository(
             sp.GetRequiredService<INocturneDbContextFactory>(), NullLogger<PatientRecordRepository>.Instance));

@@ -106,7 +106,10 @@ internal static class TenantOverviewTestKit
         {
             var context = new NocturneDbContext(options) { TenantId = tenantId() };
             if (clampSeen is not null)
-                clampSeen[context.TenantId] = category?.IsHistoryClamped == true;
+            {
+                lock (clampSeen)
+                    clampSeen[context.TenantId] = category?.IsHistoryClamped == true;
+            }
             return ValueTask.FromResult(context);
         }
     }
