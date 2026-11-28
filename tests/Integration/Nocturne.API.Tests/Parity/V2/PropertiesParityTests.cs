@@ -43,7 +43,7 @@ public class PropertiesParityTests : ParityTestBase
 
     private async Task SeedProfileForTestAsync()
     {
-        var profile = TestDataFactory.CreateProfile();
+        var profile = TestDataFactory.CreateProfile(flat: true);
         var nsProfile = new
         {
             defaultProfile = profile.DefaultProfile,
