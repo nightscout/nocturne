@@ -2,6 +2,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { demoSubjectAccess } from "#lib/authorization/demo-subject.js";
   import * as Card from "#lib/components/ui/card/index.js";
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -21,7 +22,7 @@
   import { teamProblemMessages } from "#lib/teams/problem-messages.svelte.js";
   import TeamsUnavailable from "#lib/components/teams/TeamsUnavailable.svelte";
 
-  const refused = $derived(page.data.refusedAsDemoSubject === true);
+  const refused = $derived(!demoSubjectAccess(page.data).canReadTeams);
   const teamsQuery = $derived(refused ? null : getMyTeams());
   retainQuery(() => teamsQuery);
   const myTeams = $derived(teamsQuery?.current);

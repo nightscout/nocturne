@@ -39,7 +39,7 @@ interface Situation {
   dashboardSlugs?: string[];
   /** The /api/v4/status document; a number rejects with that HTTP status. */
   status:
-    | { status?: string; tenantSlug?: string | null; anonymousReadAccess?: boolean; isDemo?: boolean }
+    | { status?: string; tenantSlug?: string | null; anonymousReadAccess?: boolean; isDemo?: boolean; demoKind?: string }
     | number;
   /** The passkey auth-status answer; a number rejects with that HTTP status. */
   authStatus: { onboardingCompleted?: boolean } | number;
@@ -432,6 +432,18 @@ describe("(authenticated) layout load — demo tenant sign-in", () => {
     await expect(
       redirectLocation({ ...demo, pathname: "/reports?__autologin=1" })
     ).resolves.toBe("/auth/login?returnUrl=%2Freports%3F__autologin%3D1");
+  });
+
+  it("signs a visitor in on the demo host", async () => {
+    await expect(
+      redirectLocation({ ...demo, status: { status: "ok", isDemo: true, demoKind: "host" } })
+    ).resolves.toBe("/api/v4/demo/session?redirect=%2F%3F__autologin%3D1");
+  });
+
+  it("keeps a person of the demo clinic on the login page, where a session request is a 404", async () => {
+    await expect(
+      redirectLocation({ ...demo, status: { status: "ok", isDemo: true, demoKind: "person" } })
+    ).resolves.toBe("/auth/login?returnUrl=%2F");
   });
 
   it("keeps a tenant that is not a demo on the login page", async () => {

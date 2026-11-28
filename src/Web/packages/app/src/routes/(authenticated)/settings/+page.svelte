@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { demoSubjectAccess } from "#lib/authorization/demo-subject.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Settings from "@lucide/svelte/icons/settings";
   import {
@@ -15,7 +16,7 @@
     visibleSettingsGroups({
       grantedScopes: page.data.effectivePermissions ?? [],
       isPlatformAdmin: data.isPlatformAdmin ?? false,
-      refusedAsDemoSubject: page.data.refusedAsDemoSubject ?? false,
+      canReadTeams: demoSubjectAccess(page.data).canReadTeams,
     })
   );
 </script>

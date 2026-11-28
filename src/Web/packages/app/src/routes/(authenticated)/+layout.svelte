@@ -31,6 +31,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import AlertSurfaces from "#lib/components/alerts/AlertSurfaces.svelte";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { demoSubjectAccess } from "#lib/authorization/demo-subject.js";
   import DemoBanner from "#lib/components/layout/DemoBanner.svelte";
   import InitialReadsPrefetch from "#lib/components/layout/InitialReadsPrefetch.svelte";
   import GuestBanner from "#lib/components/layout/GuestBanner.svelte";
@@ -344,7 +345,12 @@
         bind:offsetHeight={bannerStripHeight}
       >
           {#if data.isDemo}
-            <DemoBanner nextResetAt={data.nextResetAt} />
+            <DemoBanner
+              persona={demoSubjectAccess(data).persona ?? "personal"}
+              nextResetAt={data.nextResetAt}
+              nextVisitorResetAt={data.nextVisitorResetAt}
+              canSwitch={data.demoKind !== "person"}
+            />
           {/if}
           {#if data.isGuestSession && data.guestExpiresAt}
             <div {@attach coachmark(coachFor("guest-tour.access"))}>

@@ -18,6 +18,7 @@
     type TenantOverviewResponse,
     type TenantReviewResponse,
   } from "@nocturne/api-client";
+  import { demoSubjectAccess } from "#lib/authorization/demo-subject.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -434,6 +435,7 @@
     });
   });
 
+  const canKeepViews = $derived(demoSubjectAccess(page.data).canWriteStaffRecords);
   const canSaveView = $derived(!!openView && hasUnsaved(changes));
   const worthKeeping = $derived(!!shown && isWorthKeeping(shown));
   let managing = $state(false);
@@ -616,13 +618,13 @@
                 <span class="text-sm text-muted-foreground" data-testid="people-view-unsaved">
                   You changed this view. The changes are not saved.
                 </span>
-                <Button size="sm" disabled={saving} onclick={saveView}>Save view</Button>
+                <Button size="sm" disabled={saving || !canKeepViews} onclick={saveView}>Save view</Button>
               {/if}
               {#if worthKeeping}
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={atViewLimit || saving}
+                  disabled={atViewLimit || saving || !canKeepViews}
                   onclick={startNaming}
                 >
                   Save as new view
@@ -631,6 +633,11 @@
             </div>
           {/if}
         </div>
+        {#if (canSaveView || worthKeeping) && !canKeepViews}
+          <p class="text-sm text-muted-foreground" data-testid="people-views-demo">
+            You cannot save views in the demo.
+          </p>
+        {/if}
         {#if worthKeeping && atViewLimit}
           <p class="text-sm text-muted-foreground" data-testid="people-views-limit">
             You have {viewLimit} views, the maximum. Delete a view to save a new view.
@@ -777,7 +784,7 @@
     <PeopleTabs {groups} {views} {tab} onChange={choose}>
       {#snippet actions()}
         {#if views.length > 0}
-          <Button variant="ghost" size="sm" onclick={() => (managing = true)}>
+          <Button variant="ghost" size="sm" disabled={!canKeepViews} onclick={() => (managing = true)}>
             <Settings2 class="size-4" aria-hidden="true" />
             Manage views
           </Button>

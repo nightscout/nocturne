@@ -765,6 +765,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IGlucoseStatusClassifier, GlucoseStatusClassifier>();
         services.AddScoped<IInstanceSetupState, InstanceSetupState>();
         services.AddScoped<DemoTenantService>();
+        services.AddScoped<IDemoPersonaReader>(sp => sp.GetRequiredService<DemoTenantService>());
         services.AddScoped<ScalarAuthProvider>();
 
         // Shared by InstanceKeyHandler (authentication) and TenantSetupMiddleware

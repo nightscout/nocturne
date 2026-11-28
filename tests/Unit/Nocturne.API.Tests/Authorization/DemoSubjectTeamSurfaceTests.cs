@@ -164,6 +164,21 @@ public class DemoSubjectTeamSurfaceTests
     }
 
     [Theory]
+    [InlineData(nameof(TeamsController.CreateManagerInvite))]
+    [InlineData(nameof(TeamsController.AcceptInvite))]
+    [InlineData(nameof(TeamsController.CreateStaffInvite))]
+    [InlineData(nameof(TeamsController.AcceptStaffInvite))]
+    [InlineData(nameof(TeamsController.CreateAccessLink))]
+    [InlineData(nameof(TeamsController.GetAccessLinkInfo))]
+    [InlineData(nameof(TeamsController.ApproveAccessLink))]
+    public async Task TheClinicPersonaIsRefusedInvitesAndAccessLinks(string actionName)
+    {
+        var action = typeof(TeamsController).GetMethod(actionName, BindingFlags.Public | BindingFlags.Instance)!;
+
+        (await AdmitsAsync(typeof(TeamsController), action, inATeam: true)).Should().BeFalse();
+    }
+
+    [Theory]
     [MemberData(nameof(Actions))]
     public async Task TheVisitorInNoTeamWritesNothing(Type controller, string actionName)
     {

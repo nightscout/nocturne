@@ -74,7 +74,7 @@ export interface CommandPaletteItem {
 	/** Shown only to a platform administrator. */
 	platformAdmin?: boolean;
 	/** Not offered to the demo visitor, whom the API refuses on the page behind it. */
-	notForDemoSubject?: boolean;
+	needsTeamReads?: boolean;
 	href?: string;
 	linkedHref?: string;
 }
@@ -453,7 +453,7 @@ export function paletteItems(
 			keywords: paletteKeywords("settingsTeams", words),
 			icon: UsersRound,
 			href: "/settings/teams",
-			notForDemoSubject: true,
+			needsTeamReads: true,
 		},
 		{
 			id: "settings-profile",

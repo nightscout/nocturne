@@ -86,6 +86,7 @@ export const OUTBOUND_DESTINATIONS = [
   'github-labels',
   'discord',
   'demo',
+  'demo-clinic',
   'docs-issue',
 ] as const;
 

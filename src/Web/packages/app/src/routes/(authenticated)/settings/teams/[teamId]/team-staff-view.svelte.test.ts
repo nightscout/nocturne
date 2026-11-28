@@ -245,4 +245,21 @@ describe("team page for a staff member", () => {
       expect(page.getByRole("button", { name }).elements(), name).toHaveLength(0);
     }
   });
+
+  it("shows the team to the clinic persona of the demo, and keeps Leave disabled with the reason", async () => {
+    pageState.data = {
+      user: { subjectId: me },
+      refusedAsDemoSubject: true,
+      refusedStaffWritesAsDemoSubject: false,
+      demoPersona: "clinic",
+    };
+    render(TeamPage);
+
+    await expect.element(page.getByRole("heading", { name: "Clinic" })).toBeVisible();
+    await expect.element(leaveButton()).toBeDisabled();
+    await expect.element(page.getByText("You cannot leave a team in the demo.")).toBeVisible();
+    for (const name of ["Make link", "Make staff link", "Make access link"]) {
+      expect(page.getByRole("button", { name }).elements(), name).toHaveLength(0);
+    }
+  });
 });

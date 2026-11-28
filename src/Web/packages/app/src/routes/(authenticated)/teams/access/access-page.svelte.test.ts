@@ -576,6 +576,19 @@ describe("team access page", () => {
     expect(approveButton().elements()).toHaveLength(0);
   });
 
+  it("refuses the clinic persona of the demo too, and asks the API for nothing", async () => {
+    pageState.data = {
+      refusedAsDemoSubject: true,
+      refusedStaffWritesAsDemoSubject: false,
+      demoPersona: "clinic",
+    };
+    render(AccessPage);
+
+    await expect.element(page.getByText("Teams are not available in the demo.")).toBeVisible();
+    expect(mocks.getAccessLinkInfo).not.toHaveBeenCalled();
+    expect(approveButton().elements()).toHaveLength(0);
+  });
+
   it("says so, and asks for nothing, when the link has no token", async () => {
     openLink("");
     render(AccessPage);
