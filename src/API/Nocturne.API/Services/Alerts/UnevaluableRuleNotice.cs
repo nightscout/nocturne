@@ -13,14 +13,19 @@ namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
 /// Tells a rule's recipients, once per version of its condition, that the rule cannot fire until
-/// it is edited (docs/alerts/engine-semantics.md §1.4), and takes the notice back once it can.
+/// it is edited, or that its auto-resolve or smart snooze does nothing until it is edited
+/// (docs/alerts/engine-semantics.md §1.4), and takes the notice back once it can.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Every problem that keeps one of a rule's trees from being evaluated is logged once per version
 /// of its condition, by whichever of <see cref="Report"/> and <see cref="CheckAsync"/> sees the
-/// version first. Only a body that cannot be evaluated skips the rule, so only that is sent: an
-/// auto-resolve tree or snooze conditions that cannot be evaluated leave the rule firing. A rule
+/// version first. A body that cannot be evaluated skips the rule, and is sent as
+/// <see cref="AlertPayloadKind.Unevaluable"/> for the version of the body
+/// (<see cref="VersionOf(AlertRuleSnapshot)"/>). An auto-resolve tree or snooze conditions that
+/// cannot be evaluated leave the rule firing, so with a body that can be they are sent as
+/// <see cref="AlertPayloadKind.PartlyUnevaluable"/> for the version of those trees
+/// (<see cref="PartsVersionOf"/>); with one that cannot, the body's notice stands for both. A rule
 /// whose stored condition type, severity or scope class no engine member has (<see cref="UnreadableAlertRule"/>)
 /// is skipped too, and is sent the same notice through its channels with no condition type, at
 /// critical severity when the severity is the unreadable part.
@@ -58,7 +63,7 @@ public interface IUnevaluableRuleNotice
 
     /// <summary>
     /// Sends the notice for each rule in <paramref name="enabled"/> (every enabled rule of the
-    /// tenant) whose body cannot be evaluated or that cannot be read at all, unless it was
+    /// tenant) with a tree that cannot be evaluated or that cannot be read at all, unless it was
     /// dispatched for this version, and resolves every other standing notice of the tenant. A data
     /// or provider failure (<see cref="ProviderFailure"/>) for one notice is logged and never stops
     /// the others; a defect reaches the caller.
@@ -91,6 +96,20 @@ internal sealed class UnevaluableRuleNotice(
     internal static string VersionOf(AlertRuleSnapshot rule) =>
         Hash($"{AlertConditionTypeNames.ToWireString(rule.ConditionType)}\n{rule.ConditionParams}");
 
+    /// <summary>
+    /// The version of a rule's auto-resolve tree and smart-snooze conditions a
+    /// <see cref="AlertPayloadKind.PartlyUnevaluable"/> notice is sent for: each as the engine is
+    /// handed it, so an edit elsewhere in the rule or its client configuration does not send it
+    /// again. Snooze conditions that cannot be read count as the whole client configuration.
+    /// </summary>
+    internal static string PartsVersionOf(AlertRuleSnapshot rule)
+    {
+        var snooze = SmartSnoozeConfig.Parse(rule.ClientConfiguration);
+        var autoResolve = rule.AutoResolveEnabled ? rule.AutoResolveParams : null;
+        var snoozeConditions = snooze.SmartSnooze ? snooze.Conditions?.GetRawText() ?? rule.ClientConfiguration : null;
+        return Hash($"parts\n{autoResolve}\n{snoozeConditions}");
+    }
+
     /// <summary>The version of an unreadable rule a notice is sent for: whichever of its stored columns changes.</summary>
     internal static string VersionOf(UnreadableAlertRule rule) =>
         Hash($"unreadable\n{rule.StoredConditionType}\n{rule.ConditionParams}\n{rule.StoredSeverity}\n{rule.StoredScopeClass}");
@@ -118,10 +137,13 @@ internal sealed class UnevaluableRuleNotice(
             if (Issues(rule, tenantId) is not { } issues)
                 continue;
 
-            var version = issues.Any(i => i.Scope == BodyScope) ? VersionOf(rule) : null;
+            var (version, kind) = issues.Any(i => i.Scope == BodyScope) ? (VersionOf(rule), AlertPayloadKind.Unevaluable)
+                : issues.Count > 0 ? (PartsVersionOf(rule), AlertPayloadKind.PartlyUnevaluable)
+                : ((string?)null, AlertPayloadKind.Unevaluable);
             await SendOnceAsync(
                 NoticeRule.Of(rule),
                 version,
+                kind,
                 at => repository.RecordUnevaluableNoticeAsync(rule, version!, at, ct),
                 standing, tenantId, ct);
         }
@@ -132,6 +154,7 @@ internal sealed class UnevaluableRuleNotice(
             await SendOnceAsync(
                 new NoticeRule(rule.Id, rule.Name, null, rule.Severity, rule.AllowThroughDnd, rule.ScopeClass),
                 version,
+                AlertPayloadKind.Unevaluable,
                 at => repository.RecordUnreadableRuleNoticeAsync(rule, version, at, ct),
                 standing, tenantId, ct);
         }
@@ -148,6 +171,7 @@ internal sealed class UnevaluableRuleNotice(
     private async Task SendOnceAsync(
         NoticeRule rule,
         string? version,
+        AlertPayloadKind kind,
         Func<DateTime, Task<NoticeRecorded?>> record,
         IReadOnlyList<StandingUnevaluableNotice> standing,
         Guid tenantId,
@@ -162,7 +186,7 @@ internal sealed class UnevaluableRuleNotice(
 
         try
         {
-            await NotifyAsync(rule, record, tenantId, ct);
+            await NotifyAsync(rule, kind, record, tenantId, ct);
         }
         catch (Exception ex) when (ProviderFailure.Is(ex))
         {
@@ -205,7 +229,7 @@ internal sealed class UnevaluableRuleNotice(
         bool validated;
         try
         {
-            issues = conditionLog.IssuesFor(rule.Id, rule.ConditionType, rule.ConditionParams,
+            issues = conditionLog.IssuesFor(rule,
                 () => conditionValidator.Validate(
                     rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled,
                     rule.AutoResolveParams, rule.ClientConfiguration),
@@ -231,6 +255,7 @@ internal sealed class UnevaluableRuleNotice(
 
     private async Task NotifyAsync(
         NoticeRule rule,
+        AlertPayloadKind kind,
         Func<DateTime, Task<NoticeRecorded?>> record,
         Guid tenantId,
         CancellationToken ct)
@@ -244,12 +269,12 @@ internal sealed class UnevaluableRuleNotice(
             notice,
             (tenant, activeExcursionCount) => AlertPayloads.Unevaluable(
                 rule.Name, rule.ConditionType, rule.Severity, tenantId, notice.ExcursionId, notice.InstanceId,
-                tenant, activeExcursionCount, now),
+                tenant, activeExcursionCount, now, kind),
             tenantId, repository, ruleRepository, deliveryService, contextEnricher, resolutionHandler, logger, ct);
 
         logger.LogInformation(
-            "Notice {InstanceId} sent that alert rule {AlertRuleId} cannot be evaluated until it is edited",
-            notice.InstanceId, rule.Id);
+            "Notice {InstanceId} ({Kind}) sent that alert rule {AlertRuleId} cannot be evaluated until it is edited",
+            notice.InstanceId, kind, rule.Id);
     }
 
     private Task ResolveNoticeAsync(Guid excursionId, ExcursionCloseReason reason, CancellationToken ct) =>

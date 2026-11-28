@@ -567,7 +567,8 @@ public class AlertRepository : IAlertRepository
     /// The rule is read again under the lock: a disable commits before its retirement resolves the
     /// rule's notices, so either this sees the rule disabled and records nothing, or the retirement
     /// sees the notice this records. An edit made since the caller read the rule likewise records
-    /// nothing for the condition it replaced. See <see cref="AdvisoryLockExtensions"/>.
+    /// nothing for the trees it replaced: the body, the auto-resolve tree or the client configuration
+    /// that holds the snooze conditions. See <see cref="AdvisoryLockExtensions"/>.
     /// </remarks>
     public virtual Task<NoticeRecorded?> RecordUnevaluableNoticeAsync(
         AlertRuleSnapshot rule, string conditionVersion, DateTime at, CancellationToken ct) =>
@@ -579,7 +580,10 @@ public class AlertRepository : IAlertRepository
             (context, token) => context.AlertRules.AnyAsync(r => r.Id == rule.Id
                                                                  && r.IsEnabled
                                                                  && r.ConditionType == rule.ConditionType
-                                                                 && r.ConditionParams == rule.ConditionParams, token),
+                                                                 && r.ConditionParams == rule.ConditionParams
+                                                                 && r.AutoResolveEnabled == rule.AutoResolveEnabled
+                                                                 && r.AutoResolveParams == rule.AutoResolveParams
+                                                                 && r.ClientConfiguration == rule.ClientConfiguration, token),
             ct);
 
     /// <inheritdoc/>

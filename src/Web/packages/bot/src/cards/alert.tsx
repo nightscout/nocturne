@@ -22,7 +22,10 @@ export function AlertCard(props: {
   unit?: "mg/dL" | "mmol/L";
 }) {
   const { payload, unit = "mg/dL" } = props;
-  if (payload.kind === AlertPayloadKind.Unevaluable) return UnevaluableCard({ payload });
+  if (payload.kind === AlertPayloadKind.Unevaluable) return UnevaluableCard({ payload, text: CARD_TEXT.unevaluable });
+  if (payload.kind === AlertPayloadKind.PartlyUnevaluable) {
+    return UnevaluableCard({ payload, text: CARD_TEXT.partlyUnevaluable });
+  }
   if (payload.kind === AlertPayloadKind.Held || payload.kind === AlertPayloadKind.HeldClosed) {
     return HeldCard({ payload, closed: payload.kind === AlertPayloadKind.HeldClosed });
   }
@@ -74,14 +77,14 @@ export function AlertCard(props: {
   );
 }
 
-function UnevaluableCard(props: { payload: AlertPayload }) {
-  const { payload } = props;
+function UnevaluableCard(props: { payload: AlertPayload; text: string }) {
+  const { payload, text } = props;
   const severity = isKnownSeverity(payload.severity) ? payload.severity : undefined;
   const titlePrefix = severity ? SEVERITY_TITLES[severity] : "Alert";
 
   return (
     <Card title={`${titlePrefix}: ${payload.ruleName}`}>
-      <CardText>{CARD_TEXT.unevaluable}</CardText>
+      <CardText>{text}</CardText>
     </Card>
   );
 }

@@ -63,7 +63,9 @@ public class AlertExcursionEntity : ITenantScoped, IAuditable
     /// <summary>
     /// Set only on the row of a notice about the rule: for a notice that its stored condition cannot
     /// be evaluated, the version of the condition the notice was sent for
-    /// (<c>UnevaluableRuleNotice.VersionOf</c>); for a notice that its hold reached the bound, which
+    /// (<c>UnevaluableRuleNotice.VersionOf</c>), or of its auto-resolve and snooze trees for a notice
+    /// that only those cannot (<c>UnevaluableRuleNotice.PartsVersionOf</c>); for a notice that its
+    /// hold reached the bound, which
     /// also has <see cref="HeldSince"/>, <c>held:</c> and that instant. Its instance stays unresolved
     /// while the notice stands. Null on every excursion of a condition;
     /// <see cref="Extensions.AlertExcursionQueries"/> tells the two apart.

@@ -162,6 +162,12 @@ A tree that cannot be evaluated:
 - Auto-resolve tree: never resolves (§7 step 5, as for malformed JSON).
 - Snooze conditions: the snooze clears.
 
+The rule still fires in both cases, so the host tells the rule's recipients, as for a body, that
+its auto-resolve or smart snooze does nothing until it is edited: a payload of kind
+`partly_unevaluable`, sent once per version of the auto-resolve tree and the snooze conditions
+and resolved as the body's notice is. A rule whose body cannot be evaluated either is sent only
+the body's notice.
+
 The crate's `validate` entry point reports every problem in a rule's evaluated trees, in
 pre-order; `AlertRulesController` returns them as a 400, and a rule's stored problems are
 shown in the rule editor. Each issue carries its scope (`condition`, `auto_resolve`,

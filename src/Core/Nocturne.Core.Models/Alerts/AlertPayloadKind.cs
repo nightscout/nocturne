@@ -20,6 +20,15 @@ public enum AlertPayloadKind
     Unevaluable,
 
     /// <summary>
+    /// The rule's body can be evaluated, so the rule fires, but its stored auto-resolve tree or one
+    /// of its smart-snooze conditions cannot: the auto-resolve never closes the alert, or the snooze
+    /// clears, until the rule is edited (docs/alerts/engine-semantics.md §1.4). Sent once per
+    /// version of those trees, as <see cref="Unevaluable"/> is.
+    /// </summary>
+    [EnumMember(Value = "partly_unevaluable"), JsonStringEnumMemberName("partly_unevaluable")]
+    PartlyUnevaluable,
+
+    /// <summary>
     /// The rule has been waiting for missing data for the engine's hold bound (24 hours), so it
     /// cannot fire until the data comes back (docs/alerts/engine-semantics.md §6.4). Sent once per
     /// hold, with the facts it waits for and no glucose value.

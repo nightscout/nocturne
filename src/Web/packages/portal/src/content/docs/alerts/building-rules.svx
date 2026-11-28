@@ -139,6 +139,12 @@ condition changes, or when you disable the rule and enable it again. A
 **Device** channel does not get the notice. The notice clears when you fix the
 condition, disable the rule or delete it.
 
+If Nocturne can evaluate the condition but not the auto-resolve conditions or
+the smart snooze conditions, the rule still fires. But the auto-resolve does
+not close the alert, and the smart snooze does not extend. Nocturne sends a
+different notice for this, in the same way. It sends it again only when the
+auto-resolve or smart snooze conditions change.
+
 ### Webhook messages
 
 A webhook channel sends each message as a JSON object. The `Kind` field tells
@@ -148,6 +154,7 @@ you what the message is:
 |--------|---------|
 | `excursion` | The rule's condition became true. `GlucoseValue`, `Trend` and `TrendRate` hold the reading. `MetBy` gives what made the condition true. It is there for a forecast, eventual glucose or carbs needed condition, and for a glucose condition that compares with a target. Each item has `Kind`, `Curve`, `OffsetMinutes` (minutes ahead) and `Value` (see [Forecast curves](#forecast-curves)). A condition that compares with a target or the latest glucose also gives `Limit`, the limit it compared with. It gives `LimitFact` (`target_low`, `target_high` or `latest_glucose`) and `LimitOffset`, the amount added in mg/dL. `LimitOffset` is left out when it is 0 (see [Compare with a target or the latest glucose](#compare-with-a-target-or-the-latest-glucose)). |
 | `unevaluable` | The rule cannot run until it is edited. `GlucoseValue`, `Trend` and `TrendRate` are null, and `ReadingTimestamp` is the time of the notice. |
+| `partly_unevaluable` | The rule runs, but its auto-resolve or smart snooze conditions cannot run until it is edited. As for `unevaluable`. |
 | `held` | The rule has waited 24 hours for missing data. As for `unevaluable`, and `HeldFacts` lists each missing data source as `Fact` and `Reason`. |
 | `held_closed` | As `held`, for a rule with an open alert, which Nocturne closes because its data stayed missing for 24 hours. |
 

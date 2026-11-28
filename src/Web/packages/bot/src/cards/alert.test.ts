@@ -90,6 +90,17 @@ describe("AlertCard for a rule that cannot run", () => {
     expect(cardButtons(card)).toHaveLength(0);
   });
 
+  it("says a rule whose auto-resolve or smart snooze cannot run still sends alerts", () => {
+    const card = AlertCard({ payload: { ...notice, kind: "partly_unevaluable" } });
+
+    expect(cardTitle(card)).toBe("CRITICAL: Urgent low");
+    expect(cardTexts(card)).toEqual([
+      "This rule sends alerts, but its auto-resolve or smart snooze conditions cannot run as set. Open the rule, check its settings, and save it.",
+    ]);
+    expect(cardFields(card)).toHaveLength(0);
+    expect(cardButtons(card)).toHaveLength(0);
+  });
+
   it("renders the notice for a rule whose condition type the engine does not know", () => {
     const card = AlertCard({ payload: { ...notice, alertType: undefined } });
 

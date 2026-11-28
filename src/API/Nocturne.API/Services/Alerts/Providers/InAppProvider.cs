@@ -40,6 +40,12 @@ internal sealed class InAppProvider(
     public const string UnevaluableSubtitle = "alert_unevaluable_subtitle";
 
     /// <summary>
+    /// The subtitle of the notice, of type <see cref="UnevaluableNotificationType"/>, that a rule's
+    /// auto-resolve tree or smart-snooze conditions cannot be evaluated.
+    /// </summary>
+    public const string PartlyUnevaluableSubtitle = "alert_partly_unevaluable_subtitle";
+
+    /// <summary>
     /// The type of the notice that a rule's hold reached the engine's bound, titled and without
     /// actions as <see cref="UnevaluableNotificationType"/>. Its subtitle is the label key
     /// <see cref="HeldSubtitle"/>, or <see cref="HeldClosedSubtitle"/> when it closed an alert.
@@ -62,7 +68,7 @@ internal sealed class InAppProvider(
 
     private static string NotificationTypeFor(AlertPayloadKind kind) => kind switch
     {
-        AlertPayloadKind.Unevaluable => UnevaluableNotificationType,
+        AlertPayloadKind.Unevaluable or AlertPayloadKind.PartlyUnevaluable => UnevaluableNotificationType,
         AlertPayloadKind.Held or AlertPayloadKind.HeldClosed => HeldNotificationType,
         _ => NotificationType,
     };
@@ -70,6 +76,7 @@ internal sealed class InAppProvider(
     private static string? NoticeSubtitle(AlertPayloadKind kind) => kind switch
     {
         AlertPayloadKind.Unevaluable => UnevaluableSubtitle,
+        AlertPayloadKind.PartlyUnevaluable => PartlyUnevaluableSubtitle,
         AlertPayloadKind.Held => HeldSubtitle,
         AlertPayloadKind.HeldClosed => HeldClosedSubtitle,
         _ => null,
