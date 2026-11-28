@@ -1,12 +1,10 @@
-import type { Cookies } from "@sveltejs/kit";
 import { platformModule, runWithContext, type BotRequestContext } from "@nocturne/bot";
 import { getBot } from "./index.js";
 import { buildScopedBotApiClient, buildUnscopedBotApiClient } from "./api-client.js";
-import { getEffectiveHost, getOriginalProto } from "#lib/server/request-host.js";
+import { getOriginalHost, getOriginalProto } from "#lib/server/request-host.js";
 
 interface WebhookRequest {
   request: Request;
-  cookies: Cookies;
   fetch: typeof fetch;
 }
 
@@ -15,11 +13,11 @@ interface WebhookRequest {
  * uses instance-key clients, never `locals.apiClient`, which carries only the end user's
  * credentials. The tenant is resolved later, by `requireLink`, from the directory lookup.
  */
-export function botRequestContext({ request, cookies, fetch }: WebhookRequest): BotRequestContext {
+export function botRequestContext({ request, fetch }: WebhookRequest): BotRequestContext {
   const extraHeaders: Record<string, string> = {
     "X-Forwarded-Proto": getOriginalProto(request),
   };
-  const host = getEffectiveHost(request, cookies);
+  const host = getOriginalHost(request);
   if (host) extraHeaders["X-Forwarded-Host"] = host;
 
   return {
