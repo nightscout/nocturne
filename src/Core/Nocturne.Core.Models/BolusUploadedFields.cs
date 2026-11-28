@@ -14,16 +14,14 @@ public static class BolusUploadedFields
     public static Dictionary<string, object?>? Keep(Dictionary<string, object?>? record, Treatment treatment)
     {
         record = UploadedPumpFields.Keep(record, treatment);
-        record = UploadedAppFields.Keep(record, treatment);
-        record = UploadedAppFields.KeepUploader(record, treatment);
+        record = UploadedAppFields.KeepAll(record, treatment);
         return KeptField.Add(record, IsBasalInsulin, treatment.IsBasalInsulin);
     }
 
     public static void Restore(Treatment treatment, Bolus bolus)
     {
         UploadedPumpFields.Restore(treatment, bolus.AdditionalProperties, bolus.PumpRecordId);
-        UploadedAppFields.Restore(treatment, bolus.AdditionalProperties, bolus.App);
-        UploadedAppFields.RestoreUploader(treatment, bolus.AdditionalProperties, bolus.Device);
+        UploadedAppFields.RestoreAll(treatment, bolus.AdditionalProperties, bolus.App, bolus.Device);
         treatment.IsBasalInsulin = KeptField.Bool(bolus.AdditionalProperties, IsBasalInsulin);
     }
 }

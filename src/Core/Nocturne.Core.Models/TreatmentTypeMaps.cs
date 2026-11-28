@@ -48,4 +48,16 @@ public static class TreatmentTypeMaps
         [TreatmentTypes.PumpSuspend] = DeviceEventType.PumpSuspend,
         [TreatmentTypes.PumpResume] = DeviceEventType.PumpResume,
     };
+
+    /// <summary>The eventType string each <see cref="DeviceEventType"/> in <see cref="DeviceEventTypeMap"/> is uploaded as.</summary>
+    public static readonly IReadOnlyDictionary<DeviceEventType, string> DeviceEventTypeNames =
+        ReverseOf(DeviceEventTypeMap);
+
+    /// <summary>
+    /// <paramref name="map"/> read the other way. Two keys that map to one member throw, so a map that
+    /// gains a second name for a member cannot be reversed by picking one of them.
+    /// </summary>
+    public static Dictionary<TValue, string> ReverseOf<TValue>(IReadOnlyDictionary<string, TValue> map)
+        where TValue : notnull =>
+        map.ToDictionary(entry => entry.Value, entry => entry.Key);
 }

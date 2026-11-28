@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.GoldenFiles.Infrastructure;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -38,6 +39,8 @@ public class TreatmentUploaderFieldsTests : GoldenFileTestBase
             typeof(BGCheckEntity)),
         ["Note"] = (new() { ["eventType"] = "Note", ["notes"] = "walked" }, typeof(NoteEntity)),
         ["DeviceEvent"] = (new() { ["eventType"] = "Site Change" }, typeof(DeviceEventEntity)),
+        ["PumpSuspend"] = (new() { ["eventType"] = "Pump Suspend" }, typeof(DeviceEventEntity)),
+        ["OpenApsOffline"] = (new() { ["eventType"] = "OpenAPS Offline", ["notes"] = "offline", ["duration"] = 30 }, typeof(NoteEntity)),
         ["BolusCalculation"] = (
             new() { ["eventType"] = "Bolus Wizard", ["bloodGlucoseInput"] = 140, ["insulinOnBoard"] = 0.2 },
             typeof(BolusCalculationEntity)),
@@ -88,6 +91,35 @@ public class TreatmentUploaderFieldsTests : GoldenFileTestBase
 
     [Theory]
     [MemberData(nameof(Records))]
+    public async Task UploadedWithIsReadOnlyAndApp_ServesBoth(string record, string version)
+    {
+        var served = await UploadAndReadAsync(record, version, new() { ["isReadOnly"] = true, ["app"] = "AAPS" });
+
+        ServedFlag(served, "isReadOnly").Should().BeTrue();
+        Served(served, "app").Should().Be("AAPS");
+    }
+
+    [Theory]
+    [MemberData(nameof(Records))]
+    public async Task UploadedWithIsReadOnlyFalse_ServesFalse(string record, string version)
+    {
+        var served = await UploadAndReadAsync(record, version, new() { ["isReadOnly"] = false });
+
+        ServedFlag(served, "isReadOnly").Should().BeFalse();
+    }
+
+    [Theory]
+    [MemberData(nameof(Records))]
+    public async Task UploadedWithNeitherIsReadOnlyNorApp_ServesNeither(string record, string version)
+    {
+        var served = await UploadAndReadAsync(record, version, []);
+
+        ServedFlag(served, "isReadOnly").Should().BeNull();
+        Served(served, "app").Should().BeNull();
+    }
+
+    [Theory]
+    [MemberData(nameof(Records))]
     public async Task RowStoredWithoutKeptUploaderFields_ServesItsDeviceAsItDidBefore(string record, string version)
     {
         var served = await UploadAndReadAsync(
@@ -103,6 +135,29 @@ public class TreatmentUploaderFieldsTests : GoldenFileTestBase
             Served(served, "enteredBy").Should().Be("openaps://AAPS");
             Served(served, "device").Should().BeNull();
         }
+    }
+
+    public static TheoryData<string> DeviceEventTypes()
+    {
+        var data = new TheoryData<string>();
+        foreach (var eventType in TreatmentTypeMaps.DeviceEventTypeMap.Keys)
+            data.Add(eventType);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(DeviceEventTypes))]
+    public async Task ADeviceEventIsServedOnV1UnderTheEventTypeItWasUploadedAs(string eventType)
+    {
+        var post = await PostJsonAsync("/api/v1/treatments", new Dictionary<string, object?> { ["eventType"] = eventType, ["date"] = Date });
+        post.IsSuccessStatusCode.Should().BeTrue(await post.Content.ReadAsStringAsync());
+
+        var list = await Client.GetAsync($"/api/v1/treatments?find[date]={Date}&count=10");
+        var body = await list.Content.ReadAsStringAsync();
+        list.IsSuccessStatusCode.Should().BeTrue(body);
+        JsonDocument.Parse(body).RootElement.EnumerateArray()
+            .Select(t => t.GetProperty("eventType").GetString())
+            .Should().ContainSingle().Which.Should().Be(eventType);
     }
 
     [Fact]
@@ -176,6 +231,11 @@ public class TreatmentUploaderFieldsTests : GoldenFileTestBase
         var column = type.FindProperty("AdditionalPropertiesJson")!.GetColumnName();
         await db.Database.ExecuteSqlRawAsync($"UPDATE \"{table}\" SET \"{column}\" = NULL");
     }
+
+    private static bool? ServedFlag(JsonElement treatment, string field) =>
+        treatment.TryGetProperty(field, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? value.GetBoolean()
+            : null;
 
     private static string? Served(JsonElement treatment, string field) =>
         treatment.TryGetProperty(field, out var value) && value.ValueKind == JsonValueKind.String

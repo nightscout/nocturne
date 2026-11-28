@@ -587,7 +587,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private static string SpanSource(Treatment treatment) =>
         treatment.DataSource
         ?? treatment.EnteredBy
-        ?? UploadedString(treatment, "app")
+        ?? UploadedAppFields.AppOf(treatment)
         ?? "nightscout";
 
     #endregion
@@ -636,7 +636,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             EndTimestamp = (treatment.Mills + Math.Max(durationMs, 0)).ToUtcDateTime(),
             UtcOffset = treatment.UtcOffset,
             Device = UploadedDevice(treatment),
-            App = UploadedString(treatment, "app"),
+            App = UploadedAppFields.AppOf(treatment),
             DataSource = treatment.DataSource,
             CorrelationId = correlationId,
             Rate = percent is null ? treatment.Absolute ?? 0 : treatment.Rate,
@@ -671,7 +671,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         if (treatment.BolusType is "PUMP_SUSPEND" or "EMULATED_PUMP_SUSPEND")
             return (V4Models.TempBasalOrigin.Suspended, reported);
 
-        return (V4Models.TempBasalOriginProvenance.UploaderDefault(treatment.EnteredBy, UploadedString(treatment, "app")),
+        return (V4Models.TempBasalOriginProvenance.UploaderDefault(treatment.EnteredBy, UploadedAppFields.AppOf(treatment)),
             V4Models.TempBasalOriginEvidence.Uploader);
     }
 
@@ -761,7 +761,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             Automatic = treatment.Automatic ?? false,
             Duration = treatment.Duration,
             Device = UploadedDevice(treatment),
-            App = UploadedString(treatment, "app"),
+            App = UploadedAppFields.AppOf(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -781,7 +781,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             LegacyId = treatment.Id,
             AdditionalProperties = PreBolusSplit.AddMealId(
                 UploadedEventType(
-                    UploadedAppFields.KeepUploader(
+                    UploadedAppFields.KeepAll(
                         TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
                         treatment),
                     treatment, keepEventType, TreatmentTypes.CarbCorrection),
@@ -789,6 +789,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             Timestamp = treatment.Mills.ToUtcDateTime(),
             Carbs = treatment.Carbs ?? 0,
             Device = UploadedDevice(treatment),
+            App = UploadedAppFields.AppOf(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -812,7 +813,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         return new V4Models.BGCheck
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = UploadedAppFields.KeepUploader(
+            AdditionalProperties = UploadedAppFields.KeepAll(
                 TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
                 treatment),
             Timestamp = treatment.Mills.ToUtcDateTime(),
@@ -820,6 +821,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             GlucoseType = ParseGlucoseType(treatment.GlucoseType),
             Units = V4Models.GlucoseUnits.Parse(treatment.Units),
             Device = UploadedDevice(treatment),
+            App = UploadedAppFields.AppOf(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -832,7 +834,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         return new V4Models.Note
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = UploadedAppFields.KeepUploader(
+            AdditionalProperties = UploadedAppFields.KeepAll(
                 TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
                 treatment),
             Timestamp = treatment.Mills.ToUtcDateTime(),
@@ -840,6 +842,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             EventType = treatment.EventType,
             IsAnnouncement = isAnnouncement || (treatment.IsAnnouncement ?? false),
             Device = UploadedDevice(treatment),
+            App = UploadedAppFields.AppOf(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -852,13 +855,14 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         return new V4Models.DeviceEvent
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = UploadedAppFields.KeepUploader(
+            AdditionalProperties = UploadedAppFields.KeepAll(
                 TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
                 treatment),
             Timestamp = treatment.Mills.ToUtcDateTime(),
             EventType = deviceEventType,
             Notes = treatment.Notes,
             Device = UploadedDevice(treatment),
+            App = UploadedAppFields.AppOf(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -871,7 +875,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         return new V4Models.BolusCalculation
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = UploadedAppFields.KeepUploader(
+            AdditionalProperties = UploadedAppFields.KeepAll(
                 TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
                 treatment),
             Timestamp = treatment.Mills.ToUtcDateTime(),
@@ -883,6 +887,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
             CarbRatio = treatment.CR,
             CalculationType = MapCalculationType(treatment.CalculationType),
             Device = UploadedDevice(treatment),
+            App = UploadedAppFields.AppOf(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -949,18 +954,14 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// AAPS sets "app": "AAPS" on all treatment uploads (NSAndroidClientImpl.kt:296).
     /// </summary>
     internal static bool IsAapsUpload(Treatment treatment) =>
-        string.Equals(UploadedString(treatment, "app"), "AAPS", StringComparison.OrdinalIgnoreCase);
+        string.Equals(UploadedAppFields.AppOf(treatment), "AAPS", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The device a record names: its uploader, else the <c>device</c> the upload sent. The uploader
     /// comes first because it is the key a temp basal is matched to its loop's snapshots by.
     /// </summary>
     private static string? UploadedDevice(Treatment treatment) =>
-        treatment.EnteredBy ?? UploadedString(treatment, UploadedAppFields.DeviceKey);
-
-    /// <summary>An uploaded field the treatment has no property for, when it is a string.</summary>
-    private static string? UploadedString(Treatment treatment, string key) =>
-        KeptField.String(treatment.AdditionalProperties, key);
+        treatment.EnteredBy ?? UploadedAppFields.DeviceOf(treatment);
 
     /// <summary>
     /// Extracts AAPS v4 insulin configuration from the <c>icfg</c> JSON field in
@@ -1187,7 +1188,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         if (treatment.Timeshift is { } timeshift)
         {
             var unit = ProfileSpanMetadata.UnitOfUploadedTimeshift(
-                timeshift, treatment.EnteredBy, UploadedString(treatment, ProfileSpanMetadata.AppKey),
+                timeshift, treatment.EnteredBy, UploadedAppFields.AppOf(treatment),
                 treatment.OriginalProfileName);
             metadata[ProfileSpanMetadata.TimeshiftKey] = ProfileSpanMetadata.ToHours(timeshift, unit);
             metadata[ProfileSpanMetadata.UploadedTimeshiftKey] = timeshift;
@@ -1209,7 +1210,6 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         if (treatment.DurationInMilliseconds is { } durationMs)
             metadata[ProfileSpanMetadata.DurationInMillisecondsKey] = durationMs;
 
-        AddUploadedApp(metadata, treatment);
         AddServedTreatmentFields(metadata, treatment);
         AddInsulinContext(metadata, treatment);
 
@@ -1219,16 +1219,9 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     private static Dictionary<string, object> BuildEffectiveProfileMetadata(Treatment treatment)
     {
         var metadata = EffectiveProfileSwitch.Metadata(treatment);
-        AddUploadedApp(metadata, treatment);
         AddServedTreatmentFields(metadata, treatment);
         AddInsulinContext(metadata, treatment);
         return metadata;
-    }
-
-    private static void AddUploadedApp(Dictionary<string, object> metadata, Treatment treatment)
-    {
-        if (UploadedString(treatment, ProfileSpanMetadata.AppKey) is { Length: > 0 } app)
-            metadata[ProfileSpanMetadata.AppKey] = app;
     }
 
     private static void AddInsulinContext(Dictionary<string, object> metadata, Treatment treatment)
@@ -1320,8 +1313,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
     /// </summary>
     private static void AddServedTreatmentFields(Dictionary<string, object> metadata, Treatment treatment)
     {
-        if (!string.IsNullOrEmpty(treatment.EnteredBy))
-            metadata[UploadedAppFields.EnteredByKey] = treatment.EnteredBy;
+        UploadedAppFields.KeepInMetadata(metadata, treatment);
 
         if (!string.IsNullOrEmpty(treatment.Notes))
             metadata[LegacyTreatmentTables.NotesKey] = treatment.Notes;
@@ -1335,7 +1327,7 @@ internal class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer
         if (TreatmentUploadedTimestamp.Uploaded(treatment) is { } timestamp)
             metadata[LegacyTreatmentTables.UploadedTimestampKey] = timestamp;
 
-        SpanUploadedFields.Keep(metadata, treatment);
+        UploadedPumpFields.KeepInMetadata(metadata, treatment);
         TreatmentClientId.KeepInMetadata(metadata, treatment);
 
         metadata[StateSpanMetadataExtensions.UtcOffsetKey] = treatment.UtcOffset ?? 0;

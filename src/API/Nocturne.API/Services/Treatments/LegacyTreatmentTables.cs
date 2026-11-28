@@ -753,24 +753,6 @@ internal sealed class LegacyProfileActivationTable : ILegacyKeyedTreatmentTable
 /// </summary>
 internal static class LegacyTreatmentTables
 {
-    // DeviceEventType → legacy Nightscout eventType string (reverse of TreatmentTypeMaps.DeviceEventTypeMap)
-    private static readonly Dictionary<DeviceEventType, string> DeviceEventTypeToString =
-        new()
-        {
-            [DeviceEventType.SensorStart] = TreatmentTypes.SensorStart,
-            [DeviceEventType.SensorChange] = TreatmentTypes.SensorChange,
-            [DeviceEventType.SensorStop] = TreatmentTypes.SensorStop,
-            [DeviceEventType.SiteChange] = TreatmentTypes.SiteChange,
-            [DeviceEventType.InsulinChange] = TreatmentTypes.InsulinChange,
-            [DeviceEventType.PumpBatteryChange] = TreatmentTypes.PumpBatteryChange,
-            [DeviceEventType.PodChange] = TreatmentTypes.PodChange,
-            [DeviceEventType.PodActivated] = TreatmentTypes.PodActivated,
-            [DeviceEventType.PodDeactivated] = TreatmentTypes.PodDeactivated,
-            [DeviceEventType.ReservoirChange] = TreatmentTypes.ReservoirChange,
-            [DeviceEventType.CannulaChange] = TreatmentTypes.CannulaChange,
-            [DeviceEventType.TransmitterSensorInsert] = TreatmentTypes.TransmitterSensorInsert,
-        };
-
     /// <summary>
     /// Loop override fields with no <see cref="Treatment"/> property, kept and served with their JSON
     /// type. NightscoutKit and LoopFollow read <c>correctionRange</c> as a number array, and LoopFollow
@@ -1051,9 +1033,6 @@ internal static class LegacyTreatmentTables
             };
         }
 
-        if (span.App is { } app)
-            treatment.AdditionalProperties = new Dictionary<string, object> { [ProfileSpanMetadata.AppKey] = app };
-
         treatment.Id = activation.Id.ToString();
         treatment.LegacyId = activation.LegacyId;
         treatment.RecordId = activation.Id;
@@ -1070,12 +1049,12 @@ internal static class LegacyTreatmentTables
     internal static void RestoreServedFields(Treatment treatment, IDictionary<string, object>? metadata)
     {
         treatment.RawTimestamp ??= TreatmentUploadedTimestamp.OfSpan(metadata);
-        treatment.EnteredBy = metadata.TryReadString(UploadedAppFields.EnteredByKey);
+        UploadedAppFields.RestoreFromMetadata(treatment, metadata);
         treatment.Notes = metadata.TryReadString(NotesKey);
         treatment.SyncIdentifier = metadata.TryReadString(SyncIdentifierKey);
         treatment.InsulinType = metadata.TryReadString(InsulinTypeKey);
         treatment.UtcOffset = (int?)metadata.TryReadDecimal(StateSpanMetadataExtensions.UtcOffsetKey);
-        SpanUploadedFields.Restore(treatment, metadata);
+        UploadedPumpFields.RestoreFromMetadata(treatment, metadata);
         TreatmentClientId.RestoreFromMetadata(treatment, metadata);
     }
 
@@ -1393,7 +1372,7 @@ internal static class LegacyTreatmentTables
             SyncIdentifier = carb.SyncIdentifier,
             UtcOffset = carb.UtcOffset,
         };
-        UploadedAppFields.RestoreUploader(treatment, carb.AdditionalProperties, carb.Device);
+        UploadedAppFields.RestoreAll(treatment, carb.AdditionalProperties, carb.App, carb.Device);
         return treatment;
     }
 
@@ -1433,7 +1412,7 @@ internal static class LegacyTreatmentTables
             SyncIdentifier = bgCheck.SyncIdentifier,
             UtcOffset = bgCheck.UtcOffset,
         };
-        UploadedAppFields.RestoreUploader(treatment, bgCheck.AdditionalProperties, bgCheck.Device);
+        UploadedAppFields.RestoreAll(treatment, bgCheck.AdditionalProperties, bgCheck.App, bgCheck.Device);
         return treatment;
     }
 
@@ -1454,13 +1433,13 @@ internal static class LegacyTreatmentTables
             SyncIdentifier = note.SyncIdentifier,
             UtcOffset = note.UtcOffset,
         };
-        UploadedAppFields.RestoreUploader(treatment, note.AdditionalProperties, note.Device);
+        UploadedAppFields.RestoreAll(treatment, note.AdditionalProperties, note.App, note.Device);
         return treatment;
     }
 
     private static Treatment ProjectDeviceEvent(DeviceEvent deviceEvent)
     {
-        DeviceEventTypeToString.TryGetValue(deviceEvent.EventType, out var eventTypeString);
+        TreatmentTypeMaps.DeviceEventTypeNames.TryGetValue(deviceEvent.EventType, out var eventTypeString);
         var treatment = new Treatment
         {
             Id = deviceEvent.Id.ToString(),
@@ -1475,7 +1454,7 @@ internal static class LegacyTreatmentTables
             SyncIdentifier = deviceEvent.SyncIdentifier,
             UtcOffset = deviceEvent.UtcOffset,
         };
-        UploadedAppFields.RestoreUploader(treatment, deviceEvent.AdditionalProperties, deviceEvent.Device);
+        UploadedAppFields.RestoreAll(treatment, deviceEvent.AdditionalProperties, deviceEvent.App, deviceEvent.Device);
         return treatment;
     }
 
@@ -1508,7 +1487,7 @@ internal static class LegacyTreatmentTables
             DataSource = bc.DataSource,
             UtcOffset = bc.UtcOffset,
         };
-        UploadedAppFields.RestoreUploader(treatment, bc.AdditionalProperties, bc.Device);
+        UploadedAppFields.RestoreAll(treatment, bc.AdditionalProperties, bc.App, bc.Device);
         return treatment;
     }
 }

@@ -26,7 +26,8 @@ internal static class ProfileActivationSource
     public static string KeyOf(string? dataSource, string? app, string? enteredBy) =>
         !string.IsNullOrEmpty(dataSource) ? dataSource
         : IsAaps(app, enteredBy) ? Aaps
-        : app ?? enteredBy ?? string.Empty;
+        : !string.IsNullOrEmpty(app) ? app
+        : enteredBy ?? string.Empty;
 
     public static bool IsAaps(string? app, string? enteredBy) =>
         string.Equals(app, Aaps, StringComparison.OrdinalIgnoreCase)

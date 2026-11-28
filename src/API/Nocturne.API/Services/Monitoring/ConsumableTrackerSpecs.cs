@@ -163,7 +163,7 @@ public static class ConsumableTrackerSpecs
 
     /// <summary>The spelling of <paramref name="type"/> a definition's trigger or end list stores.</summary>
     private static string CanonicalName(DeviceEventType type) =>
-        TreatmentTypeMaps.DeviceEventTypeMap.First(pair => pair.Value == type).Key;
+        TreatmentTypeMaps.DeviceEventTypeNames[type];
 
     /// <summary>
     /// The spec for <paramref name="kind"/>: the first, by rank, of the specs of
