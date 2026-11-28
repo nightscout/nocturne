@@ -56,7 +56,6 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         public bool IsEnabled { get; set; }
         public bool IsConfigured => IsEnabled;
         public string? ServiceUrl => null;
-        public bool AllowsTeamWrites { get; set; }
     }
 
     /// <summary>

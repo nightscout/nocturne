@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Identity;
-using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models.Authorization;
@@ -155,35 +154,22 @@ public class DemoSubjectTeamSurfaceTests
 
     [Theory]
     [MemberData(nameof(Actions))]
-    public async Task WithTeamWritesOff_OnlyAReadAdmitsTheClinicPersona(Type controller, string actionName)
+    public async Task TheClinicPersonaWritesOnlyItsOwnViewsAndRules(Type controller, string actionName)
     {
         var action = controller.GetMethod(actionName, BindingFlags.Public | BindingFlags.Instance)!;
 
-        var admitted = await AdmitsAsync(controller, action, teamWritesAllowed: false, inATeam: true);
-
-        admitted.Should().Be(Expected[Key(controller, action)] == DemoSubjectOpening.Read);
-        if (!IsGet(action))
-            admitted.Should().BeFalse("{0} writes, and the demo allows no writes", Key(controller, action));
-    }
-
-    [Theory]
-    [MemberData(nameof(Actions))]
-    public async Task WithTeamWritesOn_TheClinicPersonaWritesOnlyItsOwnViewsAndRules(Type controller, string actionName)
-    {
-        var action = controller.GetMethod(actionName, BindingFlags.Public | BindingFlags.Instance)!;
-
-        var admitted = await AdmitsAsync(controller, action, teamWritesAllowed: true, inATeam: true);
+        var admitted = await AdmitsAsync(controller, action, inATeam: true);
 
         admitted.Should().Be(Expected[Key(controller, action)] is not null);
     }
 
     [Theory]
     [MemberData(nameof(Actions))]
-    public async Task WithTeamWritesOn_TheVisitorInNoTeamWritesNothing(Type controller, string actionName)
+    public async Task TheVisitorInNoTeamWritesNothing(Type controller, string actionName)
     {
         var action = controller.GetMethod(actionName, BindingFlags.Public | BindingFlags.Instance)!;
 
-        var admitted = await AdmitsAsync(controller, action, teamWritesAllowed: true, inATeam: false);
+        var admitted = await AdmitsAsync(controller, action, inATeam: false);
 
         admitted.Should().Be(Expected[Key(controller, action)] == DemoSubjectOpening.Read);
     }
@@ -193,17 +179,12 @@ public class DemoSubjectTeamSurfaceTests
 
     private static string Key(Type controller, MethodInfo action) => $"{controller.Name}.{action.Name}";
 
-    private static bool IsGet(MethodInfo action) =>
-        ControllerActionReflection.GetHttpMethods(action).Contains("GET", StringComparer.OrdinalIgnoreCase);
-
     /// <summary>Runs each <see cref="DenyDemoSubjectAttribute"/> the action meets for a demo subject, as MVC would.</summary>
-    private static async Task<bool> AdmitsAsync(Type controller, MethodInfo action, bool teamWritesAllowed, bool inATeam)
+    private static async Task<bool> AdmitsAsync(Type controller, MethodInfo action, bool inATeam)
     {
         var subjectId = Guid.CreateVersion7();
         var subjects = new Mock<ISubjectRepository>();
         subjects.Setup(s => s.IsDemoSubjectAsync(subjectId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        var demoMode = new Mock<IDemoModeService>();
-        demoMode.Setup(d => d.AllowsTeamWrites).Returns(teamWritesAllowed);
         var teams = new Mock<ITeamRepository>();
         teams.Setup(t => t.GetTeamsOfAsync(subjectId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(inATeam ? [new TeamSummary(Guid.CreateVersion7(), "Clinic", TeamMemberKind.Staff)] : []);
@@ -212,7 +193,6 @@ public class DemoSubjectTeamSurfaceTests
         {
             RequestServices = new ServiceCollection()
                 .AddSingleton(subjects.Object)
-                .AddSingleton(demoMode.Object)
                 .AddSingleton(teams.Object)
                 .BuildServiceProvider(),
         };

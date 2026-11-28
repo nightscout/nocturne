@@ -429,10 +429,9 @@ public class DemoClinicIntegrationTests(ApiIntegrationTestFixture fixture, ITest
         new { dataset = "current_status", field = "hoursSinceReading", comparison = "Above", value = 3, level = "Hazard" };
 
     [Fact]
-    public async Task With_team_writes_on_the_persona_writes_its_own_views_and_rules_and_nothing_of_the_team()
+    public async Task The_persona_writes_its_own_views_and_rules_and_nothing_of_the_team()
     {
         await ProvisionAsync();
-        using var writes = AllowTeamWrites(true);
         using var persona = await PersonaClientAsync();
         var teamId = await OnlyTeamIdAsync(persona);
         var ruleId = await FirstRuleIdAsync(persona);
@@ -453,27 +452,9 @@ public class DemoClinicIntegrationTests(ApiIntegrationTestFixture fixture, ITest
     }
 
     [Fact]
-    public async Task With_team_writes_off_the_persona_reads_its_views_and_rules_and_writes_neither()
+    public async Task The_personal_visitor_is_in_no_team_and_writes_nothing()
     {
         await ProvisionAsync();
-        using var writes = AllowTeamWrites(false);
-        using var persona = await PersonaClientAsync();
-        var ruleId = await FirstRuleIdAsync(persona);
-
-        var views = await persona.GetFromJsonAsync<JsonElement>("/api/v4/me/people-views");
-        views.GetProperty("views").GetArrayLength().Should().Be(DemoClinicSeeds.Views.Count);
-        (await persona.PostAsJsonAsync("/api/v4/me/people-views", OwnView)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await persona.PutAsJsonAsync($"/api/v4/me/flag-rules/{ruleId}", StaleReading)).StatusCode
-            .Should().Be(HttpStatusCode.Forbidden);
-        (await persona.DeleteAsync($"/api/v4/me/flag-rules/{ruleId}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await PermissionsAsync(persona)).GetProperty("refusedStaffWritesAsDemoSubject").GetBoolean().Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task With_team_writes_on_the_personal_visitor_is_in_no_team_and_writes_nothing()
-    {
-        await ProvisionAsync();
-        using var writes = AllowTeamWrites(true);
         var session = await SessionAsync(HostSlug, persona: null);
         session.StatusCode.Should().Be(HttpStatusCode.OK, await session.Content.ReadAsStringAsync());
         var token = (await session.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("accessToken").GetString();
@@ -487,20 +468,6 @@ public class DemoClinicIntegrationTests(ApiIntegrationTestFixture fixture, ITest
         (await visitor.PostAsJsonAsync("/api/v4/me/teams", new { name = "Visitor team" })).StatusCode
             .Should().Be(HttpStatusCode.Forbidden);
         (await PermissionsAsync(visitor)).GetProperty("refusedStaffWritesAsDemoSubject").GetBoolean().Should().BeTrue();
-    }
-
-    /// <summary>Sets the demo's team writes for one test, and puts them back as they were.</summary>
-    private Restore AllowTeamWrites(bool allowed)
-    {
-        var demoMode = Fixture.DemoModeService;
-        var before = demoMode.AllowsTeamWrites;
-        demoMode.AllowsTeamWrites = allowed;
-        return new Restore(() => demoMode.AllowsTeamWrites = before);
-    }
-
-    private sealed class Restore(Action restore) : IDisposable
-    {
-        public void Dispose() => restore();
     }
 
     private static async Task<Guid> OnlyTeamIdAsync(HttpClient client)

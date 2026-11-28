@@ -22,12 +22,6 @@ public interface IDemoModeService
     /// Base URL of the external demo data service as configured, or null when none was injected.
     /// </summary>
     string? ServiceUrl { get; }
-
-    /// <summary>
-    /// Whether a demo subject who is staff of a team may make the writes a staff member makes for themselves
-    /// (<see cref="Authorization.DemoSubjectOpening.StaffWrite"/>). <c>DemoMode:AllowTeamWrites</c>; false when unset.
-    /// </summary>
-    bool AllowsTeamWrites { get; }
 }
 
 /// <summary>
@@ -57,7 +51,6 @@ public class DemoModeService : IDemoModeService
     private readonly bool _isEnabled;
     private readonly bool _isConfigured;
     private readonly string? _serviceUrl;
-    private readonly bool _allowsTeamWrites;
     private readonly ILogger<DemoModeService> _logger;
 
     public DemoModeService(IConfiguration configuration, ILogger<DemoModeService> logger)
@@ -71,7 +64,6 @@ public class DemoModeService : IDemoModeService
         _isEnabled = IsEnabledIn(configuration);
         _serviceUrl = demoServiceConfig.Url;
         _isConfigured = _isEnabled && !string.IsNullOrWhiteSpace(_serviceUrl);
-        _allowsTeamWrites = configuration.GetValue("DemoMode:AllowTeamWrites", false);
 
         // Log all demo service configuration for debugging
         _logger.LogInformation(
@@ -104,7 +96,4 @@ public class DemoModeService : IDemoModeService
 
     /// <inheritdoc />
     public string? ServiceUrl => _serviceUrl;
-
-    /// <inheritdoc />
-    public bool AllowsTeamWrites => _allowsTeamWrites;
 }
