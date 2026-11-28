@@ -3,10 +3,9 @@ import { createLogger } from "./logger.js";
 const logger = createLogger();
 
 /**
- * Wraps a command or action handler so its failure is logged and goes no further. The chat SDK
- * passes a handler's failure back to the adapter, and Telegram's long polling then queues the
- * update again without limit, so a handler that fails once (a refused private message, an API
- * outage) would run every 30 seconds for as long as the bot runs.
+ * Wraps a command or action handler so its failure is logged under the handler's name and goes no
+ * further. No webhook route passes the chat SDK an option to carry a handler's failure back to the
+ * adapter, so a failed handler never makes a platform deliver its update again.
  */
 export function settled<A extends unknown[]>(
   name: string,
