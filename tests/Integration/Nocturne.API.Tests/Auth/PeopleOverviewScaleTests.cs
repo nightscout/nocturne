@@ -18,13 +18,13 @@ namespace Nocturne.API.Tests.Integration.Auth;
 
 /// <summary>
 /// The overview of a staff member who follows 300 people, more than the overview reads at once. A cold read answers
-/// with every person pending rather than waiting on figures, a warm read answers with none pending, and each item holds
-/// its own person's latest reading.
+/// with every person pending rather than waiting on figures, a warm read answers with none pending, each item holds
+/// its own person's latest reading, and each person is read on one connection.
 /// </summary>
 /// <remarks>
 /// The timing measurement (medians of <see cref="Reads"/> reads, warm and cold, for the full and the team rule set, and
-/// the contexts one read opens) runs only when <c>NOCTURNE_PEOPLE_OVERVIEW_TIMING=1</c>. Run it built in Release:
-/// <c>dotnet test tests/Integration/Nocturne.API.Tests -c Release --filter "FullyQualifiedName~PeopleOverviewScaleTests" --logger "console;verbosity=detailed"</c>.
+/// the contexts and connections one read opens) runs only when <c>NOCTURNE_PEOPLE_OVERVIEW_TIMING=1</c>. Run it built
+/// in Release: <c>dotnet test tests/Integration/Nocturne.API.Tests -c Release --filter "FullyQualifiedName~PeopleOverviewScaleTests" --logger "console;verbosity=detailed"</c>.
 /// </remarks>
 [Collection(ApiIntegrationShards.Four)]
 [Trait("Category", "Integration")]
@@ -38,7 +38,7 @@ public class PeopleOverviewScaleTests(ApiIntegrationTestFixture fixture, ITestOu
     private static readonly TimeSpan Budget = TimeSpan.FromSeconds(10);
 
     [Fact]
-    public async Task A_cold_read_of_300_people_waits_on_no_figure_and_a_warm_read_gives_each_person_their_own_reading()
+    public async Task A_cold_read_of_300_people_waits_on_no_figure_and_a_warm_read_gives_each_person_their_own_reading_on_one_connection()
     {
         var watch = Stopwatch.StartNew();
         var owner = await SeedOwnerAsync();
@@ -65,6 +65,10 @@ public class PeopleOverviewScaleTests(ApiIntegrationTestFixture fixture, ITestOu
                 .Select(t => (Tenant: t.GetProperty("tenantId").GetGuid(), Mgdl: t.GetProperty("latest").GetProperty("mgdl").GetDouble()))
                 .Should().BeEquivalentTo(expected.Select(e => (Tenant: e.Key, Mgdl: e.Value)), "each item holds its own person's reading");
         }
+
+        var opens = (await ConnectionOpensOfReadAsync(staffClient, "Fixed")).CountBy(t => t).ToDictionary();
+        sites.Select(site => opens.GetValueOrDefault(site)).Should().AllSatisfy(count =>
+            count.Should().Be(1, "each person's reads take one pool checkout and write the session once"));
 
         Output.WriteLine($"seeded in {seeded.TotalSeconds:F1} s; the test took {watch.Elapsed.TotalSeconds:F1} s");
     }
@@ -163,8 +167,9 @@ public class PeopleOverviewScaleTests(ApiIntegrationTestFixture fixture, ITestOu
     }
 
     /// <summary>
-    /// The contexts one warm full read opens, by caller, and the transactions the database committed meanwhile, which
-    /// show what each person costs the read. The transaction count takes in any other work the database did then.
+    /// The contexts one warm full read opens, by caller, the connections they opened, and the transactions the database
+    /// committed meanwhile, which show what each person costs the read. The transaction count takes in any other work
+    /// the database did then.
     /// </summary>
     private async Task WriteRoundTripsAsync(HttpClient client)
     {
@@ -174,19 +179,35 @@ public class PeopleOverviewScaleTests(ApiIntegrationTestFixture fixture, ITestOu
         await Task.Delay(TimeSpan.FromSeconds(2));
         var before = await conn.ScalarAsync<long>(Committed);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v4/me/tenants/overview")
-        {
-            Content = JsonContent.Create(new { rules = "All" }),
-        };
-        var id = ContextOpenLog.Tag(request);
-        (await client.SendAsync(request)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var id = await TaggedReadAsync(client, "All");
 
         await Task.Delay(TimeSpan.FromSeconds(2));
         var after = await conn.ScalarAsync<long>(Committed);
-        var opens = Fixture.Services.GetRequiredService<ContextOpenLog>().OpensOf(id);
-        Output.WriteLine($"one warm full read: {opens.Count} contexts, {after - before - 1} transactions committed");
+        var log = Fixture.Services.GetRequiredService<ContextOpenLog>();
+        var opens = log.OpensOf(id);
+        Output.WriteLine(
+            $"one warm full read: {opens.Count} contexts, {log.ConnectionOpensOf(id).Count} connections opened, " +
+            $"{after - before - 1} transactions committed");
         foreach (var caller in opens.GroupBy(o => o.Caller).OrderByDescending(g => g.Count()))
             Output.WriteLine($"  {caller.Count(),5} {caller.Key}");
+    }
+
+    /// <summary>The tenant of each connection one read with <paramref name="rules"/> opened.</summary>
+    private async Task<IReadOnlyList<Guid>> ConnectionOpensOfReadAsync(HttpClient client, string rules)
+    {
+        var id = await TaggedReadAsync(client, rules);
+        return Fixture.Services.GetRequiredService<ContextOpenLog>().ConnectionOpensOf(id);
+    }
+
+    private static async Task<string> TaggedReadAsync(HttpClient client, string rules)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v4/me/tenants/overview")
+        {
+            Content = JsonContent.Create(new { rules }),
+        };
+        var id = ContextOpenLog.Tag(request);
+        (await client.SendAsync(request)).StatusCode.Should().Be(HttpStatusCode.OK);
+        return id;
     }
 
     private static async Task<JsonElement> ReadAsync(HttpClient client, string rules)

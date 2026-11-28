@@ -124,6 +124,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     public Guid SubjectId { get; internal set; }
 
+    /// <summary>False for a context running on a <see cref="Services.ScopeConnection"/> another context opened.</summary>
+    internal bool OwnsConnection { get; set; } = true;
+
     /// <summary>
     /// The audit actor <see cref="Interceptors.MutationAuditInterceptor"/> attributes this context's
     /// writes to: the scope's <see cref="IAuditContext"/>, or none for a context with no scope.

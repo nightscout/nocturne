@@ -589,6 +589,7 @@ public partial class TenantOverviewServiceTests
         var clampSeen = new Dictionary<Guid, bool>();
         var contextClampSeen = new Dictionary<Guid, bool>();
         var services = new ServiceCollection();
+        services.AddScoped<ScopeConnection>();
         services.AddScoped<INocturneDbContextFactory>(sp => new ScopeContextFactory(
             options,
             () => sp.GetRequiredService<ITenantAccessor>().TenantId,
@@ -1181,6 +1182,7 @@ public partial class TenantOverviewServiceTests
         (fakes ?? new Fakes()).Register(services, latest, failingTenantId);
         services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
         services.AddScoped<ICategoryReadContext>(_ => new Nocturne.Infrastructure.Data.Services.CategoryReadContext());
+        services.AddScoped<ScopeConnection>();
         services.AddScoped<INocturneDbContextFactory>(sp => new ScopeContextFactory(
             options, () => sp.GetRequiredService<ITenantAccessor>().TenantId));
         services.AddScoped<IAlertRepository>(sp => new AlertRepository(sp.GetRequiredService<INocturneDbContextFactory>()));

@@ -180,6 +180,7 @@ public static class ServiceCollectionExtensions
             sp.GetService<ICategoryReadContext>(),
             sp.GetService<IAuditContext>()));
         services.TryAddSingleton(sp => new RootServiceProvider(sp));
+        services.AddScoped<ScopeConnection>();
         services.TryAddTransient<NocturneDbContextFactory>();
         services.TryAddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
         services.AddScoped<IReaderCachePartition, ReaderCachePartition>();

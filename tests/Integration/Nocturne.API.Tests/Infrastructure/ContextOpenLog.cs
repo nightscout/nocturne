@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
@@ -14,8 +16,9 @@ namespace Nocturne.API.Tests.Integration.Infrastructure;
 /// <summary>
 /// Every context the API's <see cref="INocturneDbContextFactory"/> hands out while a tagged request is
 /// in the pipeline, on the request thread or on work the request started and did not await, with its
-/// kind, its caller and whether the controller action had started. Opens after the request has left
-/// the pipeline are not logged, though work it started may still be running.
+/// kind, its caller and whether the controller action had started, and the tenant of every connection a
+/// context opened meanwhile. Opens after the request has left the pipeline are not logged, though work
+/// it started may still be running.
 /// </summary>
 /// <remarks>
 /// A context opens on whatever thread asks for it, and work the request did not await runs beside
@@ -26,12 +29,16 @@ namespace Nocturne.API.Tests.Integration.Infrastructure;
 /// the tag is read once, on the request thread at the head of the pipeline, and an open reads only
 /// the <see cref="RequestTag"/> that flows with the execution context.
 /// </remarks>
-public sealed class ContextOpenLog
+public sealed class ContextOpenLog : IDisposable
 {
     private const string RequestIdHeader = "X-Context-Log-Id";
 
     private readonly ConcurrentDictionary<string, ConcurrentQueue<ContextOpen>> _opens = new();
+    private readonly ConcurrentDictionary<string, ConcurrentQueue<Guid>> _connectionOpens = new();
     private readonly AsyncLocal<RequestTag?> _current = new();
+    private readonly ConnectionOpenListener _connections;
+
+    public ContextOpenLog() => _connections = new ConnectionOpenListener(this);
 
     public sealed record ContextOpen(string Kind, string Caller, bool BeforeAction);
 
@@ -45,6 +52,15 @@ public sealed class ContextOpenLog
 
     public IReadOnlyList<ContextOpen> OpensOf(string requestId) =>
         _opens.TryGetValue(requestId, out var opens) ? opens.ToList() : [];
+
+    /// <summary>
+    /// The tenant of each connection a context opened for the request: each is a pool checkout and a session write
+    /// (<c>TenantConnectionInterceptor</c>).
+    /// </summary>
+    public IReadOnlyList<Guid> ConnectionOpensOf(string requestId) =>
+        _connectionOpens.TryGetValue(requestId, out var opens) ? opens.ToList() : [];
+
+    public void Dispose() => _connections.Dispose();
 
     /// <summary>
     /// Wraps the registered factory so every context it creates is logged against the request it
@@ -75,6 +91,12 @@ public sealed class ContextOpenLog
             .Enqueue(new ContextOpen(kind, CallerOf(new StackTrace()), !tag.ActionStarted));
     }
 
+    private void RecordConnectionOpen(Guid tenantId)
+    {
+        if (_current.Value is { Ended: false } tag)
+            _connectionOpens.GetOrAdd(tag.Id, _ => new()).Enqueue(tenantId);
+    }
+
     private static string CallerOf(StackTrace trace)
     {
         foreach (var frame in trace.GetFrames())
@@ -92,6 +114,46 @@ public sealed class ContextOpenLog
         }
 
         return "?";
+    }
+
+    /// <summary>EF's <c>ConnectionOpened</c> event, raised on the flow that opened the connection.</summary>
+    private sealed class ConnectionOpenListener
+        : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
+    {
+        private readonly ContextOpenLog _log;
+        private readonly ConcurrentQueue<IDisposable> _subscriptions = new();
+
+        public ConnectionOpenListener(ContextOpenLog log)
+        {
+            _log = log;
+            _subscriptions.Enqueue(DiagnosticListener.AllListeners.Subscribe(this));
+        }
+
+        public void OnNext(DiagnosticListener listener)
+        {
+            if (listener.Name == DbLoggerCategory.Name)
+                _subscriptions.Enqueue(listener.Subscribe(this, name => name == RelationalEventId.ConnectionOpened.Name));
+        }
+
+        public void OnNext(KeyValuePair<string, object?> diagnostic)
+        {
+            if (diagnostic.Value is ConnectionEndEventData { Context: NocturneDbContext context })
+                _log.RecordConnectionOpen(context.TenantId);
+        }
+
+        public void OnCompleted()
+        {
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void Dispose()
+        {
+            while (_subscriptions.TryDequeue(out var subscription))
+                subscription.Dispose();
+        }
     }
 
     private sealed class RequestTag(string id)
