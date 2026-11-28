@@ -27,7 +27,7 @@ public static class BuiltInNotificationTemplates
     {
         registry.Register(new NotificationTemplate
         {
-            Type = "tracker.unconfigured",
+            Type = InAppNotificationType.TrackerUnconfigured.ToWireString(),
             Category = NotificationCategory.ActionRequired,
             NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
@@ -37,7 +37,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "tracker.alert",
+            Type = InAppNotificationType.TrackerAlert.ToWireString(),
             Category = NotificationCategory.Alert,
             NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Warn,
@@ -47,7 +47,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "system.statistics_summary",
+            Type = InAppNotificationType.SystemStatisticsSummary.ToWireString(),
             Category = NotificationCategory.Informational,
             NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
@@ -57,7 +57,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "system.help_response",
+            Type = InAppNotificationType.SystemHelpResponse.ToWireString(),
             Category = NotificationCategory.Informational,
             NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Info,
@@ -77,7 +77,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "glucose.predicted_low",
+            Type = InAppNotificationType.GlucosePredictedLow.ToWireString(),
             Category = NotificationCategory.Alert,
             NamesSubject = false,
             DefaultUrgency = NotificationUrgency.Urgent,
@@ -263,7 +263,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = ClockAnomalyNotice.NotificationType,
+            Type = InAppNotificationType.AlertsDeviceClockAhead.ToWireString(),
             Category = NotificationCategory.Alert,
             NamesSubject = false
         });
@@ -291,14 +291,14 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = DeviceClockService.SegmentNotificationType,
+            Type = InAppNotificationType.ConnectorDeviceClockDeviation.ToWireString(),
             Category = NotificationCategory.Informational,
             NamesSubject = false
         });
 
         registry.Register(new NotificationTemplate
         {
-            Type = DeviceClockService.ZoneChangeNotificationType,
+            Type = InAppNotificationType.ConnectorDeclaredZoneChanged.ToWireString(),
             Category = NotificationCategory.Informational,
             NamesSubject = false
         });

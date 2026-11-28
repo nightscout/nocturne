@@ -28,7 +28,9 @@ public class NotificationLabelWireFormatTests
         "team.staff_joined", "team.renamed", "system.update_available", "system.release_installed",
         "system.instance_key_changed", "system.instance_key_changed_platform", "data.rejected_uploads",
         "profile.raw_mmol_values", "meal_matching.suggested_match", "glucose.compression_low_review",
-        "external.operator", "external.app",
+        "external.operator", "external.app", "tracker.unconfigured", "tracker.alert", "system.statistics_summary",
+        "system.help_response", "glucose.predicted_low", "alerts.deviceClockAhead", "connector.deviceClockDeviation",
+        "connector.declaredZoneChanged",
     ];
 
     [Fact]
@@ -53,5 +55,12 @@ public class NotificationLabelWireFormatTests
 
         foreach (var type in Enum.GetValues<InAppNotificationType>())
             JsonSerializer.Serialize(type).Should().Be($"\"{type.ToWireString()}\"");
+    }
+
+    [Fact]
+    public void No_two_types_share_a_wire_string()
+    {
+        Enum.GetValues<InAppNotificationType>().Select(t => t.ToWireString())
+            .Should().OnlyHaveUniqueItems();
     }
 }

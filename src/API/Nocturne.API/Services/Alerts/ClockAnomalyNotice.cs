@@ -99,7 +99,6 @@ internal sealed class ClockAnomalyNotice(
     ILogger<ClockAnomalyNotice> logger)
     : IClockAnomalyNotice
 {
-    internal const string NotificationType = "alerts.deviceClockAhead";
     internal const string NotificationSource = "alert-clock";
     internal const string ReadingFact = "last_reading_at";
     internal const string AheadUntilKey = "aheadUntil";
@@ -216,7 +215,7 @@ internal sealed class ClockAnomalyNotice(
         }
 
         var active = (await notifications.GetActiveNotificationsAsync(owner, ct))
-            .Where(n => n.Type == NotificationType && n.SourceId is not null)
+            .Where(n => n.Type == InAppNotificationType.AlertsDeviceClockAhead.ToWireString() && n.SourceId is not null)
             .ToList();
         var standing = new Dictionary<string, DateTime?>(StringComparer.Ordinal);
         var sourceOf = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -239,13 +238,13 @@ internal sealed class ClockAnomalyNotice(
             {
                 if (!Covers(fact, stored))
                 {
-                    await notifications.ReplaceMetadataBySourceAsync(owner, NotificationType, sourceOf.GetValueOrDefault(fact, fact), metadata, ct);
+                    await notifications.ReplaceMetadataBySourceAsync(owner, InAppNotificationType.AlertsDeviceClockAhead.ToWireString(), sourceOf.GetValueOrDefault(fact, fact), metadata, ct);
                     standing[fact] = aheadUntil;
                 }
                 continue;
             }
             if (await notifications.CreateNotificationUnlessActiveAsync(
-                    owner, NotificationType, NotificationLabel.DeviceClockAhead.ToWireString(), fact,
+                    owner, InAppNotificationType.AlertsDeviceClockAhead.ToWireString(), NotificationLabel.DeviceClockAhead.ToWireString(), fact,
                     category: NotificationCategory.Alert,
                     source: NotificationSource,
                     subtitle: NotificationLabel.DeviceClockAheadSubtitle.ToWireString(),
@@ -259,7 +258,7 @@ internal sealed class ClockAnomalyNotice(
 
         foreach (var (fact, _) in standing.Where(f => Clears(f.Key, f.Value)).ToList())
         {
-            await notifications.ArchiveBySourceAsync(owner, NotificationType, sourceOf.GetValueOrDefault(fact, fact), NotificationArchiveReason.ConditionMet, ct);
+            await notifications.ArchiveBySourceAsync(owner, InAppNotificationType.AlertsDeviceClockAhead.ToWireString(), sourceOf.GetValueOrDefault(fact, fact), NotificationArchiveReason.ConditionMet, ct);
             standing.Remove(fact);
         }
 

@@ -40,7 +40,7 @@ public class ClockAnomalyNoticeTests
             .ReturnsAsync(() => _active.ToList());
         _notifications
             .Setup(n => n.CreateNotificationUnlessActiveAsync(
-                Owner, ClockAnomalyNotice.NotificationType, It.IsAny<string>(), It.IsAny<string>(),
+                Owner, InAppNotificationType.AlertsDeviceClockAhead.ToWireString(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<NotificationCategory?>(), ClockAnomalyNotice.NotificationSource, It.IsAny<string?>(),
                 It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string _, string type, string _, string sourceId, NotificationCategory? _, string? _,
@@ -53,7 +53,7 @@ public class ClockAnomalyNoticeTests
                 return true;
             });
         _notifications
-            .Setup(n => n.ArchiveBySourceAsync(Owner, ClockAnomalyNotice.NotificationType, It.IsAny<string>(),
+            .Setup(n => n.ArchiveBySourceAsync(Owner, InAppNotificationType.AlertsDeviceClockAhead.ToWireString(), It.IsAny<string>(),
                 NotificationArchiveReason.ConditionMet, It.IsAny<CancellationToken>()))
             .Callback((string _, string _, string sourceId, NotificationArchiveReason _, CancellationToken _) =>
             {
@@ -62,7 +62,7 @@ public class ClockAnomalyNoticeTests
             })
             .ReturnsAsync(true);
         _notifications
-            .Setup(n => n.ReplaceMetadataBySourceAsync(Owner, ClockAnomalyNotice.NotificationType, It.IsAny<string>(),
+            .Setup(n => n.ReplaceMetadataBySourceAsync(Owner, InAppNotificationType.AlertsDeviceClockAhead.ToWireString(), It.IsAny<string>(),
                 It.IsAny<Dictionary<string, object>>(), It.IsAny<CancellationToken>()))
             .Callback((string _, string _, string sourceId, Dictionary<string, object> metadata, CancellationToken _) =>
             {
@@ -199,7 +199,7 @@ public class ClockAnomalyNoticeTests
     private void StandingUnderTheRetiredPumpFact(DateTime aheadUntil) =>
         _active.Add(new InAppNotificationDto
         {
-            Type = ClockAnomalyNotice.NotificationType,
+            Type = InAppNotificationType.AlertsDeviceClockAhead.ToWireString(),
             SourceId = RetiredPumpFact,
             Metadata = new Dictionary<string, object>
             {
@@ -269,7 +269,7 @@ public class ClockAnomalyNoticeTests
 
         Standing.Should().Equal(PumpModesFact);
         _created.Should().Be(1);
-        _active.Single().Type.Should().Be(ClockAnomalyNotice.NotificationType);
+        _active.Single().Type.Should().Be(InAppNotificationType.AlertsDeviceClockAhead.ToWireString());
     }
 
     [Fact]
