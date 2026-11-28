@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Connectors.Tandem.EventParser;
 using Nocturne.Connectors.Tandem.Mappers;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Timezones;
 using Xunit;
@@ -18,7 +19,7 @@ public class TandemTimeResolverTests
         var resolver = new TandemTimeResolver(0);
 
         resolver.ToUtc(RawTimestamp2024).Should().Be(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        resolver.OffsetMinutesAt(resolver.ToUtc(RawTimestamp2024)).Should().Be(0);
+        resolver.Resolve(RawTimestamp2024).OffsetMinutes.Should().Be(0);
     }
 
     [Fact]
@@ -28,7 +29,7 @@ public class TandemTimeResolverTests
         var resolver = new TandemTimeResolver(10);
 
         resolver.ToUtc(RawTimestamp2024).Should().Be(new DateTime(2023, 12, 31, 14, 0, 0, DateTimeKind.Utc));
-        resolver.OffsetMinutesAt(resolver.ToUtc(RawTimestamp2024)).Should().Be(600);
+        resolver.Resolve(RawTimestamp2024).OffsetMinutes.Should().Be(600);
     }
 
     [Fact]
@@ -37,7 +38,7 @@ public class TandemTimeResolverTests
         var resolver = new TandemTimeResolver(-5);
 
         resolver.ToUtc(RawTimestamp2024).Should().Be(new DateTime(2024, 1, 1, 5, 0, 0, DateTimeKind.Utc));
-        resolver.OffsetMinutesAt(resolver.ToUtc(RawTimestamp2024)).Should().Be(-300);
+        resolver.Resolve(RawTimestamp2024).OffsetMinutes.Should().Be(-300);
     }
 
     private const string LosAngeles = "America/Los_Angeles";
@@ -58,10 +59,10 @@ public class TandemTimeResolverTests
     {
         var resolver = new TandemTimeResolver(-7, LosAngeles);
 
-        var utc = resolver.ToUtc(RawAt(2026, 11, 1, wallHour, wallMinute));
+        var instant = resolver.Resolve(RawAt(2026, 11, 1, wallHour, wallMinute));
 
-        utc.Should().Be(Utc(2026, 11, 1, utcHour, utcMinute));
-        resolver.OffsetMinutesAt(utc).Should().Be(offsetMinutes);
+        instant.Utc.Should().Be(Utc(2026, 11, 1, utcHour, utcMinute));
+        instant.OffsetMinutes.Should().Be(offsetMinutes);
     }
 
     [Theory]
@@ -73,10 +74,10 @@ public class TandemTimeResolverTests
     {
         var resolver = new TandemTimeResolver(-8, LosAngeles);
 
-        var utc = resolver.ToUtc(RawAt(2027, 3, 14, wallHour, wallMinute));
+        var instant = resolver.Resolve(RawAt(2027, 3, 14, wallHour, wallMinute));
 
-        utc.Should().Be(Utc(2027, 3, 14, utcHour, utcMinute));
-        resolver.OffsetMinutesAt(utc).Should().Be(offsetMinutes);
+        instant.Utc.Should().Be(Utc(2027, 3, 14, utcHour, utcMinute));
+        instant.OffsetMinutes.Should().Be(offsetMinutes);
     }
 
     [Fact]
@@ -98,12 +99,12 @@ public class TandemTimeResolverTests
         var resolver = new TandemTimeResolver(-7, zoneId);
 
         resolver.UsesTimeZone.Should().BeFalse();
-        var before = resolver.ToUtc(RawAt(2026, 11, 1, 0, 30));
-        var after = resolver.ToUtc(RawAt(2026, 11, 1, 2, 30));
-        before.Should().Be(Utc(2026, 11, 1, 7, 30));
-        after.Should().Be(Utc(2026, 11, 1, 9, 30));
-        resolver.OffsetMinutesAt(before).Should().Be(-420);
-        resolver.OffsetMinutesAt(after).Should().Be(-420);
+        var before = resolver.Resolve(RawAt(2026, 11, 1, 0, 30));
+        var after = resolver.Resolve(RawAt(2026, 11, 1, 2, 30));
+        before.Utc.Should().Be(Utc(2026, 11, 1, 7, 30));
+        after.Utc.Should().Be(Utc(2026, 11, 1, 9, 30));
+        before.OffsetMinutes.Should().Be(-420);
+        after.OffsetMinutes.Should().Be(-420);
     }
 
     [Theory]
@@ -114,10 +115,10 @@ public class TandemTimeResolverTests
     {
         var resolver = new TandemTimeResolver(0, null, LosAngeles);
 
-        var utc = resolver.ToUtc(RawAt(2026, 11, 1, wallHour, wallMinute));
+        var instant = resolver.Resolve(RawAt(2026, 11, 1, wallHour, wallMinute));
 
-        utc.Should().Be(Utc(2026, 11, 1, utcHour, utcMinute));
-        resolver.OffsetMinutesAt(utc).Should().Be(offsetMinutes);
+        instant.Utc.Should().Be(Utc(2026, 11, 1, utcHour, utcMinute));
+        instant.OffsetMinutes.Should().Be(offsetMinutes);
         resolver.ResolvedZone.Should().BeEquivalentTo(
             new ConnectorTimeZone { Id = LosAngeles, Source = ConnectorTimeZoneSource.TenantZone });
     }
@@ -210,10 +211,10 @@ public class TandemTimeResolverTests
         var resolver = new TandemTimeResolver(
             0, null, "Asia/Tokyo", MoveFromNewYorkToLosAngeles(), Utc(2026, 11, 24, 0, 0));
 
-        var utc = resolver.ToUtc(RawAt(2026, month, day, 12, 0));
+        var instant = resolver.Resolve(RawAt(2026, month, day, 12, 0));
 
-        utc.Should().Be(Utc(2026, month, day, utcHour, 0));
-        resolver.OffsetMinutesAt(utc).Should().Be(offsetMinutes);
+        instant.Utc.Should().Be(Utc(2026, month, day, utcHour, 0));
+        instant.OffsetMinutes.Should().Be(offsetMinutes);
         resolver.UsesTimeZone.Should().BeTrue();
     }
 
@@ -227,9 +228,9 @@ public class TandemTimeResolverTests
             new ConnectorTimeZone { Id = LosAngeles, Source = ConnectorTimeZoneSource.TenantTimeline });
     }
 
-    private static TimezoneTimeline HistoryStartingInMarch(string zone) => new(
+    private static TimezoneTimeline HistoryStarting(DateTime effectiveFrom, string zone) => new(
     [
-        new TimezoneTimelineEntry { EffectiveFrom = new DateTime(2026, 3, 1), Timezone = zone },
+        new TimezoneTimelineEntry { EffectiveFrom = effectiveFrom, Timezone = zone },
     ]);
 
     [Theory]
@@ -239,12 +240,12 @@ public class TandemTimeResolverTests
         int month, int day, int utcHour, int offsetMinutes)
     {
         var resolver = new TandemTimeResolver(
-            0, null, "America/New_York", HistoryStartingInMarch(LosAngeles), Utc(2026, 11, 24, 0, 0));
+            0, null, "America/New_York", HistoryStarting(new DateTime(2026, 3, 1), LosAngeles), Utc(2026, 11, 24, 0, 0));
 
-        var utc = resolver.ToUtc(RawAt(2026, month, day, 12, 0));
+        var instant = resolver.Resolve(RawAt(2026, month, day, 12, 0));
 
-        utc.Should().Be(Utc(2026, month, day, utcHour, 0));
-        resolver.OffsetMinutesAt(utc).Should().Be(offsetMinutes);
+        instant.Utc.Should().Be(Utc(2026, month, day, utcHour, 0));
+        instant.OffsetMinutes.Should().Be(offsetMinutes);
         resolver.ReadsAsUtc.Should().BeFalse();
         resolver.ResolvedZone.Source.Should().Be(ConnectorTimeZoneSource.TenantTimeline);
     }
@@ -253,10 +254,11 @@ public class TandemTimeResolverTests
     public void A_time_before_the_zone_history_is_read_as_utc_only_when_no_tenant_zone_covers_it()
     {
         var resolver = new TandemTimeResolver(
-            0, null, null, HistoryStartingInMarch(LosAngeles), Utc(2026, 11, 24, 0, 0));
+            0, null, null, HistoryStarting(new DateTime(2026, 3, 1), LosAngeles), Utc(2026, 11, 24, 0, 0));
 
-        resolver.ToUtc(RawAt(2026, 1, 15, 12, 0)).Should().Be(Utc(2026, 1, 15, 12, 0));
-        resolver.OffsetMinutesAt(Utc(2026, 1, 15, 12, 0)).Should().Be(0);
+        var instant = resolver.Resolve(RawAt(2026, 1, 15, 12, 0));
+        instant.Utc.Should().Be(Utc(2026, 1, 15, 12, 0));
+        instant.OffsetMinutes.Should().Be(0);
         resolver.ReadsAsUtc.Should().BeTrue();
     }
 
@@ -309,5 +311,135 @@ public class TandemTimeResolverTests
             (Utc(2026, 11, 1, 6, 0), (int?)-420),
             (Utc(2026, 11, 1, 11, 0), (int?)-480),
         });
+    }
+
+    private const string NewYork = "America/New_York";
+
+    private static TandemTimeResolver NewYorkBeforeLosAngelesFromJan15() => new(
+        0, null, NewYork, HistoryStarting(new DateTime(2026, 1, 15), LosAngeles), Utc(2026, 11, 24, 0, 0));
+
+    private static readonly long TwoHoursBeforeTheMove = RawAt(2026, 1, 14, 22, 0);
+    private static readonly long FarFromTheMove = RawAt(2026, 1, 10, 12, 0);
+
+    [Fact]
+    public void A_time_two_hours_before_a_history_move_keeps_the_offset_it_was_read_at()
+    {
+        var resolver = NewYorkBeforeLosAngelesFromJan15();
+
+        var instant = resolver.Resolve(TwoHoursBeforeTheMove);
+
+        instant.Utc.Should().Be(Utc(2026, 1, 15, 3, 0));
+        instant.OffsetMinutes.Should().Be(-300);
+    }
+
+    [Fact]
+    public void A_time_after_a_history_move_is_read_in_the_zone_it_moved_to()
+    {
+        var instant = NewYorkBeforeLosAngelesFromJan15().Resolve(RawAt(2026, 1, 15, 2, 0));
+
+        instant.Utc.Should().Be(Utc(2026, 1, 15, 10, 0));
+        instant.OffsetMinutes.Should().Be(-480);
+    }
+
+    [Fact]
+    public void A_time_two_hours_before_a_move_between_two_history_entries_keeps_the_offset_it_was_read_at()
+    {
+        var resolver = new TandemTimeResolver(
+            0, null, "Asia/Tokyo", MoveFromNewYorkToLosAngeles(), Utc(2026, 11, 24, 0, 0));
+
+        var instant = resolver.Resolve(RawAt(2026, 5, 31, 22, 0));
+
+        instant.Utc.Should().Be(Utc(2026, 6, 1, 2, 0));
+        instant.OffsetMinutes.Should().Be(-240);
+    }
+
+    [Theory]
+    [InlineData(0, null, 0)]
+    [InlineData(-7, null, -420)]
+    [InlineData(0, LosAngeles, -480)]
+    public void A_time_without_a_history_carries_the_offset_of_its_zone_or_setting(
+        double offsetHours, string? zoneId, int offsetMinutes)
+    {
+        new TandemTimeResolver(offsetHours, zoneId).Resolve(FarFromTheMove).OffsetMinutes.Should().Be(offsetMinutes);
+    }
+
+    [Fact]
+    public void A_time_far_from_a_history_move_carries_the_offset_of_its_own_zone()
+    {
+        var instant = NewYorkBeforeLosAngelesFromJan15().Resolve(FarFromTheMove);
+
+        instant.Utc.Should().Be(Utc(2026, 1, 10, 17, 0));
+        instant.OffsetMinutes.Should().Be(-300);
+    }
+
+    [Fact]
+    public void A_time_read_as_utc_carries_an_offset_of_zero()
+    {
+        var resolver = new TandemTimeResolver(
+            0, null, null, HistoryStarting(new DateTime(2026, 3, 1), LosAngeles), Utc(2026, 11, 24, 0, 0));
+
+        resolver.Resolve(FarFromTheMove).OffsetMinutes.Should().Be(0);
+    }
+
+    [Fact]
+    public void A_cgm_reading_two_hours_before_a_history_move_stores_the_offset_it_was_read_at()
+    {
+        var blob = TandemEventBuilder.ToBase64(
+            new TandemEventBuilder(256, TwoHoursBeforeTheMove, seqNum: 1)
+                .UInt16(4, 120).UInt32(8, (uint)TwoHoursBeforeTheMove));
+
+        var glucose = new TandemCgmMapper(NullLogger.Instance, NewYorkBeforeLosAngelesFromJan15())
+            .Map(TandemEventDecoder.Decode(blob));
+
+        glucose.Select(g => (g.Timestamp, g.UtcOffset)).Should().Equal((Utc(2026, 1, 15, 3, 0), (int?)-300));
+    }
+
+    [Fact]
+    public void A_bolus_two_hours_before_a_history_move_stores_the_offset_it_was_read_at_on_every_record()
+    {
+        var completed = new TandemEventBuilder(20, TwoHoursBeforeTheMove, seqNum: 100)
+            .UInt16(0, 42).UInt16(2, 3).Float32(4, 1.5f).Float32(8, 2.5f).Float32(12, 2.5f);
+        var msg1 = new TandemEventBuilder(64, TwoHoursBeforeTheMove, seqNum: 99)
+            .UInt16(2, 42).UInt16(4, 120).UInt16(6, 30).Float32(8, 1.5f).UInt32(12, 10000);
+
+        var result = new TandemBolusMapper(NullLogger.Instance, NewYorkBeforeLosAngelesFromJan15())
+            .Map(TandemEventDecoder.Decode(TandemEventBuilder.ToBase64(completed, msg1)));
+
+        result.Boluses.Select(b => (b.Timestamp, b.UtcOffset)).Should().Equal((Utc(2026, 1, 15, 3, 0), (int?)-300));
+        result.CarbIntakes.Single().UtcOffset.Should().Be(-300);
+        result.BolusCalculations.Single().UtcOffset.Should().Be(-300);
+    }
+
+    [Fact]
+    public void A_basal_span_two_hours_before_a_history_move_stores_the_offset_it_was_read_at()
+    {
+        var blob = TandemEventBuilder.ToBase64(new TandemEventBuilder(279, TwoHoursBeforeTheMove, seqNum: 1).UInt16(6, 1000));
+
+        var spans = new TandemBasalMapper(NullLogger.Instance, NewYorkBeforeLosAngelesFromJan15())
+            .Map(TandemEventDecoder.Decode(blob), Utc(2026, 1, 15, 4, 0), ignoreZeroUnitBasal: false).Spans;
+
+        spans.Select(t => (t.StartTimestamp, t.UtcOffset)).Should().Equal((Utc(2026, 1, 15, 3, 0), (int?)-300));
+    }
+
+    [Fact]
+    public void A_device_event_two_hours_before_a_history_move_stores_the_offset_it_was_read_at()
+    {
+        var blob = TandemEventBuilder.ToBase64(new TandemEventBuilder(33, TwoHoursBeforeTheMove, seqNum: 1));
+
+        var events = new TandemDeviceEventMapper(NullLogger.Instance, NewYorkBeforeLosAngelesFromJan15())
+            .Map(TandemEventDecoder.Decode(blob));
+
+        events.Select(e => (e.Timestamp, e.UtcOffset)).Should().Equal((Utc(2026, 1, 15, 3, 0), (int?)-300));
+    }
+
+    [Fact]
+    public void A_device_status_two_hours_before_a_history_move_stores_the_offset_it_was_read_at()
+    {
+        var blob = TandemEventBuilder.ToBase64(new TandemEventBuilder(81, TwoHoursBeforeTheMove, seqNum: 1));
+
+        var statuses = new TandemDeviceStatusMapper(NullLogger.Instance, NewYorkBeforeLosAngelesFromJan15())
+            .Map(TandemEventDecoder.Decode(blob));
+
+        statuses.Select(d => (d.Mills, d.UtcOffset)).Should().Equal((Utc(2026, 1, 15, 3, 0).ToMills(), (int?)-300));
     }
 }

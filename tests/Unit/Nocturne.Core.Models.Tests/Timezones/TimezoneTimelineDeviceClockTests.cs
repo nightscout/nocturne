@@ -117,4 +117,25 @@ public class TimezoneTimelineDeviceClockTests
         new TimezoneTimeline([], fallbackOffsetHours: 10).OffsetMinutesAtUtc(Utc(4, 11, 12)).Should().Be(600);
         new TimezoneTimeline([]).OffsetMinutesAtUtc(Utc(4, 11, 12)).Should().Be(0);
     }
+
+    [Fact]
+    public void Resolve_InsideASegment_IsTheSegmentsOffset()
+    {
+        var timeline = new TimezoneTimeline([Origin("America/New_York")], null, [AprilSegment]);
+
+        var inside = timeline.Resolve(Utc(4, 11, 14));
+        inside.OffsetMinutes.Should().Be(120);
+        inside.Utc.AddMinutes(inside.OffsetMinutes).Should().Be(Utc(4, 11, 14));
+        timeline.Resolve(Utc(4, 20, 14)).OffsetMinutes.Should().Be(-240);
+    }
+
+    [Fact]
+    public void Resolve_AnExplicitEntryWinsOverASegment()
+    {
+        var disagreeing = new DeviceClockSegment { FromUtc = Utc(4, 10, 0), ToUtc = Utc(4, 13, 0), OffsetMinutes = 300 };
+        var timeline = new TimezoneTimeline(
+            [Origin("America/New_York"), Entry("Europe/Madrid", new DateTime(2026, 4, 9))], null, [disagreeing]);
+
+        timeline.Resolve(Utc(4, 11, 14)).OffsetMinutes.Should().Be(120);
+    }
 }

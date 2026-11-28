@@ -172,4 +172,84 @@ public class TimezoneTimelineTests
         var timeline = new TimezoneTimeline([Entry("America/Toronto", new DateTime(2026, 6, 1))], fallbackOffsetHours: 10);
         timeline.ToLocal(Utc(2026, 1, 1, 21, 0)).Should().Be(new DateTime(2026, 1, 2, 7, 0, 0));
     }
+
+    [Fact]
+    public void Resolve_TwoHoursBeforeAMove_IsTheOffsetOfTheZoneTheTimeWasReadIn()
+    {
+        var timeline = new TimezoneTimeline(
+        [
+            Origin("America/New_York"),
+            Entry("America/Los_Angeles", new DateTime(2026, 1, 15)),
+        ]);
+        var wall = FakeUtc(2026, 1, 14, 22);
+
+        // Read at EST, so 03:00Z on the 15th, which the Los Angeles entry would also claim by its UTC reading.
+        timeline.ToUtc(wall).Should().Be(Utc(2026, 1, 15, 3));
+        timeline.Resolve(wall).OffsetMinutes.Should().Be(-300);
+        timeline.Resolve(FakeUtc(2026, 1, 15, 2)).OffsetMinutes.Should().Be(-480);
+    }
+
+    [Theory]
+    [InlineData(2026, 3, 8, 1, 59, -300)] // before the spring-forward: EST
+    [InlineData(2026, 3, 8, 3, 0, -240)]  // after it: EDT
+    [InlineData(2026, 11, 1, 1, 30, -240)] // occurs twice: the first occurrence, EDT
+    [InlineData(2026, 11, 1, 2, 30, -300)] // after the fall-back: EST
+    [InlineData(2026, 7, 1, 12, 0, -240)]
+    public void Resolve_FollowsDaylightSavingForTheDate(
+        int year, int month, int day, int hour, int minute, int expected)
+    {
+        var timeline = new TimezoneTimeline([Origin("America/New_York")]);
+
+        timeline.Resolve(FakeUtc(year, month, day, hour, minute)).OffsetMinutes.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Resolve_SpringForwardGap_IsTheOffsetOfTheInstantToUtcReturns()
+    {
+        var timeline = new TimezoneTimeline([Origin("America/Toronto")]);
+        var wall = FakeUtc(2026, 3, 8, 2, 30);
+
+        timeline.ToUtc(wall).Should().Be(Utc(2026, 3, 8, 7));
+        timeline.Resolve(wall).OffsetMinutes.Should().Be(-240);
+    }
+
+    [Theory]
+    [InlineData(2026, 1, 14, 22)]
+    [InlineData(2026, 1, 15, 2)]
+    [InlineData(2026, 1, 10, 12)]
+    [InlineData(2026, 3, 8, 1)]
+    [InlineData(2026, 11, 1, 1)]
+    [InlineData(2026, 11, 1, 5)]
+    public void Resolve_AddedToTheUtcToUtcReturns_GivesTheWallClock(int year, int month, int day, int hour)
+    {
+        var timeline = new TimezoneTimeline(
+        [
+            Origin("America/New_York"),
+            Entry("America/Los_Angeles", new DateTime(2026, 1, 15)),
+            Entry("America/New_York", new DateTime(2026, 6, 1)),
+        ]);
+        var wall = FakeUtc(year, month, day, hour);
+
+        var instant = timeline.Resolve(wall);
+
+        instant.Utc.AddMinutes(instant.OffsetMinutes).Should().Be(wall);
+    }
+
+    [Fact]
+    public void Resolve_NoCoveringEntry_UsesTheFallbackOffset()
+    {
+        var timeline = new TimezoneTimeline([Entry("America/Toronto", new DateTime(2026, 6, 1))], fallbackOffsetHours: 5.5);
+        var wall = FakeUtc(2026, 1, 1, 7);
+
+        timeline.Resolve(wall).OffsetMinutes.Should().Be(330);
+        timeline.Resolve(wall).Utc.AddMinutes(330).Should().Be(wall);
+    }
+
+    [Fact]
+    public void Resolve_NoCoveringEntryAndNoFallback_IsZero()
+    {
+        new TimezoneTimeline([Entry("America/Toronto", new DateTime(2026, 6, 1))])
+            .Resolve(FakeUtc(2026, 1, 1, 7)).OffsetMinutes.Should().Be(0);
+        new TimezoneTimeline([]).Resolve(FakeUtc(2026, 1, 1, 7)).OffsetMinutes.Should().Be(0);
+    }
 }

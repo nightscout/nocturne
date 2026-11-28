@@ -52,12 +52,12 @@ public sealed class TandemDeviceEventMapper(ILogger logger, TandemTimeResolver t
             if (mapped == null)
                 continue;
 
-            var timestamp = _time.ToUtc(ev.RawTimestampSeconds);
+            var (timestamp, utcOffset) = _time.Resolve(ev.RawTimestampSeconds);
 
             records.Add(new DeviceEvent
             {
                 Timestamp = timestamp,
-                UtcOffset = _time.OffsetMinutesAt(timestamp),
+                UtcOffset = utcOffset,
                 Device = TandemMapHelpers.Source,
                 SyncIdentifier = LegacyIds.Of("devent", ev.SeqNum),
                 LegacyId = LegacyIds.Of("devent", ev.SeqNum),

@@ -37,12 +37,12 @@ public sealed class TandemCgmMapper(ILogger logger, TandemTimeResolver time)
                 continue;
 
             var egvSeconds = ev.Raw("EGV TimeStamp") ?? 0;
-            var timestamp = egvSeconds > 0 ? _time.ToUtc(egvSeconds) : _time.ToUtc(ev.RawTimestampSeconds);
+            var (timestamp, utcOffset) = _time.Resolve(egvSeconds > 0 ? egvSeconds : ev.RawTimestampSeconds);
 
             records.Add(new SensorGlucose
             {
                 Timestamp = timestamp,
-                UtcOffset = _time.OffsetMinutesAt(timestamp),
+                UtcOffset = utcOffset,
                 Device = TandemMapHelpers.Source,
                 SyncIdentifier = LegacyIds.Of("cgm", ev.SeqNum),
                 LegacyId = LegacyIds.Of("cgm", ev.SeqNum),

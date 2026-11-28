@@ -115,34 +115,39 @@ public sealed class TandemTimeResolver
     public bool UsesTimeZone => _zone is not null || _timeline is not null;
 
     /// <summary>Converts a raw Tandem timestamp (seconds since the Tandem epoch) to UTC.</summary>
-    public DateTime ToUtc(long rawSeconds) =>
-        ToUtc(DateTimeOffset
-            .FromUnixTimeSeconds(TandemConstants.TandemEpochUnixSeconds + rawSeconds)
-            .UtcDateTime);
+    public DateTime ToUtc(long rawSeconds) => ToUtc(WallClock(rawSeconds));
 
     /// <summary>
     /// Converts a naive pump-local wall-clock value (e.g. the BFF's <c>maxDateOfEvents</c> /
     /// <c>availableDataRange</c>, which carry no timezone) to UTC. Only its date and time are read.
     /// </summary>
-    public DateTime ToUtc(DateTime wallClock)
+    public DateTime ToUtc(DateTime wallClock) => Resolve(wallClock).Utc;
+
+    /// <summary>
+    /// Converts a raw Tandem timestamp to UTC and the offset it was converted at, which is the
+    /// record's <c>UtcOffset</c>.
+    /// </summary>
+    public TimelineInstant Resolve(long rawSeconds) => Resolve(WallClock(rawSeconds));
+
+    /// <summary>
+    /// Converts a naive pump-local wall-clock value to UTC and the offset it was converted at.
+    /// </summary>
+    public TimelineInstant Resolve(DateTime wallClock)
     {
         var wall = DateTime.SpecifyKind(wallClock, DateTimeKind.Unspecified);
-        if (_timeline is not null)
-            return _zone is { } uncovered && _timeline.ZoneAt(wall) is null
-                ? TimeZoneHelper.LocalToUtc(wall, uncovered)
-                : _timeline.ToUtc(wall);
+        if (_timeline is not null && (_zone is null || _timeline.ZoneAt(wall) is not null))
+            return _timeline.Resolve(wall);
 
-        return _zone is { } zone
-            ? TimeZoneHelper.LocalToUtc(wall, zone)
-            : DateTime.SpecifyKind(wall - _fixedOffset, DateTimeKind.Utc);
+        if (_zone is { } zone)
+        {
+            var utc = TimeZoneHelper.LocalToUtc(wall, zone);
+            return new TimelineInstant(utc, (int)zone.GetUtcOffset(utc).TotalMinutes);
+        }
+
+        return new TimelineInstant(
+            DateTime.SpecifyKind(wall - _fixedOffset, DateTimeKind.Utc), (int)_fixedOffset.TotalMinutes);
     }
 
-    /// <summary>The UTC offset in whole minutes in effect at <paramref name="utc"/>, for a record's <c>UtcOffset</c>.</summary>
-    public int OffsetMinutesAt(DateTime utc)
-    {
-        if (_timeline is not null && (_zone is null || _timeline.ZoneAt(utc) is not null))
-            return _timeline.OffsetMinutesAtUtc(utc);
-
-        return (int)(_zone?.GetUtcOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)) ?? _fixedOffset).TotalMinutes;
-    }
+    private static DateTime WallClock(long rawSeconds) =>
+        DateTimeOffset.FromUnixTimeSeconds(TandemConstants.TandemEpochUnixSeconds + rawSeconds).UtcDateTime;
 }
