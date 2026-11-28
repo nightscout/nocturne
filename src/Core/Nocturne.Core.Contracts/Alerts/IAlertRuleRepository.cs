@@ -86,15 +86,16 @@ public interface IAlertRuleRepository
     Task<IReadOnlySet<string>> GetInAppDestinationsAsync(CancellationToken ct);
 
     /// <summary>
-    /// Sets <paramref name="scopeClass"/> on each of <paramref name="ruleIds"/> of
-    /// <paramref name="tenantId"/> in one statement, and returns how many rows it reached. Stamps
-    /// nothing else: a reclassification is not an edit.
+    /// Sets <paramref name="scopeClass"/> on each of <paramref name="rules"/> of <paramref name="tenantId"/>
+    /// that still holds the condition type and params it was classified from, and returns how many rows it
+    /// wrote. A rule edited since is left to the class its editor's save stored. Stamps nothing else: a
+    /// reclassification is not an edit.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// The repository runs on a caller's unit of work, whose tenant it cannot replace.
     /// </exception>
     Task<int> SetScopeClassAsync(
-        Guid tenantId, RuleScopeClass scopeClass, IReadOnlyCollection<Guid> ruleIds, CancellationToken ct);
+        Guid tenantId, RuleScopeClass scopeClass, IReadOnlyCollection<ClassifiedRule> rules, CancellationToken ct);
 
     /// <summary>
     /// Stores each of <paramref name="rules"/> whose name the tenant has no rule with yet, and

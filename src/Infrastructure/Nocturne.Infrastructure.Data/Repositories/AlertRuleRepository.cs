@@ -289,14 +289,21 @@ public class AlertRuleRepository : IAlertRuleRepository
 
     /// <inheritdoc/>
     public virtual async Task<int> SetScopeClassAsync(
-        Guid tenantId, RuleScopeClass scopeClass, IReadOnlyCollection<Guid> ruleIds, CancellationToken ct)
+        Guid tenantId, RuleScopeClass scopeClass, IReadOnlyCollection<ClassifiedRule> rules, CancellationToken ct)
     {
         await using var db = await OpenForTenantAsync(tenantId, ct);
 
-        var ids = ruleIds.ToList();
-        return await db.AlertRules
-            .Where(r => ids.Contains(r.Id))
-            .ExecuteUpdateAsync(s => s.SetProperty(r => r.ScopeClass, scopeClass), ct);
+        var written = 0;
+        foreach (var rule in rules)
+        {
+            written += await db.AlertRules
+                .Where(r => r.Id == rule.Id
+                    && r.ConditionType == rule.ConditionType
+                    && r.ConditionParams == rule.ConditionParams)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.ScopeClass, scopeClass), ct);
+        }
+
+        return written;
     }
 
     /// <inheritdoc/>
