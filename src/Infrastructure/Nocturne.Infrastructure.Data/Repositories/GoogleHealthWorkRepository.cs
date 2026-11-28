@@ -1,6 +1,6 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -13,11 +13,8 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class GoogleHealthWorkRepository(INocturneDbContextFactory contexts) : IGoogleHealthWorkStore
 {
-    private static readonly IReadOnlyDictionary<GoogleHealthSyncPhase, string> PhaseNames =
-        Enum.GetValues<GoogleHealthSyncPhase>().ToDictionary(phase => phase, phase => JsonSerializer.Serialize(phase).Trim('"'));
-
     private static readonly IReadOnlyDictionary<string, GoogleHealthSyncPhase> Phases =
-        PhaseNames.ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.Ordinal);
+        Enum.GetValues<GoogleHealthSyncPhase>().ToDictionary(EnumWireNames<GoogleHealthSyncPhase>.Of, phase => phase, StringComparer.Ordinal);
 
     /// <inheritdoc />
     /// <remarks>A phase that is not one of <see cref="GoogleHealthSyncPhase"/>'s names reads as no progress.</remarks>
@@ -42,7 +39,7 @@ public class GoogleHealthWorkRepository(INocturneDbContextFactory contexts) : IG
     public async Task SetProgressAsync(GoogleHealthSyncProgress? progress, CancellationToken ct)
     {
         await using var db = await TenantContextAsync(ct);
-        var phase = progress is null ? null : PhaseNames[progress.Phase];
+        var phase = progress is null ? null : EnumWireNames<GoogleHealthSyncPhase>.Of(progress.Phase);
         await db.Database.ExecuteSqlAsync($"""
             INSERT INTO google_health_work (tenant_id, progress_phase, progress_data_type, progress_completed_data_types,
                                             progress_total_data_types, progress_pages_read, progress_worker_owned)

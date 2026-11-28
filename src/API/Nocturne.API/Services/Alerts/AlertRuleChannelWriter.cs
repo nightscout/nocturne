@@ -83,8 +83,8 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
 
             if (ChannelDestinations.SupersededBy(ch.ChannelType) is { } replacements)
             {
-                return $"A {WireName(ch.ChannelType)} channel has no delivery path. Use "
-                    + $"{string.Join(" or ", replacements.Select(WireName))} instead.";
+                return $"A {EnumWireNames<ChannelType>.Of(ch.ChannelType)} channel has no delivery path. Use "
+                    + $"{string.Join(" or ", replacements.Select(EnumWireNames<ChannelType>.Of))} instead.";
             }
 
             if (ChannelDestinations.RoutesToMember(ch.ChannelType))
@@ -95,10 +95,10 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
                 if (member is null)
                 {
                     return goesToSaver
-                        ? $"A {WireName(ch.ChannelType)} channel without a member to name is "
+                        ? $"A {EnumWireNames<ChannelType>.Of(ch.ChannelType)} channel without a member to name is "
                             + "delivered to the member who saves it, and this caller is not a "
                             + "member of this site."
-                        : $"A {WireName(ch.ChannelType)} channel's destination must be the subject "
+                        : $"A {EnumWireNames<ChannelType>.Of(ch.ChannelType)} channel's destination must be the subject "
                             + $"id of a member of this site; got '{ch.Destination}'.";
                 }
 
@@ -125,12 +125,12 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
             if (ChannelDestinations.RequiresDestination(ch.ChannelType)
                 && string.IsNullOrWhiteSpace(ch.Destination))
             {
-                return $"A {WireName(ch.ChannelType)} channel requires a destination.";
+                return $"A {EnumWireNames<ChannelType>.Of(ch.ChannelType)} channel requires a destination.";
             }
 
             if (!ChannelDestinations.IsWellFormed(ch.ChannelType, ch.Destination))
             {
-                return $"A {WireName(ch.ChannelType)} channel's destination must be "
+                return $"A {EnumWireNames<ChannelType>.Of(ch.ChannelType)} channel's destination must be "
                     + $"{ChannelDestinations.DescribeDestination(ch.ChannelType)}; "
                     + $"got '{ch.Destination}'.";
             }
@@ -157,7 +157,7 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
         var bytes = System.Text.Encoding.UTF8.GetByteCount(secret);
         return bytes <= SecretMaxBytes
             ? null
-            : $"A {WireName(ch.ChannelType)} channel's signing secret must be at most "
+            : $"A {EnumWireNames<ChannelType>.Of(ch.ChannelType)} channel's signing secret must be at most "
                 + $"{SecretMaxBytes} bytes once UTF-8 encoded; got {bytes}.";
     }
 
@@ -248,10 +248,6 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
         "whatsapp" => "WhatsApp",
         _ => char.ToUpperInvariant(platform[0]) + platform[1..],
     };
-
-    /// <summary>Serialised name of a channel type, so error text matches the request wire format.</summary>
-    private static string WireName(ChannelType channelType) =>
-        JsonSerializer.Serialize(channelType).Trim('"');
 
     /// <summary>
     /// The channels as stored, once <see cref="ResolveAndValidateAsync"/> has accepted them. A

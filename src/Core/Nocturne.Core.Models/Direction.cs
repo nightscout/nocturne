@@ -91,7 +91,9 @@ public static class DirectionExtensions
     /// The legacy Nightscout wire spelling of each <see cref="Direction"/>, from
     /// <c>ClientApp/lib/plugins/direction.js</c>. Sole source of truth for the string form: v1/v3
     /// responses, the <c>entries</c> SignalR broadcast and the CSV/TSV export all read it, and
-    /// <see cref="TryParse"/> indexes it.
+    /// <see cref="TryParse"/> indexes it. The spellings live in this table rather than in
+    /// <see cref="System.Runtime.Serialization.EnumMemberAttribute"/> values: the generated client names
+    /// its enum members from that attribute, while the JSON serialiser (V4, the OpenAPI document) writes the member names.
     /// </summary>
     private static readonly Dictionary<Direction, string> WireNames = new()
     {
