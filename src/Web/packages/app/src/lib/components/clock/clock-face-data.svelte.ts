@@ -133,6 +133,18 @@ export function dataShapeOf(config: ClockFaceConfig): ClockFaceConfig {
  * The scope the caller lacks to add a part, as the API reports it; null when the caller may add it
  * or the API has not answered yet. A chart's base is `feature` undefined.
  */
+/**
+ * Whether the caller may add the part: false until the API has said what the caller may add, so
+ * nothing is added that the save would refuse.
+ */
+export function canAdd(
+  parts: readonly ClockPartAccessDto[] | undefined,
+  type: string,
+  feature?: string
+): boolean {
+  return parts !== undefined && missingScopeFor(parts, type, feature) === null;
+}
+
 export function missingScopeFor(
   parts: readonly ClockPartAccessDto[],
   type: string,

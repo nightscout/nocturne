@@ -11,6 +11,7 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { ClockElement, ClockPartAccessDto, TrackerDefinitionDto } from "#lib/api/index.js";
   import {
+    canAdd,
     missingScopeFor,
     missingScopeReason,
   } from "#lib/components/clock/clock-face-data.svelte.js";
@@ -32,7 +33,7 @@
     element: InternalElement;
     trackerDefinitions: TrackerDefinitionDto[];
     /** What the caller may add; a chart feature the caller cannot turn on is disabled with the reason. */
-    parts: ClockPartAccessDto[];
+    parts: ClockPartAccessDto[] | undefined;
     onClose: () => void;
     onRemove: () => void;
     onUpdateElement: (updates: Partial<ClockElement>) => void;
@@ -361,11 +362,11 @@
           <div class="space-y-1">
             {#each CHART_FEATURE_OPTIONS as { key, label, defaultValue } (key)}
               {@const checked = chartFlag(element.chartConfig, key) ?? defaultValue}
-              {@const missing = missingScopeFor(parts, "chart", key)}
+              {@const missing = parts ? missingScopeFor(parts, "chart", key) : null}
               <div class="flex items-start gap-2">
                 <Checkbox
                   {checked}
-                  disabled={missing !== null && !checked}
+                  disabled={!checked && !canAdd(parts, "chart", key)}
                   onCheckedChange={(v: boolean) =>
                     onUpdateElement({
                       chartConfig: {

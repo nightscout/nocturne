@@ -9,8 +9,8 @@ namespace Nocturne.API.Services.Platform;
 /// owner holds the scope. Anyone holding the face's link sees what it serves.
 /// </summary>
 /// <remarks>
-/// The latest reading, its delta, arrow and age are the face's base, served to every face as
-/// <c>ClockFacesController.GetGlucose</c> does, so they need nothing here.
+/// The latest reading, its delta, arrow and age are the face's <see cref="Base"/>, which every face
+/// shows whatever its elements, as <c>ClockFacesController.GetGlucose</c> serves them.
 /// </remarks>
 public static class ClockFaceReadScopes
 {
@@ -18,6 +18,9 @@ public static class ClockFaceReadScopes
     /// <param name="Part">Names the part, so a saved face keeps a part its owner can no longer add.</param>
     /// <param name="Scope">The scope reading the part takes.</param>
     public sealed record Requirement(string Part, string Scope);
+
+    /// <summary>The latest reading, its delta, arrow and age, which every face shows.</summary>
+    public static readonly Requirement Base = new("glucose", Scope.GlucoseRead);
 
     /// <summary>The requirements of one element.</summary>
     public static IReadOnlyList<Requirement> Of(ClockElement element) => element.Type switch
@@ -50,13 +53,13 @@ public static class ClockFaceReadScopes
         chart.ShowBolus || chart.ShowCarbs || chart.ShowIob || chart.ShowCob || chart.ShowBasal
         || chart.ShowPredictions;
 
-    /// <summary>Every requirement of the face: its elements' and its alert settings'.</summary>
+    /// <summary>Every requirement of the face: its base's, its elements' and its alert settings'.</summary>
     public static IReadOnlyList<Requirement> Of(ClockFaceConfig? config)
     {
         if (config is null)
             return [];
 
-        var required = config.Rows.SelectMany(r => r.Elements).SelectMany(Of).ToList();
+        List<Requirement> required = [Base, .. config.Rows.SelectMany(r => r.Elements).SelectMany(Of)];
         if (config.Settings?.ShowAlerts == true)
             required.Add(new("showAlerts", Scope.AlertsRead));
         if (config.Settings?.AllowMarkSeen == true)

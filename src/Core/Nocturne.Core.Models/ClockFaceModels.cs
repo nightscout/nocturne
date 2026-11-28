@@ -49,9 +49,17 @@ public class ClockFaceConfig
     /// Returns a "field: message" description of the first invalid setting, or null when the
     /// config can be saved.
     /// </summary>
-    public string? Validate() =>
-        (Settings is null ? "settings: must be an object" : Settings.Validate())
-        ?? Rows.SelectMany(r => r.Elements).Select(e => e.Validate()).FirstOrDefault(error => error is not null);
+    public string? Validate()
+    {
+        if (Settings is null)
+            return "settings: must be an object";
+        if (Rows is null || Rows.Any(r => r?.Elements is null))
+            return "rows: each row must be an object with an elements list";
+        if (Rows.Any(r => r.Elements.Any(e => e is null)))
+            return "rows: each element must be an object";
+        return Settings.Validate()
+            ?? Rows.SelectMany(r => r.Elements).Select(e => e.Validate()).FirstOrDefault(error => error is not null);
+    }
 
     /// <summary>
     /// The layout every new face starts from: glucose and trend arrow, then delta, then reading
@@ -445,11 +453,6 @@ public class ClockGlucoseDto
 }
 
 /// <summary>
-/// What a clock face shows beyond the latest reading, read for the elements its layout holds and
-/// nothing else. A part the layout has no element for, or that its reader may not read, is null or
-/// empty.
-/// </summary>
-/// <summary>
 /// Whether the caller may add a part of a clock face, so the editor can say why before the save
 /// refuses it.
 /// </summary>
@@ -465,6 +468,11 @@ public class ClockPartAccessDto
     public string? MissingScope { get; set; }
 }
 
+/// <summary>
+/// What a clock face shows beyond the latest reading, read for the elements its layout holds and
+/// nothing else. A part the layout has no element for, or that its reader may not read, is null or
+/// empty.
+/// </summary>
 public class ClockFaceData
 {
     /// <summary>Insulin on board in units, or null when nothing stands behind a total.</summary>

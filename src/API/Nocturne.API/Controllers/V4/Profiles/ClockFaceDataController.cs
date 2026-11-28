@@ -80,10 +80,14 @@ public class ClockFaceDataController(
     [RequireScope(Scope.SharingManage)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ClockFaceData), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ClockFaceData>> PreviewClockFaceData([FromBody] ClockFaceConfig config)
     {
+        if (config.Validate() is { } configError)
+            return Problem(detail: configError, statusCode: 400, title: "Bad Request");
+
         var held = HttpContext.GetGrantedScopes();
         if (!TrackerReadAccess.Allows(HttpContext))
         {

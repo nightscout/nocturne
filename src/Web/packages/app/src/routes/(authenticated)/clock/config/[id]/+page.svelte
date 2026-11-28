@@ -30,7 +30,7 @@
   import {
     dataShapeOf,
     faceReadsData,
-    missingScopeFor,
+    canAdd,
   } from "#lib/components/clock/clock-face-data.svelte.js";
   import GlucoseChartCard from "#lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
   import type { ClockElement, TrackerDefinitionDto } from "#lib/api/index.js";
@@ -113,7 +113,7 @@
 
   // What the editor may add: a part it may not is disabled with the reason, not refused on save.
   const partsQuery = getClockFaceParts();
-  const parts = $derived(partsQuery.current ?? []);
+  const parts = $derived(partsQuery.current);
 
   // Time for preview
   let currentTime = $state(new Date());
@@ -186,7 +186,7 @@
     if (internalElement.chartConfig) {
       // A new chart starts with only the tracks its editor may add.
       for (const feature of ["showBolus", "showCarbs"] as const) {
-        if (missingScopeFor(parts, "chart", feature)) internalElement.chartConfig[feature] = false;
+        if (!canAdd(parts, "chart", feature)) internalElement.chartConfig[feature] = false;
       }
     }
     if (config.rows.length === 0) {

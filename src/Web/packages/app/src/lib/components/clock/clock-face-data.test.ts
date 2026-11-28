@@ -11,6 +11,7 @@ import {
   type ClockPartAccessDto,
 } from "@nocturne/api-client";
 import {
+  canAdd,
   dataShapeOf,
   faceDrawsChart,
   faceReadsData,
@@ -112,8 +113,15 @@ describe("missingScopeFor", () => {
     expect(missingScopeFor(parts, "chart", "showBolus")).toBe("treatments.read");
   });
 
-  it("disables nothing before the API answers", () => {
-    expect(missingScopeFor([], "iob")).toBeNull();
+  it("lets nothing be added before the API answers", () => {
+    expect(canAdd(undefined, "summary")).toBe(false);
+    expect(canAdd(undefined, "chart", "showCarbs")).toBe(false);
+  });
+
+  it("lets a part be added that the API names no missing scope for", () => {
+    expect(canAdd(parts, "summary")).toBe(true);
+    expect(canAdd(parts, "iob")).toBe(false);
+    expect(canAdd(parts, "chart", "showBolus")).toBe(false);
   });
 
   it("names the permission the caller needs", () => {

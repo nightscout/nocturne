@@ -160,4 +160,13 @@ public class ClockFaceConfigTests
 
         config.Validate().Should().BeNull();
     }
+
+    [Fact]
+    public void A_missing_row_list_or_element_is_refused_rather_than_thrown_on()
+    {
+        new ClockFaceConfig { Rows = null! }.Validate().Should().StartWith("rows:");
+        new ClockFaceConfig { Rows = [null!] }.Validate().Should().StartWith("rows:");
+        new ClockFaceConfig { Rows = [new ClockRow { Elements = null! }] }.Validate().Should().StartWith("rows:");
+        new ClockFaceConfig { Rows = [new ClockRow { Elements = [null!] }] }.Validate().Should().StartWith("rows:");
+    }
 }

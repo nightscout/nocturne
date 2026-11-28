@@ -36,6 +36,7 @@ public class ClockFaceDataControllerTests
     // Strict: a part the owner may not read must never be read at all.
     private readonly Mock<IIobCobReader> _iobCob = new(MockBehavior.Strict);
     private readonly Mock<ITrackerRepository> _trackers = new(MockBehavior.Strict);
+    private readonly Mock<IChartDataService> _charts = new(MockBehavior.Strict);
 
     [Fact]
     public async Task AnUnknownFace_IsNotFound()
@@ -112,6 +113,42 @@ public class ClockFaceDataControllerTests
         await controller.GetClockFaceData(id);
 
         reader.Verify(r => r.ClampMemberHistory(), Times.Once());
+    }
+
+    public static TheoryData<string, string[], string[]?> OwnersWhoMayNotGiveTheChart => new()
+    {
+        { "an owner whose treatments access is gone", [Scope.GlucoseRead], [Scope.GlucoseRead] },
+        { "an owner who reads treatments only through a team", [Scope.GlucoseRead, Scope.TreatmentsRead], [Scope.GlucoseRead] },
+        { "an owner who reads everything only through a team", [Scope.GlucoseRead, Scope.TreatmentsRead], null },
+    };
+
+    [Theory]
+    [MemberData(nameof(OwnersWhoMayNotGiveTheChart))]
+    public async Task AChartDrawingTreatments_IsNotRead_WhenTheOwnerMayNotGiveThem(string _, string[] sum, string[]? direct)
+    {
+        var id = FaceOf(_owner.ToString(), new ClockElement { Type = "chart", ChartConfig = new ClockChartConfig { ShowBolus = true } });
+        OwnerIs(Access(false, sum), direct is null ? null : Access(false, direct));
+
+        var result = await Controller().GetClockFaceChart(id);
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<ClockFaceChart>().Which.Chart.Should().BeNull();
+        _charts.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task AChartDrawingTreatments_IsRead_WhenTheOwnerMayGiveThem()
+    {
+        var id = FaceOf(_owner.ToString(), new ClockElement { Type = "chart", ChartConfig = new ClockChartConfig { ShowBolus = true } });
+        OwnerHolds(Scope.GlucoseRead, Scope.TreatmentsRead);
+        _charts.Setup(c => c.GetDashboardChartDataAsync(
+                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DashboardChartData());
+
+        var result = await Controller().GetClockFaceChart(id);
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<ClockFaceChart>().Which.Chart.Should().NotBeNull();
     }
 
     [Theory]
@@ -194,7 +231,7 @@ public class ClockFaceDataControllerTests
     private ClockFaceDataController Controller()
     {
         var data = new ClockFaceDataService(
-            _iobCob.Object, Mock.Of<IChartDataService>(), Mock.Of<ISensorGlucoseRepository>(),
+            _iobCob.Object, _charts.Object, Mock.Of<ISensorGlucoseRepository>(),
             Mock.Of<IStatisticsService>(), _trackers.Object, new ConfigurationBuilder().Build(),
             TimeProvider.System, NullLogger<ClockFaceDataService>.Instance);
         return new ClockFaceDataController(_faces.Object, data, _members.Object, SettableTenantAccessor.Resolved(_tenant))

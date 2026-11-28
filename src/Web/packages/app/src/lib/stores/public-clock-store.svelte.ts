@@ -45,12 +45,21 @@ const DATA_POLL_INTERVAL_MS = 60_000;
 /** A chart window of hours gains one point per reading; the latest reading itself polls faster. */
 const CHART_POLL_INTERVAL_MS = 5 * 60_000;
 
+/**
+ * How many polls in a row may fail before the values they last read are dropped. The values carry
+ * no time of their own, so a clock that cannot reach the API would otherwise show an old dose or
+ * forecast as current.
+ */
+const STALE_AFTER_FAILED_POLLS = 3;
+
 export class PublicClockStore implements ClockGlucoseSource, ClockFaceDataSource {
   private readonly clockId: string;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private alertTimer: ReturnType<typeof setInterval> | null = null;
   private dataTimer: ReturnType<typeof setInterval> | null = null;
   private chartTimer: ReturnType<typeof setInterval> | null = null;
+  private failedDataPolls = 0;
+  private failedChartPolls = 0;
 
   /** What the face's other elements show, read by the face's id; null until the first read. */
   data = $state.raw<ClockFaceData | null>(null);
@@ -140,9 +149,11 @@ export class PublicClockStore implements ClockGlucoseSource, ClockFaceDataSource
   private async pollData(): Promise<void> {
     try {
       this.data = await clockFaceDataClient().getClockFaceData(this.clockId);
+      this.failedDataPolls = 0;
     } catch (err) {
-      // Keep the last values: a clock must not blank on one failed poll.
+      // Keep the last values through a short outage, so one failed poll does not blank the clock.
       console.error("Failed to load public clock values:", err);
+      if (++this.failedDataPolls >= STALE_AFTER_FAILED_POLLS) this.data = null;
     }
   }
 
@@ -151,8 +162,13 @@ export class PublicClockStore implements ClockGlucoseSource, ClockFaceDataSource
       const read = await clockFaceDataClient().getClockFaceChart(this.clockId);
       this.chart = read.chart ? transformChartData(read.chart) : null;
       this.predictions = read.predictions ? toPredictionData(read.predictions) : null;
+      this.failedChartPolls = 0;
     } catch (err) {
       console.error("Failed to load public clock chart:", err);
+      if (++this.failedChartPolls >= STALE_AFTER_FAILED_POLLS) {
+        this.chart = null;
+        this.predictions = null;
+      }
     }
   }
 

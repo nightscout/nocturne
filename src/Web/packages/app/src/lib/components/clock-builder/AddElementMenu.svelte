@@ -9,6 +9,7 @@
   } from "#lib/clock-builder/index.js";
   import type { ClockPartAccessDto } from "#lib/api/index.js";
   import {
+    canAdd,
     missingScopeFor,
     missingScopeReason,
   } from "#lib/components/clock/clock-face-data.svelte.js";
@@ -16,8 +17,11 @@
   interface Props {
     position: "top" | "bottom";
     open: boolean;
-    /** What the caller may add; an element the caller cannot add is disabled with the reason. */
-    parts: ClockPartAccessDto[];
+    /**
+     * What the caller may add, undefined until it is read. An element the caller cannot add is
+     * disabled with the reason; every element is disabled until it is read.
+     */
+    parts: ClockPartAccessDto[] | undefined;
     onOpenChange: (open: boolean) => void;
     onAddElement: (type: ClockElementType, position: "top" | "bottom") => void;
   }
@@ -26,8 +30,10 @@
 
   /** The group's unavailable elements, by the reason they are unavailable. */
   function unavailable(types: ClockElementType[]): { reason: string; names: string }[] {
+    if (parts === undefined) return [];
+    const known = parts;
     const missing = types
-      .map((type) => ({ type, scope: missingScopeFor(parts, type) }))
+      .map((type) => ({ type, scope: missingScopeFor(known, type) }))
       .filter((m): m is { type: ClockElementType; scope: string } => m.scope !== null);
     const scopes = missing.map((m) => m.scope).filter((scope, i, all) => all.indexOf(scope) === i);
     return scopes.map((scope) => ({
@@ -65,7 +71,7 @@
               <Button
                 variant="outline"
                 size="xs"
-                disabled={missingScopeFor(parts, type) !== null}
+                disabled={!canAdd(parts, type)}
                 onclick={() => onAddElement(type, position)}
               >
                 {ELEMENT_INFO[type].name}

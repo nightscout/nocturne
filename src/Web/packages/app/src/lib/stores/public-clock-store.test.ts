@@ -133,4 +133,30 @@ describe("PublicClockStore", () => {
     store.stop();
     vi.useRealTimers();
   });
+
+  it("drops the values once the polls have failed for three intervals", async () => {
+    getClockFaceData
+      .mockResolvedValueOnce({ iob: 2.3, trackers: [] })
+      .mockRejectedValue(new Error("offline"));
+    getClockFaceChart
+      .mockResolvedValueOnce({ chart: { glucoseData: [{ time: MILLS, sgv: 120 }] }, predictions: null })
+      .mockRejectedValue(new Error("offline"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers();
+    const store = new PublicClockStore("clock-id");
+
+    store.watchFace({ rows: [{ elements: [{ type: "iob" }, { type: "chart" }] }] });
+    await vi.waitFor(() => expect(store.chart).not.toBeNull());
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(store.data).toEqual({ iob: 2.3, trackers: [] });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(store.data).toBeNull();
+    expect(store.chart).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(12 * 60_000);
+    expect(store.chart).toBeNull();
+    store.stop();
+    vi.useRealTimers();
+  });
 });

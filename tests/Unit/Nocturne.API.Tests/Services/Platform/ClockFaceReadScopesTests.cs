@@ -80,7 +80,16 @@ public class ClockFaceReadScopesTests
 
         ClockFaceReadScopes.MissingFor(after, before: null, held: new HashSet<string> { Scope.GlucoseRead })
             .Should().Be(Scope.TreatmentsRead);
-        ClockFaceReadScopes.MissingFor(after, before: null, held: new HashSet<string> { Scope.TreatmentsRead })
+        ClockFaceReadScopes.MissingFor(after, before: null, held: new HashSet<string> { Scope.GlucoseRead, Scope.TreatmentsRead })
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void EveryFace_TakesGlucoseForItsLatestReading()
+    {
+        ClockFaceReadScopes.MissingFor(new ClockFaceConfig(), before: null, held: new HashSet<string>())
+            .Should().Be(Scope.GlucoseRead);
+        ClockFaceReadScopes.MissingFor(new ClockFaceConfig(), before: new ClockFaceConfig(), held: new HashSet<string>())
             .Should().BeNull();
     }
 

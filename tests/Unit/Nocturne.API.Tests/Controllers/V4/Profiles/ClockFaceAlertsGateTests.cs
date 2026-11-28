@@ -86,7 +86,7 @@ public class ClockFaceAlertsGateTests
         _faces.Setup(f => f.CreateAsync(It.IsAny<string>(), It.IsAny<CreateClockFaceRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ClockFace { Id = Guid.NewGuid() });
 
-        var result = await Faces(Scope.AlertsRead).Create(new CreateClockFaceRequest
+        var result = await Faces(Scope.GlucoseRead, Scope.AlertsRead).Create(new CreateClockFaceRequest
         {
             Name = "Kitchen",
             Config = WithAlerts(true, true),
@@ -100,7 +100,7 @@ public class ClockFaceAlertsGateTests
     {
         var id = Guid.NewGuid();
         _faces.Setup(f => f.GetByIdAsync(id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ClockFace { Id = id, Config = WithAlerts(true, false) });
+            .ReturnsAsync(new ClockFace { Id = id, UserId = _owner.ToString(), Config = WithAlerts(true, false) });
         _faces.Setup(f => f.UpdateAsync(id, It.IsAny<string>(), It.IsAny<UpdateClockFaceRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ClockFace { Id = id });
 
@@ -140,7 +140,8 @@ public class ClockFaceAlertsGateTests
         httpContext.SetAuthContext(new AuthContext { IsAuthenticated = true, SubjectId = _owner });
         httpContext.SetGrantedScopes(new HashSet<string>(scopes));
         return new ClockFacesController(
-            _faces.Object, Mock.Of<ISensorGlucoseRepository>(), Mock.Of<ILogger<ClockFacesController>>())
+            _faces.Object, Mock.Of<ISensorGlucoseRepository>(), Mock.Of<ITenantMemberService>(),
+            SettableTenantAccessor.Resolved(_tenant), Mock.Of<ILogger<ClockFacesController>>())
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
             ProblemDetailsFactory = new EchoingProblemDetailsFactory(),
