@@ -603,7 +603,6 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     {
         var devices = await ResolveDevicesAsync(batch, ct);
         var links = await _deviceService.GetPatientDeviceLinksAsync(devices.Select(d => d.Pump), ct);
-        var spans = await PreloadSpansAsync(batch, ct);
 
         var models = batch
             .Select((status, i) => BuildModels(status, source, devices[i].Pump, devices[i].Uploader, links, group))
@@ -611,6 +610,7 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
 
         await WriteSnapshotsAsync(models, group, result, origin, ct);
         await StampLoopAsync(result, ct);
+        var spans = await PreloadSpansAsync(batch, result, ct);
 
         await FoldOverridesAsync(batch, spans, result, result.SpanOwners, ct);
         await FoldPumpModesAsync(spans, result, result.SpanOwners, ct);
@@ -796,8 +796,12 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     /// The spans the folds read, one query per category the batch observes: every open span, every span
     /// overlapping the batch's observations, and the first <see cref="OverrideQueryLimit"/> override spans
     /// after them from each observing device, which is as far as the next span of an observation is read.
+    /// The pump-mode observations are each stored pump snapshot's timestamp and its transition's
+    /// <see cref="PumpModeSpanClock.Transition.ReadAt"/>, which needs when the snapshot was stored, so the
+    /// spans are read once the snapshots are written.
     /// </summary>
-    private async Task<SpanState> PreloadSpansAsync(IReadOnlyList<BatchStatus> batch, CancellationToken ct)
+    private async Task<SpanState> PreloadSpansAsync(
+        IReadOnlyList<BatchStatus> batch, V4Models.DecompositionResult written, CancellationToken ct)
     {
         var observing = batch.Where(s => s.Status.Override is { Active: not null }).ToList();
         IReadOnlyList<StateSpan> overrides = observing.Count == 0
@@ -810,8 +814,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
                 OverrideQueryLimit,
                 ct);
 
-        var transitions = batch.Where(s => s.Status.Pump != null)
-            .SelectMany(s => ParseTimestampToDateTime(s.Status.Pump!.Clock) is { } clock ? [clock, s.Timestamp] : new[] { s.Timestamp })
+        var transitions = written.StoredRecords.OfType<V4Models.PumpSnapshot>()
+            .SelectMany(p => TransitionOf(p).ReadAt.Append(p.Timestamp))
             .ToList();
         IReadOnlyList<StateSpan> pumpModes = transitions.Count == 0
             ? []

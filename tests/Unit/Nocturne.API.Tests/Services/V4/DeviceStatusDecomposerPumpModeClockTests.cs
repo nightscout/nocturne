@@ -129,6 +129,31 @@ public class DeviceStatusDecomposerPumpModeClockTests : IDisposable
         (await SpansAsync(PumpModeState.Suspended)).Should().Equal([ended]);
     }
 
+    /// <summary>
+    /// A suspension seen by two snapshots, then a resume sent a day ahead, arriving below the millisecond,
+    /// which ends the suspension at its arrival as the store keeps it. Decomposed again on its own, it finds
+    /// that end, a day before its own time, so it backfills no suspension from the second snapshot and
+    /// writes no span.
+    /// </summary>
+    [Fact]
+    public async Task AResumeSentADayAhead_DecomposedAgainOnItsOwn_BackfillsNothingAndChangesNothing()
+    {
+        var arrived = T.AddTicks(1_234_567);
+        await FoldAsync(T.AddHours(-2), Suspension("before", T.AddHours(-2), suspended: false));
+        await FoldAsync(T.AddHours(-1), Suspension("suspend", T.AddHours(-1), suspended: true));
+        await FoldAsync(T.AddMinutes(-30), Suspension("still", T.AddMinutes(-30), suspended: true));
+        await FoldAsync(arrived, Suspension("resume-ahead", DayAhead, suspended: false));
+        var ended = (T.AddHours(-1), (DateTime?)RecordTime.AtMillisecond(arrived));
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal([ended]);
+
+        var again = await FoldAsync(T.AddHours(2), Suspension("resume-ahead", DayAhead, suspended: false));
+
+        (await SpansAsync(PumpModeState.Suspended)).Should().Equal([ended]);
+        again.CreatedRecords.Concat(again.UpdatedRecords).Concat(again.UnchangedRecords).OfType<StateSpan>()
+            .Should().BeEmpty();
+    }
+
     /// <summary>A resume dated a day ahead backfills a suspension that ends when it arrived, not at a future time.</summary>
     [Fact]
     public async Task AResumeDatedADayAhead_BackfillsASuspensionEndingWhenItArrived()
@@ -513,10 +538,10 @@ public class DeviceStatusDecomposerPumpModeClockTests : IDisposable
     };
 
     /// <summary>Decomposes <paramref name="status"/> as it arrives at <paramref name="arrivedAt"/>.</summary>
-    private async Task FoldAsync(DateTime arrivedAt, DeviceStatus status)
+    private async Task<V4Models.DecompositionResult> FoldAsync(DateTime arrivedAt, DeviceStatus status)
     {
         _clock.AdjustTime(new DateTimeOffset(arrivedAt));
-        await _decomposer.DecomposeBatchAsync([status], null, WriteOrigin.Live);
+        return await _decomposer.DecomposeBatchAsync([status], null, WriteOrigin.Live);
     }
 
     /// <summary>Stores a pump snapshot arriving at <paramref name="arrivedAt"/> without folding it.</summary>

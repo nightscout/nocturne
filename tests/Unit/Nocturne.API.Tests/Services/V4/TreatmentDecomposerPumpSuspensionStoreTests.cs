@@ -153,6 +153,110 @@ public class TreatmentDecomposerPumpSuspensionStoreTests : IDisposable
     }
 
     /// <summary>
+    /// A suspend and a resume dated a day ahead, arriving below the millisecond in one batch, end the
+    /// suspension at the resume's arrival. The resume uploaded again on its own finds that end, a day before
+    /// its own time, and writes nothing.
+    /// </summary>
+    [Fact]
+    public async Task AResumeDatedADayAhead_UploadedAgainOnItsOwn_WritesNothingAndWarnsOfNothing()
+    {
+        var arrived = Now.AddHours(1).AddTicks(1_234_567);
+        _clock.SetUtcNow(new DateTimeOffset(arrived));
+        await DecomposeAsync(PumpEvent("suspend", "Pump Suspend", Now), PumpEvent("resume-ahead", "Pump Resume", Ahead));
+        var ended = (DateTime?)RecordTime.AtMillisecond(arrived);
+
+        (await SuspensionsAsync()).Should().Equal([("pump-suspended-tx:suspend", Now, ended)]);
+
+        _clock.SetUtcNow(new DateTimeOffset(Now.AddHours(2)));
+        var again = await DecomposeAsync(PumpEvent("resume-ahead", "Pump Resume", Ahead));
+
+        (await SuspensionsAsync()).Should().Equal([("pump-suspended-tx:suspend", Now, ended)]);
+        WrittenSpans(again).Should().BeEmpty();
+        VerifyWarnings(Times.Never());
+    }
+
+    /// <summary>
+    /// A resume dated a day ahead ends the suspension at its arrival. Sent again under a new legacy id with
+    /// the same sync key, it updates its stored device event, which keeps that arrival, so it finds the end
+    /// and writes nothing.
+    /// </summary>
+    [Fact]
+    public async Task AResumeDatedADayAhead_SentAgainUnderANewIdWithItsSyncKey_WritesNothingAndWarnsOfNothing()
+    {
+        await DecomposeAsync(PumpEvent("suspend", "Pump Suspend", Now));
+        _clock.SetUtcNow(new DateTimeOffset(Now.AddHours(1)));
+        await DecomposeAsync(Synced(PumpEvent("resume-ahead", "Pump Resume", Ahead)));
+
+        (await SuspensionsAsync()).Should().Equal([("pump-suspended-tx:suspend", Now, (DateTime?)Now.AddHours(1))]);
+
+        _clock.SetUtcNow(new DateTimeOffset(Now.AddHours(2)));
+        var again = await DecomposeAsync(Synced(PumpEvent("resume-ahead-again", "Pump Resume", Ahead)));
+
+        (await SuspensionsAsync()).Should().Equal([("pump-suspended-tx:suspend", Now, (DateTime?)Now.AddHours(1))]);
+        WrittenSpans(again).Should().BeEmpty();
+        VerifyWarnings(Times.Never());
+
+        static Treatment Synced(Treatment treatment)
+        {
+            treatment.DataSource = "pump-uploader";
+            treatment.SyncIdentifier = "resume-sync";
+            return treatment;
+        }
+    }
+
+    /// <summary>A resume on the server's clock uploaded again on its own writes nothing and warns of nothing.</summary>
+    [Fact]
+    public async Task AResume_UploadedAgainOnItsOwn_WritesNothingAndWarnsOfNothing()
+    {
+        await DecomposeAsync(PumpEvent("suspend", "Pump Suspend", Now));
+        _clock.SetUtcNow(new DateTimeOffset(Now.AddHours(1)));
+        await DecomposeAsync(PumpEvent("resume", "Pump Resume", Now.AddHours(1)));
+
+        _clock.SetUtcNow(new DateTimeOffset(Now.AddHours(2)));
+        var again = await DecomposeAsync(PumpEvent("resume", "Pump Resume", Now.AddHours(1)));
+
+        (await SuspensionsAsync()).Should().Equal([("pump-suspended-tx:suspend", Now, (DateTime?)Now.AddHours(1))]);
+        WrittenSpans(again).Should().BeEmpty();
+        VerifyWarnings(Times.Never());
+    }
+
+    /// <summary>A resume dated a day ahead with no suspension stored ends nothing and is warned of once.</summary>
+    [Fact]
+    public async Task AResumeDatedADayAhead_WithNoSuspensionStored_IsWarnedOfOnce()
+    {
+        var result = await DecomposeAsync(PumpEvent("resume-ahead", "Pump Resume", Ahead));
+
+        (await SuspensionsAsync()).Should().BeEmpty();
+        WrittenSpans(result).Should().BeEmpty();
+        VerifyWarnings(Times.Once());
+    }
+
+    /// <summary>
+    /// A resume dated a day ahead ends a suspension, then the pump suspends again on the server's clock. The
+    /// resume uploaded again on its own does not end the later suspension, and warns of nothing.
+    /// </summary>
+    [Fact]
+    public async Task AResumeDatedADayAhead_UploadedAgainOnItsOwn_LeavesALaterSuspensionOpen()
+    {
+        await DecomposeAsync(PumpEvent("suspend", "Pump Suspend", Now));
+        _clock.SetUtcNow(new DateTimeOffset(Now.AddHours(1)));
+        await DecomposeAsync(PumpEvent("resume-ahead", "Pump Resume", Ahead));
+        _clock.SetUtcNow(new DateTimeOffset(Now.AddMinutes(90)));
+        await DecomposeAsync(PumpEvent("later", "Pump Suspend", Now.AddMinutes(90)));
+
+        _clock.SetUtcNow(new DateTimeOffset(Now.AddHours(2)));
+        var again = await DecomposeAsync(PumpEvent("resume-ahead", "Pump Resume", Ahead));
+
+        (await SuspensionsAsync()).Should().BeEquivalentTo(
+        [
+            ("pump-suspended-tx:suspend", Now, (DateTime?)Now.AddHours(1)),
+            ("pump-suspended-tx:later", Now.AddMinutes(90), (DateTime?)null),
+        ]);
+        WrittenSpans(again).Should().BeEmpty();
+        VerifyWarnings(Times.Never());
+    }
+
+    /// <summary>
     /// A pump clock set an hour forward during a suspension dates the resume ahead. The suspension ends when
     /// the resume arrived.
     /// </summary>
@@ -341,8 +445,17 @@ public class TreatmentDecomposerPumpSuspensionStoreTests : IDisposable
     private static Treatment PumpEvent(string id, string eventType, DateTime at) =>
         new() { Id = id, EventType = eventType, Mills = new DateTimeOffset(at).ToUnixTimeMilliseconds() };
 
-    private Task DecomposeAsync(params Treatment[] treatments) =>
+    private Task<TreatmentDecomposition> DecomposeAsync(params Treatment[] treatments) =>
         _decomposer.DecomposeBatchAsync([.. treatments], WriteOrigin.Live, default, new TreatmentDecomposition());
+
+    private static IEnumerable<StateSpan> WrittenSpans(TreatmentDecomposition result) =>
+        result.CreatedRecords.Concat(result.UpdatedRecords).Concat(result.UnchangedRecords).OfType<StateSpan>();
+
+    private void VerifyWarnings(Times times) =>
+        _logger.Verify(
+            l => l.Log(LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            times);
 
     private async Task<List<(string? Id, DateTime Start, DateTime? End)>> SuspensionsAsync() =>
         [.. (await _spans.GetStateSpansAsync(category: StateSpanCategory.PumpMode))
