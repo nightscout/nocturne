@@ -25,7 +25,10 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// </remarks>
 public interface INocturneDbContextFactory
 {
-    /// <summary>Creates a context that reads as the scope's reader, including its resolved tenant.</summary>
+    /// <summary>
+    /// Creates a context that reads as the scope's reader, including its resolved tenant. While the scope's
+    /// <see cref="ScopeConnection"/> is held, the context runs on that connection.
+    /// </summary>
     ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default);
 
     /// <summary>Creates a context pinned to <paramref name="tenantId"/> in place of the scope's tenant.</summary>
@@ -92,10 +95,18 @@ internal sealed class NocturneDbContextFactory(
         ? TenantReadContext.FailClosed
         : services.GetRequiredService<TenantReadContext>();
 
+    private readonly ScopeConnection? _held = ReferenceEquals(services, root.Root)
+        ? null
+        : services.GetRequiredService<ScopeConnection>();
+
     private readonly TimeProvider _clock = services.GetRequiredService<TimeProvider>();
 
-    public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
-        ValueTask.FromResult(Create());
+    public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
+    {
+        var context = Create();
+        _held?.Attach(context);
+        return ValueTask.FromResult(context);
+    }
 
     public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default)
     {

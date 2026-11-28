@@ -41,9 +41,9 @@ public partial class TenantOverviewService : ITenantOverviewService
     private const int PersonEntryLimit = 10;
 
     /// <summary>
-    /// The most people one overview read reads at once. Each holds one pool connection at a time, so one read holds at
-    /// most this many of the pool's connections (100 by default): a dozen viewers reading at once still leave room for
-    /// every other request.
+    /// The most people one overview read reads at once. Each holds one pool connection for their read
+    /// (<see cref="ReadPersonAsync"/>), so one read holds at most this many of the pool's connections (100 by default): a
+    /// dozen viewers reading at once still leave room for every other request.
     /// </summary>
     private const int PeopleReadAtOnce = 8;
 
@@ -542,9 +542,14 @@ public partial class TenantOverviewService : ITenantOverviewService
         PumpSnapshot? Pump,
         TenantOverviewThresholds Thresholds);
 
-    /// <summary>The person's reads in <paramref name="services"/>, the scope opened for them. Judges nothing.</summary>
+    /// <summary>
+    /// The person's reads in <paramref name="services"/>, the scope opened for them, all on one connection the scope holds
+    /// until they are done (<see cref="ScopeConnection"/>), which is back in the pool before the person waits to be
+    /// judged. Judges nothing.
+    /// </summary>
     private async Task<PersonReads> ReadPersonAsync(IServiceProvider services, ItemAccess access, CancellationToken ct)
     {
+        await using var held = await services.GetRequiredService<ScopeConnection>().HoldConnectionAsync(ct);
         var nowUtc = _time.GetUtcNow().UtcDateTime;
         var canonical = services.GetRequiredService<ICanonicalGlucoseService>();
         var recent = await canonical.GetRecentAsync(nowUtc - TraceWindow, ct);

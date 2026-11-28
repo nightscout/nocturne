@@ -172,6 +172,7 @@ public class TenantOverviewGroupTests
         var services = new ServiceCollection();
         services.AddScoped<ITenantAccessor>(_ => new SettableTenantAccessor());
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
+        services.AddScoped<ScopeConnection>();
         services.AddScoped<INocturneDbContextFactory>(sp => new ScopeContextFactory(
             _options, () => sp.GetRequiredService<ITenantAccessor>().TenantId));
         services.AddScoped<IAlertRepository>(sp => new AlertRepository(sp.GetRequiredService<INocturneDbContextFactory>()));

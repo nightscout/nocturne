@@ -23,9 +23,15 @@ public static class RlsPinningExtensions
     /// used by unit tests), where there is no Row Level Security and <c>set_config</c> does not
     /// exist.
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// The context runs on a connection it does not own (<see cref="ScopeConnection"/>), whose session other contexts share.
+    /// </exception>
     public static async Task PinTenantAsync(
         this NocturneDbContext context, Guid tenantId, CancellationToken ct = default)
     {
+        if (!context.OwnsConnection)
+            throw new InvalidOperationException("A context on a shared connection cannot pin a tenant to its session.");
+
         context.TenantId = tenantId;
 
         if (!context.Database.IsNpgsql())

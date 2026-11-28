@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -6,6 +7,8 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using static Nocturne.API.Tests.Services.Identity.TenantOverviewTestKit;
 
@@ -103,6 +106,65 @@ public partial class TenantOverviewServiceTests
 
         await read.Should().ThrowAsync<OperationCanceledException>();
         rules.Finished.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// On a relational provider a person's read holds their scope's connection (<see cref="ScopeConnection"/>); by the
+    /// time they are judged the hold is over, so a judge can take it again. SQLite here shares one connection, so one
+    /// person is read.
+    /// </summary>
+    [Fact]
+    public async Task A_persons_connection_hold_is_over_before_they_are_judged()
+    {
+        using var sqlite = TestDbContextFactory.CreateSqlite();
+        var subjectId = Guid.NewGuid();
+        var person = SeedMembership(sqlite.Options, subjectId, "held-person", [Scope.GlucoseRead]);
+        var rules = new HoldProbingRules();
+
+        var response = await NewService(sqlite.Options, clock: CrowdClock, flagRules: rules)
+            .GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All, PeopleQuery.Empty);
+
+        response.Tenants.Should().ContainSingle().Which.TenantId.Should().Be(person);
+        rules.HoldFreeWhenJudged.Should().Equal([true], "the read releases its hold before the person waits to be judged");
+    }
+
+    /// <summary>A run that takes each person's connection hold again while judging them, and records whether it could.</summary>
+    private sealed class HoldProbingRules : IViewerFlagRules
+    {
+        public List<bool> HoldFreeWhenJudged { get; } = [];
+
+        public Task<IViewerFlagRuleRun?> BeginAsync(
+            Guid subjectId, OverviewRuleSet rules, IReadOnlyList<PeopleFilter> facts, IReadOnlyList<GlucoseReadTenant> people,
+            bool credentialLimitTo24Hours, CancellationToken ct) =>
+            Task.FromResult<IViewerFlagRuleRun?>(new Run(this));
+
+        private sealed class Run(HoldProbingRules owner) : IViewerFlagRuleRun
+        {
+            public int PeopleWithRulesPending => 0;
+
+            public IReadOnlyList<TenantOverviewRuleTeam> Teams => [];
+
+            public async Task<ViewerJudgement> JudgeAsync(
+                GlucoseReadTenant person, IServiceProvider personScope, SensorGlucose? latest,
+                IReadOnlyList<TrackerInstance>? activeTrackers, PumpSnapshot? pump, CancellationToken ct)
+            {
+                try
+                {
+                    await using (await personScope.GetRequiredService<ScopeConnection>().HoldConnectionAsync(ct))
+                        owner.HoldFreeWhenJudged.Add(true);
+                }
+                catch (InvalidOperationException)
+                {
+                    owner.HoldFreeWhenJudged.Add(false);
+                }
+
+                return new ViewerJudgement([], true);
+            }
+
+            public void Finish()
+            {
+            }
+        }
     }
 
     /// <summary>The overview's glucose reads, each slow enough that reads run at once overlap.</summary>

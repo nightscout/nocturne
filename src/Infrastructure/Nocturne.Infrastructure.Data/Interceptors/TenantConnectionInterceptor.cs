@@ -106,16 +106,17 @@ public class TenantConnectionInterceptor : DbConnectionInterceptor
             return;
         }
 
+        var session = ConnectionSession.Of(ctx);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = SessionSql;
-        AddParameter(cmd, "tenant_id", Pin(ctx.TenantId));
-        AddParameter(cmd, "subject_id", Pin(ctx.SubjectId));
+        AddParameter(cmd, "tenant_id", Pin(session.TenantId));
+        AddParameter(cmd, "subject_id", Pin(session.SubjectId));
         AddParameter(cmd, "application_name",
-            ctx.TenantId == Guid.Empty ? applicationName : HistoryHorizon.SessionTag(ctx.TenantId));
-        AddParameter(cmd, "is_share", ctx.IsShareContext ? "true" : "false");
-        AddParameter(cmd, "visible_categories", ctx.VisibleCategories ?? string.Empty);
-        AddParameter(cmd, "share_full_history", ctx.ShareFullHistory ? "true" : "false");
-        AddParameter(cmd, "history_clamped", ctx.HistoryClamped ? "true" : "false");
+            session.TenantId == Guid.Empty ? applicationName : HistoryHorizon.SessionTag(session.TenantId));
+        AddParameter(cmd, "is_share", session.IsShare ? "true" : "false");
+        AddParameter(cmd, "visible_categories", session.VisibleCategories ?? string.Empty);
+        AddParameter(cmd, "share_full_history", session.ShareFullHistory ? "true" : "false");
+        AddParameter(cmd, "history_clamped", session.HistoryClamped ? "true" : "false");
 
         if (async)
         {
