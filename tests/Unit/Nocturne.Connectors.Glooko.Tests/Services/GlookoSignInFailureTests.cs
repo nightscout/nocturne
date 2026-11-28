@@ -36,7 +36,8 @@ public class GlookoSignInFailureTests
         var result = await SyncAgainst(_ => Answer(HttpStatusCode.Unauthorized, "{}"));
 
         result.Success.Should().BeFalse();
-        result.Message.Should().Contain("did not accept this sign-in");
+        result.Message.Should().Contain("did not accept this sign-in")
+            .And.Contain("email, password, and server region");
     }
 
     private static async Task<SyncResult> SyncAgainst(Func<HttpRequestMessage, HttpResponseMessage> answer)

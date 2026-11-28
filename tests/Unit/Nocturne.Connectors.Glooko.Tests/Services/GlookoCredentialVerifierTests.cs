@@ -203,6 +203,75 @@ public class GlookoCredentialVerifierTests
         handler.SignInRequests.Should().Be(0);
     }
 
+    [Fact]
+    public async Task VerifyAsync_GlookoUnavailableEveryTime_SaysTheFailureIsTemporary()
+    {
+        var verifier = BuildVerifier(new ScriptedHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
+
+        var result = await verifier.VerifyAsync(BuildConfigurationJson(), BuildSecrets(), [], CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("usually temporary").And.NotContain("did not accept this sign-in");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task VerifyAsync_GlookoRefusesTheSignIn_NamesTheEmailPasswordAndRegion(HttpStatusCode refusal)
+    {
+        var verifier = BuildVerifier(new ScriptedHandler(_ => new HttpResponseMessage(refusal)));
+
+        var result = await verifier.VerifyAsync(BuildConfigurationJson(), BuildSecrets(), [], CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("did not accept this sign-in")
+            .And.Contain("email, password, and server region")
+            .And.NotContain("usually temporary");
+    }
+
+    [Fact]
+    public async Task VerifyAsync_GlookoCannotBeReached_SaysTheFailureIsTemporary()
+    {
+        var verifier = BuildVerifier(new ScriptedHandler(_ => throw new HttpRequestException("No such host is known")));
+
+        var result = await verifier.VerifyAsync(BuildConfigurationJson(), BuildSecrets(), [], CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("usually temporary").And.NotContain("did not accept this sign-in");
+    }
+
+    [Fact]
+    public async Task VerifyAsync_V3ProfileFetchFailsAfterAGoodSignIn_SaysTheFailureIsTemporary()
+    {
+        var verifier = BuildVerifier(new ScriptedHandler(request => request.Method == HttpMethod.Post
+            ? SignInSuccess("""{"success":true,"two_fa_required":false}""")
+            : new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
+        var configuration = JsonDocument.Parse(
+            $$"""{"email":"{{Email}}","server":"{{GlookoConstants.RegionEU}}","useV3Api":true}""");
+
+        var result = await verifier.VerifyAsync(configuration, BuildSecrets(), [], CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("usually temporary").And.NotContain("did not accept this sign-in");
+    }
+
+    [Fact]
+    public async Task VerifyAsync_ARefusalDoesNotLeakIntoTheNextVerificationOfTheSameProvider()
+    {
+        var answers = new Queue<Func<HttpResponseMessage>>(
+        [
+            () => new HttpResponseMessage(HttpStatusCode.Unauthorized),
+            () => throw new HttpRequestException("No such host is known"),
+        ]);
+        var verifier = BuildVerifier(new ScriptedHandler(_ => answers.Dequeue()()));
+
+        var first = await verifier.VerifyAsync(BuildConfigurationJson(), BuildSecrets(), [], CancellationToken.None);
+        var second = await verifier.VerifyAsync(BuildConfigurationJson(), BuildSecrets(), [], CancellationToken.None);
+
+        first.Message.Should().Contain("did not accept this sign-in");
+        second.Message.Should().Contain("usually temporary").And.NotContain("did not accept this sign-in");
+    }
+
     // ── Test infrastructure ─────────────────────────────────────────────
 
     private sealed record StoredConnector(
@@ -225,7 +294,7 @@ public class GlookoCredentialVerifierTests
     /// must neither read or write a cached session nor require a tenant context.
     /// </summary>
     private static GlookoCredentialVerifier BuildVerifier(
-        SignInHandler handler,
+        HttpMessageHandler handler,
         Mock<IRetryDelayStrategy>? retryDelayStrategy = null,
         GlookoConnectorConfiguration? defaults = null,
         StoredConnector? stored = null,
@@ -259,6 +328,23 @@ public class GlookoCredentialVerifierTests
             new ConnectorRegistration<GlookoConnectorConfiguration>(
                 defaults ?? new GlookoConnectorConfiguration(), "Glooko"),
             configService.Object);
+    }
+
+    private static HttpResponseMessage SignInSuccess(string body)
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
+        response.Headers.Add("Set-Cookie", $"{GlookoConstants.SessionCookieName}=sess; Path=/; HttpOnly");
+        return response;
+    }
+
+    private sealed class ScriptedHandler(Func<HttpRequestMessage, HttpResponseMessage> answer) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(answer(request));
     }
 
     /// <summary>

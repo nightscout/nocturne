@@ -202,18 +202,26 @@ public abstract class AuthTokenProviderBase<TConfig>(
     ///     skip the provider and a cache write would overwrite the tenant's live session.
     /// </summary>
     /// <param name="config">The configuration carrying the credentials to verify.</param>
-    /// <returns>Whether the provider issued a token for the credentials.</returns>
-    public async Task<bool> VerifyCredentialsAsync(TConfig config, CancellationToken cancellationToken = default)
+    /// <returns>
+    ///     Verified, or failed with the reason <see cref="SignInFailureReason"/> gives a sync that
+    ///     failed the same way.
+    /// </returns>
+    public async Task<ConnectorCredentialVerificationResult> VerifyCredentialsAsync(
+        TConfig config, CancellationToken cancellationToken = default)
     {
+        _signInFailure = null;
         try
         {
             var result = await AcquireTokenAsync(config, cancellationToken);
-            return !string.IsNullOrEmpty(result.Token);
+            if (!string.IsNullOrEmpty(result.Token))
+                return ConnectorCredentialVerificationResult.Verified();
+
+            return ConnectorCredentialVerificationResult.Failed(SignInFailureReason);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || ConnectorFaults.IsTimeout(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Credential verification failed for {ProviderName}", GetType().Name);
-            return false;
+            return ConnectorCredentialVerificationResult.Failed(SignInFailureReason);
         }
     }
 
@@ -258,6 +266,12 @@ public abstract class AuthTokenProviderBase<TConfig>(
         ?? ConnectorName;
 
     /// <summary>
+    ///     The settings a refused sign-in depends on, as the refused message tells the tenant to check
+    ///     them. A provider whose sign-in depends on more than the username and password names them.
+    /// </summary>
+    protected virtual string SignInSettings => "the username and password";
+
+    /// <summary>
     ///     What the tenant is told when a login gets no token. Deliberately carries no status code
     ///     and none of the source's own error text: the reader is managing their own diabetes data,
     ///     and the sign-in details they entered are the only part they could act on — so only a
@@ -266,7 +280,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
     private string SignInFailureMessage(SignInFailure failure) => failure switch
     {
         SignInFailure.CredentialsRefused =>
-            $"{ConnectorDisplayName} did not accept this sign-in. Check the username and password in "
+            $"{ConnectorDisplayName} did not accept this sign-in. Check {SignInSettings} in "
             + $"the connector settings and save them again. If they are correct, the account may need "
             + $"attention on {ConnectorDisplayName}'s own site.",
         _ =>
