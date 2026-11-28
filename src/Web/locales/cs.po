@@ -15992,9 +15992,8 @@ msgstr "Obnoví se za {0} h {1} min"
 msgid "Resets in {0}m"
 msgstr "Obnoví se za {0} min"
 
-#: src/lib/components/layout/DemoBanner.svelte
-msgid "Demo instance with synthetic data"
-msgstr "Demo instance se syntetickými daty"
+#~ msgid "Demo instance with synthetic data"
+#~ msgstr "Demo instance se syntetickými daty"
 
 #. 0: hours; 1: minutes
 #: src/lib/components/layout/GuestBanner.svelte
@@ -19334,9 +19333,8 @@ msgstr "Živé demo"
 msgid "A full Nocturne instance you can explore and change: add treatments, edit settings, browse reports. It runs on made-up data, not anyone's real readings, and it resets on a schedule, so you can click anything."
 msgstr "Plnohodnotná instance Nocturne, kterou můžete libovolně prozkoumat a upravovat: přidávat léčbu, měnit nastavení a procházet reporty. Používá pouze syntetická data a pravidelně se obnovuje, takže můžete cokoli vyzkoušet."
 
-#: ../portal/src/routes/demo/+page.svelte
-msgid "Open the demo <0/>"
-msgstr "Otevřít demo <0/>"
+#~ msgid "Open the demo <0/>"
+#~ msgstr "Otevřít demo <0/>"
 
 #: ../portal/src/routes/demo/+page.svelte
 msgid "Everyone shares the same demo instance, so you may see changes other visitors have made."
@@ -53319,4 +53317,48 @@ msgstr ""
 #. 0: formatAge(-hours)
 #: src/lib/components/trackers/age.svelte.ts
 msgid "{0} late"
+msgstr ""
+
+#: ../portal/src/routes/demo/+page.svelte
+msgid "Try it as a person"
+msgstr ""
+
+#: ../portal/src/routes/demo/+page.svelte
+msgid "See the dashboard of one person with diabetes: glucose, treatments, reports and settings."
+msgstr ""
+
+#: ../portal/src/routes/demo/+page.svelte
+msgid "Try it as a clinic"
+msgstr ""
+
+#: ../portal/src/routes/demo/+page.svelte
+msgid "See the People page of a clinic that follows eleven people, with the ones that need attention flagged."
+msgstr ""
+
+#: src/lib/components/layout/DemoBanner.svelte
+msgid "See it as a person"
+msgstr ""
+
+#: src/lib/components/layout/DemoBanner.svelte
+msgid "See it as a clinic"
+msgstr ""
+
+#: src/lib/components/layout/DemoBanner.svelte
+msgid "Demo, Demotown Diabetes Clinic, synthetic data"
+msgstr ""
+
+#: src/lib/components/layout/DemoBanner.svelte
+msgid "Demo, synthetic data"
+msgstr ""
+
+#: src/lib/components/people/PeoplePage.svelte
+msgid "You cannot save views in the demo."
+msgstr ""
+
+#: src/routes/(authenticated)/people/rules/+page.svelte
+msgid "You cannot change flag rules in the demo."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/teams/[teamId]/+page.svelte
+msgid "You cannot leave a team in the demo."
 msgstr ""
