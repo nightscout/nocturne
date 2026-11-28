@@ -213,7 +213,7 @@ public class DemoAdminController : ControllerBase
     /// trackers, alert rules with alarm history and notifications, foods,
     /// state spans, patient record, body weight, timezone timeline, clock
     /// face, and a DND example. Called by the demo background service after
-    /// each reset. Idempotent — every type upserts or rebuilds rather than
+    /// each reset that succeeded. Idempotent — every type upserts or rebuilds rather than
     /// duplicates, except entries/treatments which append (the demo resets
     /// before seeding). Per-user types are owned by the demo tenant's Public
     /// subject, which anonymous visitors browse as. With <see cref="DemoSeedExtrasDto.Person"/>,

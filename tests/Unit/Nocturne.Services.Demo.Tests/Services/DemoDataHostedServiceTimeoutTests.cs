@@ -21,6 +21,7 @@ public class DemoDataHostedServiceTimeoutTests
 
     private const string Entry = "POST /api/v4/glucose/sensor/bulk";
     private const string Reset = "POST /api/v4/admin/demo/reset";
+    private const string Seed = "POST /api/v4/admin/demo/seed-extras";
     private const string StatusUpdate = "PATCH /api/v4/admin/demo/status";
     private const string PersonSeed = "POST /api/v4/admin/demo/seed-extras (person)";
 
@@ -96,7 +97,53 @@ public class DemoDataHostedServiceTimeoutTests
         await run.AdvanceUntilAsync("a tick from the loop", () => api.CountOf(Entry) >= 2);
 
         run.Service.State.Should().Be(DemoServiceState.Running);
-        run.Logger.Errors.Should().ContainSingle().Which.Should().Be("Failed to post the first demo entry");
+        run.Logger.Errors.Should().ContainSingle().Which.Should().Be("Error generating demo data");
+    }
+
+    [Fact]
+    public async Task A_first_reading_that_fails_for_another_reason_is_logged_and_the_loop_posts_the_next()
+    {
+        var api = new TimeoutApi(Now) { FaultOn = (call, nth) => call == Entry && nth == 1 };
+
+        await using var run = await RunAsync(api, new DemoModeConfiguration());
+        await run.AdvanceUntilAsync("a tick from the loop", () => api.CountOf(Entry) >= 2);
+
+        run.Service.State.Should().Be(DemoServiceState.Running);
+        run.Logger.Entries.Should().Contain(e =>
+            e.Level == LogLevel.Error && e.Exception is InvalidOperationException && e.Message == "Error generating demo data");
+    }
+
+    [Fact]
+    public async Task A_regeneration_whose_reset_fails_seeds_nothing_and_resets_again_an_interval_later()
+    {
+        var api = new TimeoutApi(Now) { RefuseOn = (call, nth) => call == Reset && nth == 1 };
+        var config = new DemoModeConfiguration { ClearOnStartup = true };
+
+        await using var run = await RunAsync(api, config);
+        api.CountOf(Seed).Should().Be(0, "a seed over data the reset did not delete would duplicate it");
+
+        await run.AdvanceUntilAsync("the reset after the failed one", () => api.CountOf(Reset) >= 2);
+        api.CalledAt(Reset)[1].Should().BeOnOrAfter(api.CalledAt(Reset)[0].AddMinutes(config.IntervalMinutes));
+        await run.AdvanceUntilAsync("the seed after the good reset", () => api.CountOf(Seed) >= 1);
+
+        var ticks = api.CountOf(Entry);
+        await run.AdvanceUntilAsync("ticks long after the good reset", () => api.CountOf(Entry) >= ticks + 5);
+        api.CountOf(Reset).Should().Be(2, "with periodic resets off, a good reset is not followed by another");
+        api.CountOf(Seed).Should().Be(1);
+        run.Logger.Warnings.Should().Contain(w => w.StartsWith("Failed to reset the demo tenant", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_seed_that_fails_after_a_good_reset_is_not_retried_by_a_second_reset()
+    {
+        var api = new TimeoutApi(Now) { RefuseOn = (call, nth) => call == Seed && nth == 1 };
+
+        await using var run = await RunAsync(api, new DemoModeConfiguration { ClearOnStartup = true });
+        var ticks = api.CountOf(Entry);
+        await run.AdvanceUntilAsync("ticks past several intervals", () => api.CountOf(Entry) >= ticks + 5);
+
+        api.CountOf(Reset).Should().Be(1, "a second reset would wipe the readings taken since");
+        api.CountOf(Seed).Should().Be(1);
     }
 
     [Fact]
@@ -229,6 +276,9 @@ public class DemoDataHostedServiceTimeoutTests
 
         public Func<string, int, bool> TimeOutOn { get; set; } = (_, _) => false;
 
+        /// <summary>Fails a call as a defect of the service itself does, with no HTTP failure behind it.</summary>
+        public Func<string, int, bool> FaultOn { get; set; } = (_, _) => false;
+
         public Func<string, int, bool> BlockOn { get; set; } = (_, _) => false;
 
         /// <summary>How long a reset takes on the clock, so the next reading is due when it returns.</summary>
@@ -270,6 +320,8 @@ public class DemoDataHostedServiceTimeoutTests
                 throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.");
             if (RefuseOn(call, nth))
                 throw new HttpRequestException("Connection refused");
+            if (FaultOn(call, nth))
+                throw new InvalidOperationException("The reading could not be serialised");
             if (BlockOn(call, nth))
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
 
