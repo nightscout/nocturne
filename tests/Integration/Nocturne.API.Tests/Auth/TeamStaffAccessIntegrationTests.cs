@@ -457,6 +457,28 @@ public class TeamStaffAccessIntegrationTests(ApiIntegrationTestFixture fixture, 
         await SubscribedHubAsync(staffSession);
     }
 
+    [Fact]
+    public async Task A_staff_member_reads_their_groups_at_the_apex_without_belonging_to_the_site()
+    {
+        var (manager, _) = await SeedSubjectAsync("Tabbing Manager");
+        var staff = await SeedBareSubjectAsync("Tabbing Nurse");
+        using var managerClient = await SessionAtApexAsync(manager);
+        using var staffAtApex = await SessionAtApexAsync(staff);
+        var teamId = await TeamWithStaffAsync(managerClient, staff);
+        var created = await managerClient.PostAsJsonAsync($"/api/v4/me/teams/{teamId}/groups", new { name = "Ward" });
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+        var groupId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        (await managerClient.PostAsync($"/api/v4/me/teams/{teamId}/groups/{groupId}/staff/{staff}", null))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var response = await staffAtApex.GetAsync("/api/v4/me/tenants/overview/groups");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var groups = (await response.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray().Should().ContainSingle().Subject;
+        groups.GetProperty("id").GetGuid().Should().Be(groupId);
+        groups.GetProperty("name").GetString().Should().Be("Ward");
+    }
+
     private async Task SetGrantAsync(Guid subject, bool limitTo24Hours, string[] scopes)
     {
         await using var conn = await OpenPostgresAsync();

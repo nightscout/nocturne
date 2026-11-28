@@ -77,6 +77,7 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
     [InlineData("/api/v4/me/tenants", "GET")]
     [InlineData("/api/v4/me/tenants/overview", "POST")]
     [InlineData("/api/v4/me/tenants/overview/review", "POST")]
+    [InlineData("/api/v4/me/tenants/overview/groups", "GET")]
     [InlineData("/api/v4/me/tenants/overview/person", "GET")]
     [InlineData("/api/v4/me/overview-admission", "GET")]
     [InlineData("/api/v4/me/teams", "GET")]
