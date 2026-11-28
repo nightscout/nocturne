@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Cookies } from "@sveltejs/kit";
 import { getUnscopedApi, getScopedApiFactory, type BotApiClient } from "@nocturne/bot";
 
 const unscoped = { name: "unscoped" } as unknown as BotApiClient;
@@ -25,15 +24,11 @@ vi.mock("./api-client.js", () => ({
   buildUnscopedBotApiClient: vi.fn(() => unscoped),
   buildScopedBotApiClient: vi.fn(() => scoped),
 }));
-vi.mock("#lib/server/request-host.js", () => ({
-  getEffectiveHost: () => "nocturne.test",
-  getOriginalProto: () => "https",
-}));
 
 const { handleBotWebhook } = await import("./webhook");
-const { buildScopedBotApiClient } = await import("./api-client.js");
+const { buildScopedBotApiClient, buildUnscopedBotApiClient } = await import("./api-client.js");
 
-const event = (request: Request) => ({ request, cookies: {} as Cookies, fetch });
+const event = (request: Request) => ({ request, fetch });
 
 describe("handleBotWebhook", () => {
   beforeEach(() => {
@@ -51,6 +46,23 @@ describe("handleBotWebhook", () => {
 
     expect(seen).toEqual({ unscoped, scoped });
     expect(buildScopedBotApiClient).toHaveBeenCalledWith(fetch, "family");
+  });
+
+  it("forwards the request's own host, whatever setup-tenant cookie it carries", async () => {
+    webhooks.whatsapp = async () => new Response("ok");
+    const request = new Request("http://web.internal/api/v4/webhooks/whatsapp", {
+      method: "POST",
+      headers: { "x-forwarded-host": "nocturne.test", "x-forwarded-proto": "https", cookie: "nocturne-setup-tenant=family" },
+    });
+
+    // The route hands over the whole SvelteKit event, cookies included.
+    const routeEvent = { ...event(request), cookies: { get: (name: string) => (name === "nocturne-setup-tenant" ? "family" : undefined) } };
+    await handleBotWebhook("whatsapp", routeEvent);
+
+    expect(buildUnscopedBotApiClient).toHaveBeenLastCalledWith(fetch, {
+      "X-Forwarded-Proto": "https",
+      "X-Forwarded-Host": "nocturne.test",
+    });
   });
 
   it("hands a GET to the adapter unchanged, so Meta's verification reaches it", async () => {

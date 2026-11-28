@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCrossSiteFormRequest, isProxiedApiPath } from "./csrf.js";
+import { isCrossSiteFormRequest, isProxiedApiPath, isSignedWebhookPath, isWebAppApiPath } from "./csrf.js";
 
 const SELF = "https://tenant.example";
 
@@ -27,10 +27,26 @@ describe("isCrossSiteFormRequest", () => {
     expect(isCrossSiteFormRequest(...req("POST", "/api/v1/entries", { "content-type": "application/json" }))).toBe(false);
   });
 
-  it("refuses a bodyless cross-site DELETE outside the proxy", () => {
-    expect(isCrossSiteFormRequest(...req("DELETE", "/auth/logout"))).toBe(true);
-    expect(isCrossSiteFormRequest(...req("DELETE", "/api/v4/webhooks/telegram"))).toBe(true);
+  it.each(["/auth/logout", "/api/v4/bot/dispatch"])("refuses a bodyless cross-site DELETE outside the proxy to %s", (path) => {
+    expect(isCrossSiteFormRequest(...req("DELETE", path))).toBe(true);
   });
+
+  it("passes a cross-site form POST with no Origin to a webhook", () => {
+    expect(
+      isCrossSiteFormRequest(...req("POST", "/api/v4/webhooks/slack", { "content-type": "application/x-www-form-urlencoded" })),
+    ).toBe(false);
+  });
+
+  it.each(["POST", "DELETE"])("passes a bodyless cross-site %s to a webhook, which the route itself refuses", (method) => {
+    expect(isCrossSiteFormRequest(...req(method, "/api/v4/webhooks/telegram"))).toBe(false);
+  });
+
+  it.each(["/settings", "/api/v4/bot/dispatch", "/api/v4/webhooksx", "/api/v4/webhooksx/slack"])(
+    "refuses a cross-site form POST with no Origin to %s",
+    (path) => {
+      expect(isCrossSiteFormRequest(...req("POST", path, { "content-type": "application/x-www-form-urlencoded" }))).toBe(true);
+    },
+  );
 
   it("refuses a cross-site form POST to a page", () => {
     expect(isCrossSiteFormRequest(...req("POST", "/auth/logout", { "content-type": "application/x-www-form-urlencoded" }))).toBe(true);
@@ -51,10 +67,43 @@ describe("isProxiedApiPath", () => {
   it.each([
     ["/api/v3/treatments", true],
     ["/api/v4/webhooks/slack", false],
+    ["/api/v4/webhooksx", true],
     ["/api/v4/bot/dispatch", false],
+    ["/api/v4/botx", true],
     ["/api/otel/errors", false],
+    ["/api/otelx", true],
     ["/dashboard", false],
   ])("%s -> %s", (path, expected) => {
     expect(isProxiedApiPath(path)).toBe(expected);
+  });
+});
+
+describe("isWebAppApiPath", () => {
+  it.each([
+    ["/api/v4/webhooks/slack", true],
+    ["/api/v4/bot/dispatch", true],
+    ["/api/otel/errors", true],
+    ["/api/v4/bot", true],
+    ["/api/v4/webhooksx", false],
+    ["/api/v4/botx", false],
+    ["/api/otelx", false],
+    ["/api/v3/treatments", false],
+    ["/settings", false],
+  ])("%s -> %s", (path, expected) => {
+    expect(isWebAppApiPath(path)).toBe(expected);
+  });
+});
+
+describe("isSignedWebhookPath", () => {
+  it.each([
+    ["/api/v4/webhooks/slack", true],
+    ["/api/v4/webhooks", true],
+    ["/api/v4/webhooksx", false],
+    ["/api/v4/webhooksx/slack", false],
+    ["/api/v4/bot/dispatch", false],
+    ["/api/otel/errors", false],
+    ["/settings", false],
+  ])("%s -> %s", (path, expected) => {
+    expect(isSignedWebhookPath(path)).toBe(expected);
   });
 });

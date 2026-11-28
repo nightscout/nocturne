@@ -1,5 +1,5 @@
 import { isInternalOnlyApiPath } from "#lib/server/internal-only-api-paths.js";
-import { isCrossSiteFormRequest, isProxiedApiPath } from "#lib/server/csrf.js";
+import { isCrossSiteFormRequest, isProxiedApiPath, isWebAppApiPath } from "#lib/server/csrf.js";
 import { randomUUID } from "#lib/utils/index.js";
 import { isRecord, nonEmptyString } from "#lib/utils/type-guards.js";
 import { applySecurityHeaders, parseFrameAncestors } from "#lib/server/security-headers.js";
@@ -213,7 +213,7 @@ function cacheReadyStatus(host: string | null, body: App.TenantStatus): void {
  * cannot follow HTML redirects and will treat any non-2xx as a hard failure.
  */
 function skipsStatusProbe(pathname: string): boolean {
-  return STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) || pathname.startsWith(SHARE_UNAVAILABLE_PATH) || pathname.startsWith(TENANT_INACTIVE_PATH) || pathname.startsWith("/setup") || pathname.startsWith("/auth") || pathname.startsWith("/api/v4/webhooks") || pathname.startsWith("/api/v4/bot") || pathname.startsWith("/api/otel");
+  return STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) || pathname.startsWith(SHARE_UNAVAILABLE_PATH) || pathname.startsWith(TENANT_INACTIVE_PATH) || pathname.startsWith("/setup") || pathname.startsWith("/auth") || isWebAppApiPath(pathname);
 }
 
 /**

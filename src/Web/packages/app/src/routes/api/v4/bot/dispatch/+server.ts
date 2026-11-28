@@ -6,8 +6,8 @@ import { parseAlertDispatchEvent } from "@nocturne/bot/parse-dispatch";
 
 export const POST: RequestHandler = async ({ request, fetch }) => {
 	// This is a public HTTP endpoint: the gateway routes /api/** here and
-	// hooks.server.ts exempts /api/v4/bot from the site-security handle and the
-	// credential-scoping proxy. Dispatching posts an alert to a chat platform and
+	// hooks.server.ts keeps /api/v4/bot out of the credential-scoping proxy and the
+	// status probe (isWebAppApiPath). Dispatching posts an alert to a chat platform and
 	// writes delivery state with instance-key (admin) privilege, so the caller
 	// must present the instance key before anything else happens.
 	if (!isTrustedInstanceRequest(request)) {
