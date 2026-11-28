@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
+using Nocturne.API.Reports;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -146,7 +147,7 @@ public partial class TenantOverviewServiceTests
 
             public async Task<ViewerJudgement> JudgeAsync(
                 GlucoseReadTenant person, IServiceProvider personScope, SensorGlucose? latest,
-                IReadOnlyList<TrackerInstance>? activeTrackers, PumpSnapshot? pump, CancellationToken ct)
+                IReadOnlyList<TrackerInstance>? activeTrackers, PumpSnapshot? pump, OnBoardFigures? onBoard, CancellationToken ct)
             {
                 try
                 {
@@ -232,7 +233,7 @@ public partial class TenantOverviewServiceTests
 
             public async Task<ViewerJudgement> JudgeAsync(
                 GlucoseReadTenant person, IServiceProvider personScope, SensorGlucose? latest,
-                IReadOnlyList<TrackerInstance>? activeTrackers, PumpSnapshot? pump, CancellationToken ct)
+                IReadOnlyList<TrackerInstance>? activeTrackers, PumpSnapshot? pump, OnBoardFigures? onBoard, CancellationToken ct)
             {
                 var judging = Interlocked.Increment(ref owner._judging);
                 owner.MostJudgingAtOnce = Math.Max(owner.MostJudgingAtOnce, judging);

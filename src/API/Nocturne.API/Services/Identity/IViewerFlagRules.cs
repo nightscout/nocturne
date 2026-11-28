@@ -1,3 +1,4 @@
+using Nocturne.API.Reports;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Identity;
@@ -48,8 +49,9 @@ public interface IViewerFlagRuleRun
     /// What the rules and the filters give for <paramref name="person"/>, judged by one judging, so a rule and a filter
     /// on one fact share its read. A personal rule's reason is left out where a team's rule with the same fact, days,
     /// comparison and value gave one. It never waits on a read. <paramref name="personScope"/> is the overview's scope
-    /// for the person, and <paramref name="latest"/>, <paramref name="activeTrackers"/> and <paramref name="pump"/> what
-    /// it already read there (trackers and pump null where the caller may not read them).
+    /// for the person, and <paramref name="latest"/>, <paramref name="activeTrackers"/>, <paramref name="pump"/> and
+    /// <paramref name="onBoard"/> what it already read there (trackers, pump and on board figures null where the caller
+    /// may not read them).
     /// </summary>
     Task<ViewerJudgement> JudgeAsync(
         GlucoseReadTenant person,
@@ -57,6 +59,7 @@ public interface IViewerFlagRuleRun
         SensorGlucose? latest,
         IReadOnlyList<TrackerInstance>? activeTrackers,
         PumpSnapshot? pump,
+        OnBoardFigures? onBoard,
         CancellationToken ct);
 
     /// <summary>Starts the reads left to the background. Called once, after the last person.</summary>

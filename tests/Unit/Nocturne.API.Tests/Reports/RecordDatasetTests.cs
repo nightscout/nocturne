@@ -977,7 +977,7 @@ public class RecordDatasetTests
     }
 
     [Fact]
-    public async Task Current_status_leaves_the_trackers_out_without_alerts_read_and_has_no_value_without_a_reading()
+    public async Task Current_status_leaves_the_trackers_and_on_board_figures_out_without_their_scopes_and_has_no_value_without_a_reading()
     {
         var harness = new Harness();
         var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead);
@@ -988,8 +988,8 @@ public class RecordDatasetTests
 
         var row = panel.Rows.Single();
         row["hoursSinceReading"].Should().BeNull();
-        row.Should().NotContainKey("sensorHoursLeft").And.NotContainKey("siteHoursLeft");
-        panel.Omitted.Select(o => o.Field).Should().Equal("sensorHoursLeft", "siteHoursLeft");
+        row.Should().NotContainKeys("sensorHoursLeft", "siteHoursLeft", "insulinOnBoard", "carbsOnBoard");
+        panel.Omitted.Select(o => o.Field).Should().Equal("sensorHoursLeft", "siteHoursLeft", "insulinOnBoard", "carbsOnBoard");
         harness.Trackers.Verify(t => t.GetActiveInstancesAsync(It.IsAny<CancellationToken>()), Times.Never);
         readLog.Datasets.Should().BeEmpty();
     }

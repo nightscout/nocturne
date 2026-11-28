@@ -353,7 +353,7 @@ public partial class FlagFactEvaluatorTests
                 ? null
                 : await scope.ServiceProvider.GetRequiredService<ICanonicalGlucoseService>().GetLatestAsync(CancellationToken.None);
             var pump = await Harness.NewestPumpAsync(person, scope.ServiceProvider, CancellationToken.None);
-            reasons.Add((await run!.JudgeAsync(person, scope.ServiceProvider, latest, [], pump, CancellationToken.None)).Reasons);
+            reasons.Add((await run!.JudgeAsync(person, scope.ServiceProvider, latest, [], pump, null, CancellationToken.None)).Reasons);
         }
         run!.Finish();
         return (reasons, run.PeopleWithRulesPending, run.Teams);

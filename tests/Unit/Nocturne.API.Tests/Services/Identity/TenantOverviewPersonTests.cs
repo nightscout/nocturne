@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.API.Reports;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Alerts;
@@ -127,6 +128,59 @@ public class TenantOverviewPersonTests
         person.Person.Attention.Should().ContainSingle(a => a.Kind == TenantOverviewAttentionKind.FlagRule)
             .Which.Should().Be(harness.Rules.Reasons[tenantId][0], "the panel states the rule reason the roster flags the person by");
         harness.Rules.FinishedAfter.Should().NotBeNull("the person read starts the background reads it found missing");
+    }
+
+    [Fact]
+    public async Task The_rules_are_judged_on_the_one_on_board_read_the_person_shows()
+    {
+        var subjectId = Guid.NewGuid();
+        var options = NewOptions();
+        var tenantId = SeedMembership(options, subjectId, "family", TreatmentReader);
+        var harness = new Harness(options)
+        {
+            OnBoard = new IobCobReading(
+                new IobResult { Iob = 1.2349, ReportedByDevice = true },
+                new CobResult { Cob = 12.5, ReportedByDevice = true },
+                new IobCobInputs([], [], [])),
+        };
+
+        var person = await harness.Service.GetPersonAsync(
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+
+        person!.Person.Therapy.Should().Be(new TenantOverviewTherapy(1.23, true, 12, true));
+        harness.Rules.Judged.Should().ContainSingle().Which.OnBoard.Should().Be(new OnBoardFigures(1.23, 12));
+        harness.OnBoardReads.Should().Be(1, "judging reads nothing again");
+    }
+
+    [Fact]
+    public async Task A_total_with_nothing_behind_it_is_passed_to_the_rules_as_not_known()
+    {
+        var subjectId = Guid.NewGuid();
+        var options = NewOptions();
+        var tenantId = SeedMembership(options, subjectId, "family", TreatmentReader);
+        var harness = new Harness(options);
+
+        var person = await harness.Service.GetPersonAsync(
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+
+        person!.Person.Therapy.Should().Be(new TenantOverviewTherapy(0, false, 0, false));
+        harness.Rules.Judged.Should().ContainSingle().Which.OnBoard.Should().Be(new OnBoardFigures(null, null));
+    }
+
+    [Fact]
+    public async Task A_caller_without_treatments_read_gets_no_on_board_read_and_the_rules_get_none()
+    {
+        var subjectId = Guid.NewGuid();
+        var options = NewOptions();
+        var tenantId = SeedMembership(options, subjectId, "family", Reader);
+        var harness = new Harness(options);
+
+        var person = await harness.Service.GetPersonAsync(
+            subjectId, tenantId, FullTokenScopes, AuthType.SessionCookie, OverviewRuleSet.All);
+
+        person!.Person.Therapy.Should().BeNull();
+        harness.Rules.Judged.Should().ContainSingle().Which.OnBoard.Should().BeNull();
+        harness.OnBoardReads.Should().Be(0);
     }
 
     [Fact]
@@ -423,6 +477,14 @@ public class TenantOverviewPersonTests
         public IEnumerable<(string Kind, bool Clamped)> ClampsOf(Guid tenantId) =>
             Clamps.Where(c => c.Tenant == tenantId).Select(c => (c.Kind, c.Clamped));
         public Guid? Failing { get; init; }
+
+        /// <summary>What the reader totals for every person.</summary>
+        public IobCobReading OnBoard { get; set; } =
+            new(new IobResult(), new CobResult(), new IobCobInputs([], [], [])) { InsulinInWindow = false };
+
+        private int _onBoardReads;
+
+        public int OnBoardReads => _onBoardReads;
         public ScriptedRules Rules { get; } = new();
         public TenantOverviewService Service { get; }
 
@@ -513,8 +575,8 @@ public class TenantOverviewPersonTests
             });
             var iobCob = new Mock<IIobCobReader>();
             iobCob.Setup(r => r.ReadTotalAsync(It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new IobCobReading(
-                    new IobResult(), new CobResult(), new IobCobInputs([], [], [])) { InsulinInWindow = false });
+                .Callback(() => Interlocked.Increment(ref _onBoardReads))
+                .ReturnsAsync(() => OnBoard);
             services.AddScoped(_ => iobCob.Object);
             var pumps = new Mock<IPumpSnapshotRepository>();
             pumps.Setup(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))

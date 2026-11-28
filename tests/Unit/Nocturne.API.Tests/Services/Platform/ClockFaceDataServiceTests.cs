@@ -67,6 +67,20 @@ public class ClockFaceDataServiceTests
     }
 
     [Fact]
+    public async Task OnBoardFigures_AreRoundedAsTheOverviewRoundsThemAndAnUnknownOneIsLeftOut()
+    {
+        _iobCob.Setup(r => r.ReadTotalAsync(It.IsAny<long>(), true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobCobReading(
+                new IobResult { Iob = 1.2349, ReportedByDevice = true }, new CobResult(), new IobCobInputs([], [], [])));
+
+        var data = await Service().ReadAsync(
+            Face(new ClockElement { Type = "iob" }, new ClockElement { Type = "cob" }), AllScopes, CancellationToken.None);
+
+        data.Iob.Should().Be(1.23);
+        data.Cob.Should().BeNull();
+    }
+
+    [Fact]
     public async Task ASummary_ReadsTimeInRangeOverTheHoursItNames()
     {
         _glucose.Setup(g => g.GetAsync(

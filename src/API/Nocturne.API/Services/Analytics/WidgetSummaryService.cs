@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.API.Reports;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -211,10 +212,11 @@ public class WidgetSummaryService : IWidgetSummaryService
             var now = _time.GetUtcNow().ToUnixTimeMilliseconds();
 
             var reading = await _iobCobReader.ReadTotalAsync(now, live: true, cancellationToken);
-            response.IobKnown = reading.HasIob;
-            response.Iob = reading.HasIob ? OnBoardRounding.Iob(reading.Iob.Iob) : 0;
-            response.CobKnown = reading.HasCob;
-            response.Cob = reading.HasCob ? OnBoardRounding.Cob(reading.Cob!.Cob) : 0;
+            var onBoard = OnBoardFigures.Of(reading);
+            response.IobKnown = onBoard.Insulin is not null;
+            response.Iob = onBoard.Insulin ?? 0;
+            response.CobKnown = onBoard.Carbs is not null;
+            response.Cob = onBoard.Carbs ?? 0;
         }
         catch (Exception ex)
         {

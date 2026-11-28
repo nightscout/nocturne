@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Reports;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Glucose;
@@ -538,6 +539,7 @@ public partial class TenantOverviewService : ITenantOverviewService
         List<V4TrackerStatus>? Trackers,
         IReadOnlyList<TrackerInstance>? ActiveTrackers,
         TenantOverviewTherapy? Therapy,
+        OnBoardFigures? OnBoard,
         TenantOverviewDevices? Devices,
         PumpSnapshot? Pump,
         TenantOverviewThresholds Thresholds);
@@ -584,15 +586,13 @@ public partial class TenantOverviewService : ITenantOverviewService
         }
 
         TenantOverviewTherapy? therapy = null;
+        OnBoardFigures? onBoard = null;
         if (access.Therapy)
         {
-            var onBoard = await services.GetRequiredService<IIobCobReader>()
-                .ReadTotalAsync(new DateTimeOffset(nowUtc).ToUnixTimeMilliseconds(), live: true, ct);
+            onBoard = await OnBoardFigures.ReadAsync(
+                services.GetRequiredService<IIobCobReader>(), new DateTimeOffset(nowUtc), ct);
             therapy = new TenantOverviewTherapy(
-                onBoard.HasIob ? OnBoardRounding.Iob(onBoard.Iob.Iob) : 0,
-                onBoard.HasIob,
-                onBoard.HasCob ? OnBoardRounding.Cob(onBoard.Cob!.Cob) : 0,
-                onBoard.HasCob);
+                onBoard.Insulin ?? 0, onBoard.Insulin is not null, onBoard.Carbs ?? 0, onBoard.Carbs is not null);
         }
 
         TenantOverviewDevices? devices = null;
@@ -608,7 +608,8 @@ public partial class TenantOverviewService : ITenantOverviewService
             await services.GetRequiredService<IAlertRepository>().GetEnabledRulesAsync(ct));
 
         return new PersonReads(
-            nowUtc, latest, recent, activeAlertCount, highestSeverity, trackers, activeTrackers, therapy, devices, pump, thresholds);
+            nowUtc, latest, recent, activeAlertCount, highestSeverity, trackers, activeTrackers, therapy, onBoard, devices, pump,
+            thresholds);
     }
 
     /// <summary>
@@ -637,7 +638,8 @@ public partial class TenantOverviewService : ITenantOverviewService
         var matchesFilters = true;
         if (rules is not null)
         {
-            var judged = await rules.JudgeAsync(readable, services, latest, reads.ActiveTrackers, reads.Pump, ct);
+            var judged = await rules.JudgeAsync(
+                readable, services, latest, reads.ActiveTrackers, reads.Pump, reads.OnBoard, ct);
             matchesFilters = judged.MatchesFilters;
             attention = attention
                 .Concat(judged.Reasons)
