@@ -16,6 +16,9 @@ public class ProfileSnapshotServiceTests
     private const long Hour = 3_600_000L;
     private const long Day = 24 * Hour;
 
+    private const double FallbackLow = 70.0;
+    private const double FallbackHigh = 180.0;
+
     private static readonly DateTimeOffset Midnight = new(2024, 1, 15, 0, 0, 0, TimeSpan.Zero);
 
     private readonly Mock<ITherapyTimelineResolver> _timeline = new();
@@ -30,10 +33,7 @@ public class ProfileSnapshotServiceTests
     public ProfileSnapshotServiceTests()
     {
         _therapySettings.Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        _targetRange.Setup(r => r.GetLowBGTargetAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(100.0);
-        _targetRange.Setup(r => r.GetHighBGTargetAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(120.0);
+        GivenStoredTargets(_ => (100.0, 120.0));
         _insulins.Setup(r => r.GetPrimaryBolusInsulinAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PatientInsulin { Peak = 60, Curve = "ultra-rapid", Dia = 5.0 });
 
@@ -60,6 +60,10 @@ public class ProfileSnapshotServiceTests
             sens ?? new[] { Entry(0, 50.0) },
             carb ?? new[] { Entry(0, 10.0) },
             basal ?? new[] { Entry(0, 1.0) });
+
+    private void GivenStoredTargets(Func<long, (double Low, double High)?> targetsAt) =>
+        _targetRange.Setup(r => r.FindBGTargetRangeAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long t, string? _, CancellationToken _) => targetsAt(t));
 
     private void GivenTimeline(params TherapySegment[] segments) =>
         _timeline.Setup(r => r.BuildAsync(_now, _now + Day, null, It.IsAny<CancellationToken>()))
@@ -144,8 +148,7 @@ public class ProfileSnapshotServiceTests
                 new TherapySegment(_now, split, Snapshot()),
                 new TherapySegment(split, _now + Day, Snapshot()),
             }));
-        _targetRange.Setup(r => r.GetLowBGTargetAsync(It.Is<long>(t => t >= split), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(110.0);
+        GivenStoredTargets(t => t >= split ? (110.0, 120.0) : (100.0, 120.0));
 
         var result = await _sut.BuildAsync(null);
 
@@ -175,7 +178,51 @@ public class ProfileSnapshotServiceTests
         seg.MaxBg.Should().Be(120.0);
         seg.Peak.Should().Be(75);
         seg.Curve.Should().Be("rapid-acting");
+        seg.DefaultTargets.Should().BeTrue();
+        result.UsesDefaults.Should().BeTrue();
         _timeline.Verify(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task TherapyDataWithATargetSchedule_MarksNeitherTheSnapshotNorTheSegmentAsDefaults()
+    {
+        GivenTimeline(new TherapySegment(_now, _now + Day, Snapshot()));
+
+        var result = await _sut.BuildAsync(null);
+
+        result.UsesDefaults.Should().BeFalse();
+        result.Segments.Should().ContainSingle().Which.DefaultTargets.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task TherapyDataWithoutATargetSchedule_EmitsTheFallbackTargetsMarkedAsDefaultsOnly()
+    {
+        GivenStoredTargets(_ => null);
+        GivenTimeline(new TherapySegment(_now, _now + Day, Snapshot()));
+
+        var result = await _sut.BuildAsync(null);
+
+        result.UsesDefaults.Should().BeFalse();
+        var seg = result.Segments.Should().ContainSingle().Subject;
+        seg.DefaultTargets.Should().BeTrue();
+        seg.MinBg.Should().Be(FallbackLow);
+        seg.MaxBg.Should().Be(FallbackHigh);
+        seg.Sens.Should().Be(50.0);
+    }
+
+    [Fact]
+    public async Task ChangeBetweenStoredAndFallbackTargets_StartsANewSegmentEvenWhenTheNumbersMatch()
+    {
+        var split = _now + 8 * Hour;
+        GivenStoredTargets(t => t >= split ? null : (FallbackLow, FallbackHigh));
+        GivenTimeline(new TherapySegment(_now, _now + Day, Snapshot()));
+
+        var result = await _sut.BuildAsync(null);
+
+        result.Segments.Should().HaveCount(2);
+        result.Segments[0].DefaultTargets.Should().BeFalse();
+        result.Segments[1].DefaultTargets.Should().BeTrue();
+        result.Segments[1].StartMills.Should().Be(split);
     }
 
     [Fact]
@@ -211,6 +258,17 @@ public class ProfileSnapshotServiceTests
         var act = () => _sut.BuildAsync(null);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void ResponseEmitsBothDefaultFlagsWhenFalse()
+    {
+        var response = new ProfileSnapshotResponse { Segments = { new ProfileSnapshotSegment() } };
+
+        var json = JsonSerializer.Serialize(response);
+
+        json.Should().Contain("\"uses_defaults\":false");
+        json.Should().Contain("\"default_targets\":false");
     }
 
     [Fact]
