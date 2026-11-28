@@ -84,6 +84,40 @@ public partial class FlagFactEvaluatorTests
     }
 
     [Fact]
+    public async Task A_later_judging_in_the_period_that_reads_treatments_writes_its_own_audit_row()
+    {
+        var harness = new Harness();
+        var person = harness.Follow(
+            new Person(Pattern, TimeSpan.FromDays(1), LatestAge: TimeSpan.FromMinutes(5), OnBoard: new OnBoardFigures(1.23, 12)),
+            OnBoardScopes);
+
+        await harness.JudgeAsync(person, HoursSinceReading(harness));
+        harness.Time.Advance(TimeSpan.FromMinutes(1));
+        await harness.JudgeAsync(person, InsulinOnBoard(harness, FlagComparison.Above, 1));
+
+        (await harness.AuditRowsAsync()).Select(r => r.EntityType).Should().Equal("glucose", "glucose,treatments");
+    }
+
+    [Fact]
+    public async Task Judgings_in_the_period_that_read_the_same_categories_write_one_audit_row_per_set_of_categories()
+    {
+        var harness = new Harness();
+        var person = harness.Follow(
+            new Person(Pattern, TimeSpan.FromDays(1), LatestAge: TimeSpan.FromMinutes(5), OnBoard: new OnBoardFigures(1.23, 12)),
+            OnBoardScopes);
+
+        foreach (var _ in Enumerable.Range(0, 3))
+        {
+            await harness.JudgeAsync(person, HoursSinceReading(harness));
+            await harness.JudgeAsync(person, InsulinOnBoard(harness, FlagComparison.Above, 1));
+            await harness.JudgeAsync(person, harness.Condition("current_status", "carbsOnBoard", null, FlagComparison.Above, 10, "g"));
+            harness.Time.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        (await harness.AuditRowsAsync()).Select(r => r.EntityType).Should().Equal("glucose", "glucose,treatments");
+    }
+
+    [Fact]
     public async Task A_caller_without_treatments_read_cannot_check_insulin_on_board()
     {
         var harness = new Harness();
