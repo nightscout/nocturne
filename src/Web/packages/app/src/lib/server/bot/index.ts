@@ -19,11 +19,17 @@ let botInitPromise: Promise<Bot> | null = null;
 export function getBot(): Promise<Bot> {
 	if (botInstance) return Promise.resolve(botInstance);
 	if (botInitPromise) return botInitPromise;
-	botInitPromise = initBot().then((bot) => {
-		botInstance = bot;
-		botInitPromise = null;
-		return bot;
-	});
+	botInitPromise = initBot().then(
+		(bot) => {
+			botInstance = bot;
+			botInitPromise = null;
+			return bot;
+		},
+		(err: unknown) => {
+			botInitPromise = null;
+			throw err;
+		},
+	);
 	return botInitPromise;
 }
 
@@ -33,8 +39,6 @@ async function initBot(): Promise<Bot> {
 		postgresUrl: botPostgresUrl(),
 	};
 
-	const bot = createBot(options);
-
 	const baseDomain = process.env.BASE_DOMAIN;
 	if (!baseDomain) {
 		throw new Error(
@@ -42,7 +46,18 @@ async function initBot(): Promise<Bot> {
 				"Set it via Aspire AppHost parameters or your .env file (e.g. localhost:1612 for dev).",
 		);
 	}
+
+	const bot = createBot(options);
 	registerAllCommands(bot, baseDomain);
+
+	try {
+		// An adapter holds no chat until the bot initialises, and a WhatsApp send without one skips
+		// the stored route and goes to the number on the thread.
+		await bot.initialize();
+	} catch (err) {
+		await bot.shutdown().catch(() => {});
+		throw err;
+	}
 
 	const enabledPlatforms = Object.entries(options.platforms ?? {})
 		.filter(([, val]) => val !== false && val !== undefined)

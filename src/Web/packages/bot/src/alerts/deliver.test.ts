@@ -435,7 +435,7 @@ describe("AlertDeliveryHandler on WhatsApp", () => {
 
   it("sends the card when the bot's state cannot be read, rather than withhold the alert", async () => {
     await window.recordInbound(THREAD, Date.now() - 25 * HOUR);
-    vi.spyOn(state, "connect").mockRejectedValueOnce(new Error("connect ECONNREFUSED"));
+    vi.spyOn(state, "get").mockRejectedValueOnce(new Error("connect ECONNREFUSED"));
 
     await handler.deliver(createEvent("whatsapp_dm", WA_ID));
 
