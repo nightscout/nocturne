@@ -88,4 +88,47 @@ public class ConnectorEffectiveConfigurationTests : IDisposable
         // Secrets are never part of the effective values.
         effective.Should().NotContainKey("password");
     }
+
+    [Theory]
+    [InlineData("https://ns.example.com/token-abc/", "ns.example.com/…")]
+    [InlineData("https://ns.example.com?token=abc", "ns.example.com")]
+    [InlineData("https://ns.example.com/site?token=abc", "ns.example.com/…")]
+    [InlineData("https://ns.example.com", "ns.example.com")]
+    public async Task GetEffectiveConfiguration_ShowsAnAddressOnlyInItsShownForm(string stored, string shown)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Connectors:Nightscout:Url"] = stored,
+                ["Connectors:Nightscout:RealtimeUrl"] = stored,
+                ["Connectors:Nightscout:ApiSecret"] = "connector-secret",
+            })
+            .Build();
+
+        var effective = await CreateService(configuration).GetEffectiveConfigurationAsync("Nightscout");
+
+        effective.Should().NotBeNull();
+        effective!["url"].Should().Be(shown);
+        effective["realtimeUrl"].Should().Be(shown);
+        effective.Should().NotContainKey("apiSecret");
+    }
+
+    [Fact]
+    public async Task GetEffectiveConfiguration_LeavesAnotherConnectorsNonAddressValueAsItIs()
+    {
+        const string accountEmail = "connector-user@example.test";
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Connectors:Glooko:Email"] = accountEmail,
+                ["Connectors:Glooko:Server"] = "EU",
+            })
+            .Build();
+
+        var effective = await CreateService(configuration).GetEffectiveConfigurationAsync("Glooko");
+
+        effective.Should().NotBeNull();
+        effective!["email"].Should().Be(accountEmail);
+        effective["server"].Should().Be("EU");
+    }
 }

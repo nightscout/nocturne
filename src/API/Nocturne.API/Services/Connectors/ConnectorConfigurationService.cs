@@ -698,6 +698,10 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             {
                 value = value.ToString();
             }
+            else if (value is string address && DelegatedConfigurationGuard.ChoosesDestination(property))
+            {
+                value = ConnectorAddresses.ShownForm(address);
+            }
 
             result[ToCamelCase(connectorPropAttr.GetKeyName())] = value;
         }

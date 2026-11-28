@@ -44,6 +44,13 @@ public sealed class ConnectorAddresses
             .ToList());
     }
 
+    /// <summary>
+    /// <paramref name="address"/> in its <see cref="NightscoutAddress.Shown"/> form, or as it is when
+    /// it is blank, which holds nothing to hide.
+    /// </summary>
+    public static string? ShownForm(string? address) =>
+        string.IsNullOrWhiteSpace(address) ? address : NightscoutAddress.Shown(address);
+
     /// <summary><paramref name="configuration"/> with each address it holds in its shown form.</summary>
     public JsonDocument Shown(JsonDocument configuration)
     {
@@ -52,9 +59,8 @@ public sealed class ConnectorAddresses
 
         foreach (var (key, _) in _addresses)
         {
-            if (document[key] is JsonValue value && value.TryGetValue<string>(out var address)
-                && !string.IsNullOrWhiteSpace(address))
-                document[key] = NightscoutAddress.Shown(address);
+            if (document[key] is JsonValue value && value.TryGetValue<string>(out var address))
+                document[key] = ShownForm(address);
         }
 
         return JsonDocument.Parse(document.ToJsonString());
