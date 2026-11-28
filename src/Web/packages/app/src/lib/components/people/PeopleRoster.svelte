@@ -21,7 +21,7 @@
   import ReviewSummary from "./ReviewSummary.svelte";
   import { setPersonSelection } from "./person-selection.js";
   import { Reveal, setReveal } from "./reveal.js";
-  import { isFlagged, keepUnchanged } from "./person.js";
+  import { keepUnchanged, splitFlagged } from "./person.js";
   import { reviewCell, type ReviewCell, type ReviewState } from "./review-lens.js";
   import { REVIEW_ROW_GRID, ROW_GRID } from "./row-grid.js";
 
@@ -76,8 +76,7 @@
   /** At this many people or fewer, each person gets the large layout. */
   const LARGE_LAYOUT_MAX = 4;
 
-  const flagged = $derived(people.filter(isFlagged));
-  const others = $derived(people.filter((person) => !isFlagged(person)));
+  const { flagged, others } = $derived(splitFlagged(people));
   const large = $derived(people.length <= LARGE_LAYOUT_MAX);
 
   const reveal = new Reveal();
