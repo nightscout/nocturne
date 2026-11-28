@@ -1949,9 +1949,8 @@ msgstr "BASAL"
 #~ msgid "Add Element"
 #~ msgstr "Añadir elemento"
 
-#: src/lib/components/clock-builder/ClockElementPreview.svelte
-msgid "Select tracker"
-msgstr "Seleccionar seguimiento"
+#~ msgid "Select tracker"
+#~ msgstr "Seleccionar seguimiento"
 
 #~ msgid "2d 4h"
 #~ msgstr ""
@@ -1992,7 +1991,6 @@ msgstr "Vista previa"
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/wizard/SettingsStep.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
-#: src/lib/components/clock/ClockFaceRenderer.svelte
 #: src/lib/components/people/attention-phrases.svelte.ts
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
@@ -2136,6 +2134,7 @@ msgstr "Umbral de visibilidad"
 msgid "Always show"
 msgstr "Mostrar siempre"
 
+#: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/reports/custom/workspace/WorkspaceView.svelte
@@ -54239,4 +54238,24 @@ msgstr ""
 
 #: src/lib/components/alerts/conditionIssues.svelte.ts
 msgid "Edit the smart snooze conditions and save the rule."
+msgstr ""
+
+#. 0: Math.round(percent)
+#: src/lib/components/clock/clock-face-data.svelte.ts
+msgid "{0}% in range"
+msgstr ""
+
+#. 0: label
+#: src/lib/components/clock/clock-face-data.svelte.ts
+msgid "You need the \"{0}\" permission."
+msgstr ""
+
+#. 0: formatAge(hours)
+#: src/lib/components/trackers/age.svelte.ts
+msgid "{0} left"
+msgstr ""
+
+#. 0: formatAge(-hours)
+#: src/lib/components/trackers/age.svelte.ts
+msgid "{0} late"
 msgstr ""
