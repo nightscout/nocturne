@@ -270,9 +270,32 @@ public static class ServiceRegistrationExtensions
 
         var who = !string.IsNullOrEmpty(credential)
             ? Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(credential)))
-            : context.Request.RouteValues["id"]?.ToString() ?? AnonymousDraftPartition;
+            : RouteId(context) ?? AnonymousDraftPartition;
         return $"{host}|{who}";
     }
+
+    /// <summary>
+    /// The route's id in one spelling: a <c>{id:guid}</c> route takes every format
+    /// <see cref="Guid.TryParse(string?, out Guid)"/> reads, in either case, so the raw value would
+    /// give one clock a fresh bucket per spelling.
+    /// </summary>
+    private static string? RouteId(HttpContext context) =>
+        context.Request.RouteValues["id"]?.ToString() is { } raw
+            ? Guid.TryParse(raw, out var id) ? id.ToString("N") : raw
+            : null;
+
+    /// <summary>
+    /// Rate-limiting policy for the values and chart a public clock face serves by its id, which
+    /// compute insulin on board, a forecast and time in range on each call.
+    /// </summary>
+    public const string ClockFaceDataRateLimitPolicy = "clock-face-data";
+
+    /// <summary>
+    /// Partition key for <see cref="ClockFaceDataRateLimitPolicy"/>: the request host, lowered, and the
+    /// clock face in the route, so every screen showing one face shares its bucket.
+    /// </summary>
+    internal static string ClockFaceDataPartitionKey(HttpContext context) =>
+        $"{context.Request.Host.Host.ToLowerInvariant()}|{RouteId(context)}";
 
     /// <summary>
     /// Rate-limiting policy for the per-session translation draft store.
@@ -333,6 +356,7 @@ public static class ServiceRegistrationExtensions
             [StatisticsComputeRateLimitPolicy] = StatisticsComputePartitionKey,
             [TranslationDraftsRateLimitPolicy] = TranslationDraftPartitionKey,
             [NoAccountAlertsRateLimitPolicy] = NoAccountAlertsPartitionKey,
+            [ClockFaceDataRateLimitPolicy] = ClockFaceDataPartitionKey,
         };
         foreach (var (policy, _, _) in ClientAddressPolicies)
             keys[policy] = clientRateLimitKey.Resolve;
@@ -551,6 +575,22 @@ public static class ServiceRegistrationExtensions
                         factory: _ => new FixedWindowRateLimiterOptions
                         {
                             PermitLimit = 300,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                        }
+                    )
+            );
+
+            // A clock reads its values every minute and its chart every five from each screen it is
+            // open on, so a face on a few dozen screens fits; the editor's preview is not limited here.
+            options.AddPolicy(
+                ClockFaceDataRateLimitPolicy,
+                context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey: partitionKeys[ClockFaceDataRateLimitPolicy](context),
+                        factory: _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 120,
                             Window = TimeSpan.FromMinutes(1),
                             QueueLimit = 0,
                         }
@@ -943,6 +983,7 @@ public static class ServiceRegistrationExtensions
             MyFitnessPalMatchingSettingsService
         >();
         services.AddScoped<IClockFaceService, ClockFaceService>();
+        services.AddScoped<ClockFaceDataService>();
         services.AddScoped<IWidgetSummaryService, WidgetSummaryService>();
         // Basal series builder (used by chart data pipeline and reports endpoint)
         services.AddScoped<IBasalSeriesBuilder, BasalSeriesBuilder>();

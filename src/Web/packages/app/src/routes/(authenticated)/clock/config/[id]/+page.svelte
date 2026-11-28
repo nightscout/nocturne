@@ -22,7 +22,16 @@
     getStarter as getStarterClockFace,
     update as updateClockFace,
   } from "#lib/api/generated/clockFaces.generated.remote.js";
+  import {
+    getClockFaceParts,
+    previewClockFaceData,
+  } from "#lib/api/generated/clockFaceDatas.generated.remote.js";
   import { faceUnits } from "#lib/components/clock/element-value.js";
+  import {
+    dataShapeOf,
+    faceReadsData,
+    missingScopeFor,
+  } from "#lib/components/clock/clock-face-data.svelte.js";
   import GlucoseChartCard from "#lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
   import type { ClockElement, TrackerDefinitionDto } from "#lib/api/index.js";
   import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
@@ -39,7 +48,7 @@
     createInternalElement,
     createInternalRow,
     clockBackgroundStyle,
-    isTrackerBelowThreshold,
+    isTrackerHiddenNow,
   } from "#lib/clock-builder/index.js";
 
   import {
@@ -87,6 +96,24 @@
   const trackerDefinitions = $derived<TrackerDefinitionDto[]>(
     definitionsQuery.current ?? [],
   );
+
+  // What the face's IOB, COB, basal, forecast, summary and tracker elements would show, read as
+  // the editor may read it; refreshed while the face is being edited.
+  const previewConfig = $derived(toApiConfig(config));
+  const previewQuery = $derived(
+    faceReadsData(previewConfig) ? previewClockFaceData(dataShapeOf(previewConfig)) : null
+  );
+  const previewData = $derived(previewQuery?.current ?? null);
+  $effect(() => {
+    const query = previewQuery;
+    if (!browser || !query) return;
+    const interval = setInterval(() => void query.refresh(), 60_000);
+    return () => clearInterval(interval);
+  });
+
+  // What the editor may add: a part it may not is disabled with the reason, not refused on save.
+  const partsQuery = getClockFaceParts();
+  const parts = $derived(partsQuery.current ?? []);
 
   // Time for preview
   let currentTime = $state(new Date());
@@ -156,6 +183,12 @@
   // Element operations
   function addElement(type: ClockElementType, position: "top" | "bottom") {
     const internalElement = createInternalElement(type);
+    if (internalElement.chartConfig) {
+      // A new chart starts with only the tracks its editor may add.
+      for (const feature of ["showBolus", "showCarbs"] as const) {
+        if (missingScopeFor(parts, "chart", feature)) internalElement.chartConfig[feature] = false;
+      }
+    }
     if (config.rows.length === 0) {
       config.rows = [createInternalRow([internalElement])];
     } else if (position === "top") {
@@ -426,7 +459,7 @@
   rowIndex: number,
   elementIndex: number
 )}
-  {@const belowThreshold = isTrackerBelowThreshold(element)}
+  {@const hiddenNow = isTrackerHiddenNow(element, previewData)}
   <div class="relative">
     <!-- eslint-disable-next-line no-restricted-syntax -- draggable element on the clock canvas -->
     <button
@@ -436,10 +469,10 @@
       ondragend={handleDragEnd}
       class="relative cursor-grab rounded px-1 transition-all active:cursor-grabbing {selectedElementId ===
       element._id
-        ? belowThreshold
+        ? hiddenNow
           ? 'border-2 border-dashed border-primary/60'
           : 'ring-2 ring-primary ring-offset-2 ring-offset-black'
-        : belowThreshold
+        : hiddenNow
           ? 'border border-dashed border-transparent hover:border-white/40'
           : 'hover:ring-1 hover:ring-white/30'}"
       onclick={() => selectedElementId = element._id}
@@ -458,7 +491,7 @@
           settings={config.settings}
           glucose={glucose}
           now={currentTime}
-          trackerDefinitions={trackerDefinitions}
+          data={previewData}
         />
       {/if}
     </button>
@@ -579,6 +612,7 @@
                 position="top"
                 open={addMenuOpen === "top"}
                 onOpenChange={(open) => addMenuOpen = open ? "top" : null}
+                {parts}
                 onAddElement={addElement}
               />
             {/if}
@@ -604,6 +638,7 @@
                 position="bottom"
                 open={addMenuOpen === "bottom"}
                 onOpenChange={(open) => addMenuOpen = open ? "bottom" : null}
+                {parts}
                 onAddElement={addElement}
               />
             {/if}
@@ -617,6 +652,7 @@
         <ElementInspector
           element={element}
           trackerDefinitions={trackerDefinitions}
+          {parts}
           onClose={() => selectedElementId = null}
           onRemove={() => removeElement(rowIndex, element._id)}
           onUpdateElement={(updates) =>

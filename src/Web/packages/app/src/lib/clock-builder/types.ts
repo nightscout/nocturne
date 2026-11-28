@@ -198,29 +198,14 @@ export interface ElementGroup {
   types: ClockElementType[];
 }
 
-/**
- * Element types with no runtime data source. They remain in ClockElementType and
- * ELEMENT_INFO so a saved face containing one still loads and can be edited, but
- * they are absent from ELEMENT_GROUPS (so they cannot be added) and the runtime
- * renderer skips them instead of printing a placeholder value.
- */
-export const UNWIRED_ELEMENT_TYPES: ReadonlySet<string> = new Set([
-  "basal",
-  "forecast",
-]);
-
-export function isUnwiredElementType(type: string | undefined): boolean {
-  return type !== undefined && UNWIRED_ELEMENT_TYPES.has(type);
-}
-
 export const ELEMENT_GROUPS: ElementGroup[] = [
   {
     name: "Glucose",
-    types: ["sg", "delta", "arrow", "age", "summary"],
+    types: ["sg", "delta", "arrow", "age", "summary", "forecast"],
   },
   {
     name: "Loop",
-    types: ["iob", "cob"],
+    types: ["iob", "cob", "basal"],
   },
   { name: "Trackers", types: ["tracker", "trackers"] },
   { name: "Display", types: ["time", "text", "chart"] },
@@ -265,6 +250,7 @@ export const VISIBILITY_OPTIONS: SelectOption[] = [
 export const TRACKER_SHOW_OPTIONS: SelectOption[] = [
   { value: "name", label: "Name" },
   { value: "icon", label: "Icon" },
+  { value: "remaining", label: "Time left" },
 ];
 
 export const TRACKER_CATEGORIES = [

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
@@ -105,16 +106,9 @@ public class ClockFaceAlertsController(
         return await receipts.RecordAsync(excursionId, Actor(face), ct) ? NoContent() : NotFound();
     }
 
-    private async Task<bool> OwnerReadsAlertsAsync(ClockFace face, CancellationToken ct)
-    {
-        if (!Guid.TryParse(face.UserId, out var owner)
-            || await members.GetMemberAccessAsync(owner, tenant.TenantId, ct) is not { } access)
-            return false;
-
-        var scopes = MemberScopeResolver.Resolve(
-            access.EffectivePermissions, AuthType.SessionCookie, new HashSet<string>());
-        return Scope.Satisfies(scopes, Scope.AlertsRead);
-    }
+    private async Task<bool> OwnerReadsAlertsAsync(ClockFace face, CancellationToken ct) =>
+        Scope.Satisfies(
+            await HttpContext.ReadAsOwnerAsync(members, tenant.TenantId, face, ct), Scope.AlertsRead);
 
     private static AlertReceiptActor Actor(ClockFace face) =>
         new(AlertReceiptActorKind.Clock, face.Id, face.Name);

@@ -28,4 +28,9 @@ public class TenantMemberService(ITenantMembershipRepository members, TimeProvid
     public Task<TenantMemberAccess?> GetMemberAccessAsync(
         Guid subjectId, Guid tenantId, CancellationToken ct = default) =>
         members.GetMemberAccessAsync(tenantId, subjectId, Now, ct);
+
+    public async Task<TenantMembershipFacts?> GetMembershipFactsAsync(Guid subjectId, Guid tenantId, CancellationToken ct) =>
+        await members.ReadSubjectMembershipAsync(subjectId, tenantId, Now, ct) is { IsActive: true, Membership: { } membership }
+            ? membership
+            : null;
 }

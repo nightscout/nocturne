@@ -27,3 +27,9 @@ export function formatLifespan(hours: number | undefined | null): string {
   if (hours < 24) return plural(hours, ["# hour", "# hours"]);
   return plural(Math.floor(hours / 24), ["# day", "# days"]);
 }
+
+/** Hours to a tracker's expected end, as a clock shows them: time left, or how late it is. */
+export function formatTimeLeft(hours: number | undefined | null): string {
+  if (hours === undefined || hours === null) return "";
+  return hours >= 0 ? `${formatAge(hours)} left` : `${formatAge(-hours)} late`;
+}

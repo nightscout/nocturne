@@ -522,6 +522,10 @@ public class V4WriteScopeGatingTests
 
             // See the ClockFacesController remarks.
             ["ClockFacesController"] = Scope.SharingManage,
+
+            // Its one POST writes nothing: it previews the values of a layout the editor has not
+            // saved, under the same scope as saving one.
+            ["ClockFaceDataController"] = Scope.SharingManage,
         };
 
     /// <summary>

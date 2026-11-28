@@ -27,5 +27,5 @@
   settings={{ glucoseUnits: "mg/dl", timeFormat: "12" }}
   {glucose}
   {now}
-  trackerDefinitions={[]}
+  data={null}
 />

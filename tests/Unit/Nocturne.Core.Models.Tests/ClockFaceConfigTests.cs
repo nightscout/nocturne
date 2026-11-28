@@ -130,4 +130,34 @@ public class ClockFaceConfigTests
 
         config.Validate().Should().StartWith("settings.glucoseUnits");
     }
+
+    [Theory]
+    [InlineData("summary", 2, null, "hours")]
+    [InlineData("chart", 48, null, "hours")]
+    [InlineData("forecast", null, 20, "minutesAhead")]
+    public void A_value_the_editor_does_not_offer_is_refused(string type, int? hours, int? minutesAhead, string field)
+    {
+        var config = new ClockFaceConfig
+        {
+            Rows = [new ClockRow { Elements = [new ClockElement { Type = type, Hours = hours, MinutesAhead = minutesAhead }] }],
+        };
+
+        config.Validate().Should().StartWith($"{field}:");
+    }
+
+    [Theory]
+    [InlineData("summary", 24, null)]
+    [InlineData("chart", 1, null)]
+    [InlineData("forecast", null, 60)]
+    [InlineData("summary", null, null)]
+    [InlineData("sg", 2, 20)]
+    public void An_offered_or_unread_value_saves(string type, int? hours, int? minutesAhead)
+    {
+        var config = new ClockFaceConfig
+        {
+            Rows = [new ClockRow { Elements = [new ClockElement { Type = type, Hours = hours, MinutesAhead = minutesAhead }] }],
+        };
+
+        config.Validate().Should().BeNull();
+    }
 }

@@ -9,7 +9,11 @@
   import * as Select from "#lib/components/ui/select/index.js";
   import X from "@lucide/svelte/icons/x";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import type { ClockElement, TrackerDefinitionDto } from "#lib/api/index.js";
+  import type { ClockElement, ClockPartAccessDto, TrackerDefinitionDto } from "#lib/api/index.js";
+  import {
+    missingScopeFor,
+    missingScopeReason,
+  } from "#lib/components/clock/clock-face-data.svelte.js";
   import {
     elementInfo,
     VISIBILITY_OPTIONS,
@@ -27,6 +31,8 @@
   interface Props {
     element: InternalElement;
     trackerDefinitions: TrackerDefinitionDto[];
+    /** What the caller may add; a chart feature the caller cannot turn on is disabled with the reason. */
+    parts: ClockPartAccessDto[];
     onClose: () => void;
     onRemove: () => void;
     onUpdateElement: (updates: Partial<ClockElement>) => void;
@@ -38,6 +44,7 @@
   let {
     element,
     trackerDefinitions,
+    parts,
     onClose,
     onRemove,
     onUpdateElement,
@@ -269,6 +276,21 @@
             {/each}
           </div>
         </div>
+        <div class="space-y-2">
+          <Label>Show</Label>
+          <div class="space-y-1">
+            {#each TRACKER_SHOW_OPTIONS as opt (opt.value)}
+              <div class="flex items-center gap-2">
+                <Checkbox
+                  checked={isShowOptionChecked(element.show, opt.value)}
+                  onCheckedChange={() =>
+                    toggleShowOption(element.show, opt.value)}
+                />
+                <span class="text-sm">{opt.label}</span>
+              </div>
+            {/each}
+          </div>
+        </div>
       </div>
     {/if}
 
@@ -338,9 +360,12 @@
           <Label>Chart features</Label>
           <div class="space-y-1">
             {#each CHART_FEATURE_OPTIONS as { key, label, defaultValue } (key)}
-              <div class="flex items-center gap-2">
+              {@const checked = chartFlag(element.chartConfig, key) ?? defaultValue}
+              {@const missing = missingScopeFor(parts, "chart", key)}
+              <div class="flex items-start gap-2">
                 <Checkbox
-                  checked={chartFlag(element.chartConfig, key) ?? defaultValue}
+                  {checked}
+                  disabled={missing !== null && !checked}
                   onCheckedChange={(v: boolean) =>
                     onUpdateElement({
                       chartConfig: {
@@ -349,7 +374,12 @@
                       },
                     })}
                 />
-                <span class="text-sm">{label}</span>
+                <div>
+                  <span class="text-sm">{label}</span>
+                  {#if missing !== null && !checked}
+                    <p class="text-xs text-muted-foreground">{missingScopeReason(missing)}</p>
+                  {/if}
+                </div>
               </div>
             {/each}
           </div>

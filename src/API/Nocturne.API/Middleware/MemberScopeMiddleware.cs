@@ -131,20 +131,9 @@ public class MemberScopeMiddleware
         context.SetGrantedScopes(resolvedScopes);
         var sumClamped = MemberScopeResolver.IsHistoryClamped(
             authContext.CredentialLimitTo24Hours, membership.Access.LimitTo24Hours, effectivePermissions);
-        // Never wider than the sum: a row an older build narrowed can hold less than its direct reason.
-        context.SetGrantCeiling(membership.Direct switch
-        {
-            null => null,
-            var direct when ReferenceEquals(direct, membership.Access) =>
-                new GrantCeiling(resolvedScopes, membership.Access.AccessEndsAt, sumClamped),
-            var direct => new GrantCeiling(
-                Scope.Common(
-                    MemberScopeResolver.Resolve(direct.EffectivePermissions, authContext.AuthType, credentialScopes),
-                    resolvedScopes),
-                HttpContextExtensions.Earlier(direct.AccessEndsAt, membership.Access.AccessEndsAt),
-                sumClamped || MemberScopeResolver.IsHistoryClamped(
-                    authContext.CredentialLimitTo24Hours, direct.LimitTo24Hours, direct.EffectivePermissions)),
-        });
+        context.SetGrantCeiling(GrantCeiling.Of(
+            membership.Access, membership.Direct, resolvedScopes, sumClamped,
+            authContext.AuthType, credentialScopes, authContext.CredentialLimitTo24Hours));
 
         // Rebuild the permission trie from the resolved scopes. Both must be set: GrantedScopes
         // drives RequireScope checks, while the trie drives the HasPermissions policy (the legacy

@@ -22,6 +22,17 @@ public class NoAccountAlertsPartitionKeyTests
     }
 
     [Fact]
+    public void EverySpellingOfOneClockFace_SharesItsWindow()
+    {
+        var id = Guid.NewGuid();
+        string[] spellings = [id.ToString(), id.ToString("N"), id.ToString("B").ToUpperInvariant(), id.ToString("P")];
+
+        spellings.Select(s => Key(Request("t.example.com", id: s))).Distinct().Should().ContainSingle();
+        spellings.Select(s => ServiceRegistrationExtensions.ClockFaceDataPartitionKey(Request("t.example.com", id: s)))
+            .Distinct().Should().ContainSingle();
+    }
+
+    [Fact]
     public void EachCredential_HasItsOwnWindow()
     {
         var first = Request("t.example.com");

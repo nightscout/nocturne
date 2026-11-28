@@ -4,6 +4,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -166,7 +167,7 @@ public class ClockFacesController : ControllerBase
     [Authorize]
     [RequireScope(Scope.SharingManage)]
     [ProducesResponseType(typeof(ClockFace), 201)]
-    [ScopeDecidedBy(typeof(ClockFacesController), nameof(AlertsSettingWithoutScope))]
+    [ScopeDecidedBy(typeof(ClockFacesController), nameof(ReadsWithoutScope))]
     [ProducesResponseType(400)]
     [ProducesResponseType(401)]
     [ProducesResponseType(403)]
@@ -187,7 +188,7 @@ public class ClockFacesController : ControllerBase
             return Problem(detail: configError, statusCode: 400, title: "Bad Request");
         }
 
-        if (AlertsSettingWithoutScope(request.Config) is { } refused)
+        if (ReadsWithoutScope(request.Config) is { } refused)
         {
             return refused;
         }
@@ -207,7 +208,7 @@ public class ClockFacesController : ControllerBase
     [RemoteCommand(Invalidates = ["List", "GetById"])]
     [Authorize]
     [RequireScope(Scope.SharingManage)]
-    [ScopeDecidedBy(typeof(ClockFacesController), nameof(AlertsSettingWithoutScope))]
+    [ScopeDecidedBy(typeof(ClockFacesController), nameof(ReadsWithoutScope))]
     [ProducesResponseType(typeof(ClockFace), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(401)]
@@ -226,7 +227,7 @@ public class ClockFacesController : ControllerBase
         }
 
         var existing = await _clockFaceService.GetByIdAsync(id, HttpContext.RequestAborted);
-        if (AlertsSettingWithoutScope(request.Config, existing?.Config.Settings) is { } refused)
+        if (ReadsWithoutScope(request.Config, existing?.Config) is { } refused)
         {
             return refused;
         }
@@ -242,20 +243,16 @@ public class ClockFacesController : ControllerBase
     }
 
     /// <summary>
-    /// Refuses turning on alerts for a face from a caller who may not read them: the face would hand
-    /// them to anyone holding its link. Keeping a setting the face already had is not turning it on,
-    /// and <see cref="ClockFaceAlertsController"/> stops serving alerts once the owner loses them.
+    /// Refuses a face that adds a part its caller may not give, as <see cref="ClockFaceReadScopes"/>
+    /// names them: the face hands that part to anyone holding its link, so it is bounded by what the
+    /// caller may give (<see cref="HttpContextExtensions.CallerGrantCeiling"/>), not by what a team lets
+    /// them read. Keeping a part the face already had is not adding it, and the face stops serving a
+    /// part once its owner loses the scope.
     /// </summary>
-    private ObjectResult? AlertsSettingWithoutScope(ClockFaceConfig? config, ClockSettings? before = null)
-    {
-        var turnsOn = config?.Settings is { } after
-            && ((after.ShowAlerts && before?.ShowAlerts != true)
-                || (after.AllowMarkSeen && before?.AllowMarkSeen != true));
-
-        return turnsOn && !HttpContext.HasScope(Scope.AlertsRead)
-            ? this.ForbiddenForScope(Scope.AlertsRead)
+    private ObjectResult? ReadsWithoutScope(ClockFaceConfig? config, ClockFaceConfig? before = null) =>
+        ClockFaceReadScopes.MissingFor(config, before, HttpContext.ClockFaceGivableScopes()) is { } missing
+            ? this.ForbiddenForScope(missing)
             : null;
-    }
 
     /// <summary>
     /// Delete a clock face (owner only)

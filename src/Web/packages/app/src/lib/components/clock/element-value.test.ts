@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import type { ClockElement, ClockSettings } from "#lib/api/index.js";
+import {
+  BasalDeliveryOrigin,
+  type ClockElement,
+  type ClockFaceData,
+  type ClockSettings,
+} from "#lib/api/index.js";
 import type {
   GlucoseUnits,
   TimeFormat,
@@ -27,7 +32,6 @@ vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
 }));
 
 const { renderClockElementValue } = await import("./element-value");
-const { UNWIRED_ELEMENT_TYPES } = await import("#lib/clock-builder/types.js");
 const store = await import("#lib/stores/appearance-store.svelte.js");
 
 const now = new Date(2026, 11, 31, 14, 5);
@@ -81,8 +85,21 @@ function asViewer(
 const render = (
   element: ClockElement,
   settings: ClockSettings | undefined = mgdl12,
-  source: ClockGlucoseSource = glucose
-) => renderClockElementValue(element, settings, source, now);
+  source: ClockGlucoseSource = glucose,
+  data: ClockFaceData | null = null
+) => renderClockElementValue(element, settings, source, now, data);
+
+const faceData: ClockFaceData = {
+  iob: 2.35,
+  cob: 18,
+  basal: { rate: 0.85, scheduledRate: 0.8, origin: BasalDeliveryOrigin.Algorithm },
+  forecasts: [{ minutesAhead: 30, mgdl: 150 }],
+  summaries: [
+    { hours: 3, inRangePercent: 82.6, belowPercent: 2, abovePercent: 15.4, readings: 36 },
+    { hours: 24, inRangePercent: 0, belowPercent: 0, abovePercent: 0, readings: 0 },
+  ],
+  trackers: [],
+};
 
 describe("renderClockElementValue", () => {
   it("shows a mmol, 24 hour face in mmol/L and 24 hour time to a viewer with no preferences", () => {
@@ -161,16 +178,34 @@ describe("renderClockElementValue", () => {
     expect(render(el({ type: "time" }), mmol24, noReading)).toBe("14:05");
   });
 
-  it("renders explicit placeholders for insulin and carbs on board", () => {
-    expect(render(el({ type: "iob" }))).toBe("--U");
-    expect(render(el({ type: "cob" }))).toBe("--g");
+  it("renders the values the API read for the face", () => {
+    expect(render(el({ type: "iob" }), mgdl12, glucose, faceData)).toBe("2.35U");
+    expect(render(el({ type: "cob" }), mgdl12, glucose, faceData)).toBe("18g");
+    expect(render(el({ type: "basal" }), mgdl12, glucose, faceData)).toBe("0.85 U/h");
+    expect(render(el({ type: "summary", hours: 3 }), mgdl12, glucose, faceData)).toBe(
+      "83% in range"
+    );
   });
 
-  it("renders nothing for element types with no runtime data source", () => {
-    // A saved face may still contain these; they must not print a plausible number.
-    for (const type of UNWIRED_ELEMENT_TYPES) {
+  it("renders a forecast in the face's units, at the minutes ahead the element names", () => {
+    expect(
+      render(el({ type: "forecast", minutesAhead: 30 }), mgdl12, glucose, faceData)
+    ).toBe("150 mg/dL");
+    expect(
+      render(el({ type: "forecast", minutesAhead: 30, showUnits: false }), mmol24, glucose, faceData)
+    ).toBe("8.3");
+    expect(render(el({ type: "forecast", minutesAhead: 60 }), mgdl12, glucose, faceData)).toBe("");
+  });
+
+  it("renders nothing, not a stand-in number, for a value the API did not read", () => {
+    for (const type of ["iob", "cob", "basal", "forecast", "summary"]) {
       expect(render(el({ type }))).toBe("");
+      expect(render(el({ type }), mgdl12, glucose, { trackers: [] } as ClockFaceData)).toBe("");
     }
+  });
+
+  it("renders no time in range for a window with no readings", () => {
+    expect(render(el({ type: "summary", hours: 24 }), mgdl12, glucose, faceData)).toBe("");
   });
 
   it("renders custom text and nothing for icon-rendered types", () => {
@@ -182,11 +217,11 @@ describe("renderClockElementValue", () => {
 });
 
 describe("ELEMENT_GROUPS", () => {
-  it("does not offer element types with no runtime data source", async () => {
+  it("offers every element type a face can show", async () => {
     const { ELEMENT_GROUPS } = await import("#lib/clock-builder/types.js");
     const offered = ELEMENT_GROUPS.flatMap((g) => g.types);
-    for (const type of UNWIRED_ELEMENT_TYPES) {
-      expect(offered).not.toContain(type);
+    for (const type of ["iob", "cob", "basal", "forecast", "summary", "tracker", "trackers", "chart"]) {
+      expect(offered).toContain(type);
     }
   });
 });

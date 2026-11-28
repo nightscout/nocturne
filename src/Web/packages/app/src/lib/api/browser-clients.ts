@@ -7,6 +7,7 @@ import {
   BolusClient,
   CarbIntakeClient,
   ClockFaceAlertsClient,
+  ClockFaceDataClient,
   ClockFacesClient,
   CurrentTherapyStateClient,
   DeviceEventClient,
@@ -43,6 +44,7 @@ export const bgCheckClient = () => new BGCheckClient("", browserHttp());
 export const bolusClient = () => new BolusClient("", browserHttp());
 export const carbIntakeClient = () => new CarbIntakeClient("", browserHttp());
 export const clockFaceAlertsClient = () => new ClockFaceAlertsClient("", browserHttp());
+export const clockFaceDataClient = () => new ClockFaceDataClient("", browserHttp());
 export const clockFacesClient = () => new ClockFacesClient("", browserHttp());
 export const currentTherapyStateClient = () => new CurrentTherapyStateClient("", browserHttp());
 export const deviceEventClient = () => new DeviceEventClient("", browserHttp());

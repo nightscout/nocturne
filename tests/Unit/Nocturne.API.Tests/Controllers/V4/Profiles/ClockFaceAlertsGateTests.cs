@@ -48,6 +48,38 @@ public class ClockFaceAlertsGateTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData("iob", Scope.TreatmentsRead)]
+    [InlineData("trackers", Scope.AlertsRead)]
+    public async Task Create_RefusesAnElementTheCallerCannotRead(string type, string scope)
+    {
+        var result = await Faces(Scope.GlucoseRead).Create(new CreateClockFaceRequest
+        {
+            Name = "Kitchen",
+            Config = new ClockFaceConfig { Rows = [new ClockRow { Elements = [new ClockElement { Type = type }] }] },
+        });
+
+        result.Result.Should().BeOfType<ScopeForbiddenResult>()
+            .Which.Scopes.Should().Equal(scope);
+    }
+
+    [Fact]
+    public async Task Create_RefusesAPartTheCallerReadsOnlyThroughATeam()
+    {
+        var controller = Faces(Scope.GlucoseRead, Scope.TreatmentsRead);
+        // A team reason lets the caller read treatments, but a face gives them to anyone with its link.
+        controller.HttpContext.SetGrantCeiling(new GrantCeiling(new HashSet<string> { Scope.GlucoseRead }, null, false));
+
+        var result = await controller.Create(new CreateClockFaceRequest
+        {
+            Name = "Kitchen",
+            Config = new ClockFaceConfig { Rows = [new ClockRow { Elements = [new ClockElement { Type = "iob" }] }] },
+        });
+
+        result.Result.Should().BeOfType<ScopeForbiddenResult>()
+            .Which.Scopes.Should().Equal(Scope.TreatmentsRead);
+    }
+
     [Fact]
     public async Task Create_AdmitsAlertsFromACallerWhoReadsThem()
     {
@@ -118,8 +150,9 @@ public class ClockFaceAlertsGateTests
     private ClockFaceAlertsController Alerts(INocturneDbContextFactory contexts, string[] ownerPermissions)
     {
         var members = new Mock<ITenantMemberService>();
-        members.Setup(m => m.GetMemberAccessAsync(_owner, _tenant, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TenantMemberAccess(new HashSet<string>(ownerPermissions), false, null));
+        var access = new TenantMemberAccess(new HashSet<string>(ownerPermissions), false, null);
+        members.Setup(m => m.GetMembershipFactsAsync(_owner, _tenant, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantMembershipFacts(Guid.NewGuid(), access, access, null));
         var tenant = SettableTenantAccessor.Resolved(_tenant);
 
         return new ClockFaceAlertsController(

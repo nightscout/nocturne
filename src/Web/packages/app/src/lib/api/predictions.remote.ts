@@ -4,13 +4,13 @@ import { z } from "zod";
 import { error } from "@sveltejs/kit";
 import { PREDICTIONS_UNAVAILABLE } from "#lib/api/predictions-messages.js";
 import { errorStatus } from "#lib/forms/submit-error.js";
+import { toPredictionData } from "./prediction-data";
 
 const getPredictionsSchema = z.object({
   profileId: z.string().optional(),
 });
 
 export type { PredictionPoint, PredictionCurves, PredictionData } from "@nocturne/charts/core";
-import type { PredictionData, PredictionPoint } from "@nocturne/charts/core";
 
 /**
  * Get glucose predictions based on current data. Returns predicted glucose
@@ -25,40 +25,7 @@ export const getPredictions = query(getPredictionsSchema, async (props) => {
       props.profileId
     );
 
-    // Get the base timestamp from the response
-    const baseTimestamp = response.timestamp
-      ? new Date(response.timestamp).getTime()
-      : Date.now();
-    const intervalMs = (response.intervalMinutes || 5) * 60 * 1000;
-
-    // Helper to convert prediction array to timestamped points
-    const toPoints = (
-      predictions: number[] | undefined | null
-    ): PredictionPoint[] => {
-      if (!predictions) return [];
-      return predictions.map((value, index) => ({
-        timestamp: baseTimestamp + index * intervalMs,
-        value,
-      }));
-    };
-
-    return {
-      timestamp: response.timestamp ? new Date(response.timestamp) : new Date(),
-      currentBg: response.currentBg || 0,
-      delta: response.delta || 0,
-      eventualBg: response.eventualBg || 0,
-      iob: response.iob || 0,
-      cob: response.cob || 0,
-      sensitivityRatio: response.sensitivityRatio ?? null,
-      intervalMinutes: response.intervalMinutes || 5,
-      curves: {
-        main: toPoints(response.predictions?.default),
-        iobOnly: toPoints(response.predictions?.iobOnly),
-        uam: toPoints(response.predictions?.uam),
-        cob: toPoints(response.predictions?.cob),
-        zeroTemp: toPoints(response.predictions?.zeroTemp),
-      },
-    } satisfies PredictionData;
+    return toPredictionData(response);
   } catch (err) {
     // 404 means predictions are not configured — this is expected for optional features
     if (errorStatus(err) === 404) {
