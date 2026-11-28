@@ -63,7 +63,8 @@ public static class ApsSnapshotCurvesRewriter
             LIMIT @size),
         oref AS (
             UPDATE aps_snapshots a
-            SET suggested_json = {{OrefSuggested}}, enacted_json = {{OrefEnacted}},
+            SET suggested_json = {{Kept("a.suggested_json", OrefSuggested)}},
+                enacted_json = {{Kept("a.enacted_json", OrefEnacted)}},
                 predicted_default_json = {{OrefDefault}}
             FROM page
             WHERE a.id = page.id
@@ -76,7 +77,8 @@ public static class ApsSnapshotCurvesRewriter
             RETURNING 1),
         loop AS (
             UPDATE aps_snapshots a
-            SET suggested_json = {{LoopSuggested}}, enacted_json = {{LoopEnacted}}, loop_json = {{LoopLoop}}
+            SET suggested_json = {{LoopSuggested}}, enacted_json = {{LoopEnacted}},
+                loop_json = {{Kept("a.loop_json", LoopLoop)}}
             FROM page
             WHERE a.id = page.id
               AND a.loop_json IS NOT NULL
@@ -166,6 +168,13 @@ public static class ApsSnapshotCurvesRewriter
 
         return ((int)reader.GetInt64(0), reader.GetDateTime(1), reader.GetGuid(2));
     }
+
+    /// <summary>
+    /// The rewrite of <paramref name="column"/>, or the stored value when the rewrite equals it: a value
+    /// the rewrite rebuilds is a new datum, which PostgreSQL compresses and TOASTs again even when it is equal.
+    /// </summary>
+    private static string Kept(string column, string rewrite) =>
+        $"CASE WHEN {column} IS DISTINCT FROM {rewrite} THEN {rewrite} ELSE {column} END";
 
     private static string StripCommand(string column) => $$"""
         CASE WHEN jsonb_strip_nulls({{column}} -> 'predBGs') = {{Curves}} THEN jsonb_strip_nulls({{column}} - 'predBGs')

@@ -304,6 +304,32 @@ public class ApsSnapshotMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void A_default_curve_that_copies_the_iob_curve_in_other_formatting_is_not_stored()
+    {
+        var entity = ApsSnapshotMapper.ToEntity(new ApsSnapshot
+        {
+            Timestamp = DateTime.UtcNow, AidAlgorithm = AidAlgorithm.OpenAps,
+            PredictedDefaultJson = "[120, 118, 116]", PredictedIobJson = Iob,
+        });
+
+        entity.PredictedDefaultJson.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void A_default_that_is_not_json_is_stored_as_given()
+    {
+        var entity = ApsSnapshotMapper.ToEntity(new ApsSnapshot
+        {
+            Timestamp = DateTime.UtcNow, AidAlgorithm = AidAlgorithm.OpenAps,
+            PredictedDefaultJson = "[120,", PredictedIobJson = Iob,
+        });
+
+        entity.PredictedDefaultJson.Should().Be("[120,");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void A_default_curve_that_differs_from_the_iob_curve_is_stored()
     {
         var model = new ApsSnapshot

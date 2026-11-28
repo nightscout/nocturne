@@ -54,6 +54,13 @@ public class ApsSnapshotCurvesJobTests
         outcome.Should().Be(JobOutcome.Done);
     }
 
+    [Fact]
+    public void Its_name_differs_from_the_name_every_tenant_already_finished()
+    {
+        new ApsSnapshotCurvesJob(NullLogger<ApsSnapshotCurvesJob>.Instance).Name
+            .Should().NotBe("aps-snapshot-curves");
+    }
+
     private static async Task<JobOutcome> RunAsync(
         JobCursor? cursor, Func<Guid, (DateTime, Guid)?, ApsSnapshotCurvesRewriter.Pass> rewrite)
     {

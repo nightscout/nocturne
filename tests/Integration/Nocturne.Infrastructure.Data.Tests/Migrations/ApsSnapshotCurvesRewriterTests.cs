@@ -32,6 +32,9 @@ public class ApsSnapshotCurvesRewriterFixture() : MigratedDatabase("aps_curves_r
     /// <summary>An AAPS snapshot whose commands hold no curves and whose default column copies its IOB curve.</summary>
     internal static readonly Guid CopiedDefault = Guid.Parse("c0000000-0000-7000-8000-000000000005");
 
+    /// <summary>An AAPS snapshot whose default column holds a curve of its own.</summary>
+    internal static readonly Guid OwnDefault = Guid.Parse("c0000000-0000-7000-8000-000000000006");
+
     internal Dictionary<Guid, Row> Rewritten { get; } = [];
     internal int CrossTenantChanged { get; private set; }
     internal int FirstRewriteChanged { get; private set; }
@@ -155,6 +158,11 @@ public class ApsSnapshotCurvesRewriterFixture() : MigratedDatabase("aps_curves_r
                  "enacted": {"rate": 2.0, "duration": 30, "received": true},
                  "predicted": {"values": [130, 125, 120], "startDate": "2026-01-01T00:15:00Z"} }',
                '[130, 125, 120]');
+            INSERT INTO aps_snapshots
+              (id, tenant_id, timestamp, aps_system, enacted, suggested_json, predicted_default_json, predicted_iob_json)
+            VALUES
+              ('{{OwnDefault}}', '{{TenantB}}', '2026-01-01T00:25:00Z', 'AndroidAps', false,
+               '{"bg": 100, "timestamp": "2026-01-01T00:25:00Z"}', '[100, 99]', '[100, 98, 96]');
             """);
     }
 }
@@ -207,6 +215,12 @@ public class ApsSnapshotCurvesRewriterTests(ApsSnapshotCurvesRewriterFixture fix
 
         row.Default.Should().BeNull();
         Json(row.Suggested)["bg"]!.GetValue<int>().Should().Be(100);
+    }
+
+    [Fact]
+    public void A_default_curve_of_its_own_stays()
+    {
+        fixture.Rewritten[ApsSnapshotCurvesRewriterFixture.OwnDefault].Default.Should().Be("[100, 99]");
     }
 
     [Fact]
