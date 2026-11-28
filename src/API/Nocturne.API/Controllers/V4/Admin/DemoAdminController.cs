@@ -291,12 +291,6 @@ public record DemoStateDto(
     DateTime? NextVisitorResetAt,
     bool AlreadyExisted);
 
-public record DemoStatusPatchDto(
-    DateTime? NextResetAt = null,
-    DateTime? LastResetAt = null,
-    bool? IsActive = null,
-    DateTime? NextVisitorResetAt = null);
-
 public record DemoDeleteResultDto(long DeletedCount);
 
 public record DemoResetResultDto(Guid TenantId);

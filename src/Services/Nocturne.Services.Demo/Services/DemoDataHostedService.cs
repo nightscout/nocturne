@@ -103,7 +103,7 @@ public class DemoDataHostedService : BackgroundService
             if (tenantState.NextVisitorResetAt is null && nextVisitorResetUtc is { } firstVisitorReset)
                 await RecordNextVisitorResetAsync(firstVisitorReset, stoppingToken);
 
-            await GenerateAndPostEntryAsync(stoppingToken);
+            await TryGenerateAndPostEntryAsync(stoppingToken);
             StartSeedingPeople(stoppingToken);
 
             var generationInterval = TimeSpan.FromMinutes(_config.IntervalMinutes);
@@ -148,12 +148,11 @@ public class DemoDataHostedService : BackgroundService
                 {
                     now = UtcNow;
 
-                    var reset = false;
                     if (nextResetUtc is { } resetDue && now >= resetDue)
                     {
                         nextResetUtc = NextResetDue(_config, await RegenerateAndRecordResetAsync(stoppingToken));
                         now = UtcNow;
-                        reset = true;
+                        StartSeedingPeople(stoppingToken);
                     }
 
                     if (nextVisitorResetUtc is { } visitorResetDue && now >= visitorResetDue)
@@ -167,11 +166,8 @@ public class DemoDataHostedService : BackgroundService
                         await GenerateAndPostEntryAsync(stoppingToken);
                         nextGenerationUtc = now.Add(generationInterval);
                     }
-
-                    if (reset)
-                        StartSeedingPeople(stoppingToken);
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
                     _logger.LogInformation("Demo data generation service is stopping");
                     break;
@@ -179,6 +175,11 @@ public class DemoDataHostedService : BackgroundService
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error generating demo data");
+                    var failedAt = UtcNow;
+                    var retryAt = failedAt.Add(generationInterval);
+                    nextGenerationUtc = DeferIfDue(nextGenerationUtc, failedAt, retryAt);
+                    nextResetUtc = DeferIfDue(nextResetUtc, failedAt, retryAt);
+                    nextVisitorResetUtc = DeferIfDue(nextVisitorResetUtc, failedAt, retryAt);
                 }
             }
         }
@@ -252,6 +253,16 @@ public class DemoDataHostedService : BackgroundService
         config.VisitorResetIntervalMinutes > 0
             ? recorded ?? now.AddMinutes(config.VisitorResetIntervalMinutes)
             : null;
+
+    /// <summary>
+    /// The time of a step that was due when a tick failed moves to <paramref name="retryAt"/>, so a step that fails at
+    /// once is not tried again at once. A step not yet due keeps its time.
+    /// </summary>
+    internal static DateTime DeferIfDue(DateTime due, DateTime now, DateTime retryAt) => due <= now ? retryAt : due;
+
+    /// <inheritdoc cref="DeferIfDue(DateTime, DateTime, DateTime)"/>
+    internal static DateTime? DeferIfDue(DateTime? due, DateTime now, DateTime retryAt) =>
+        due is { } at ? DeferIfDue(at, now, retryAt) : null;
 
     internal static TimeSpan DelayUntilNextWake(
         DateTime now,
@@ -346,7 +357,7 @@ public class DemoDataHostedService : BackgroundService
         {
             await _apiClient.ResetAsync(cancellationToken);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (DemoApiFailure.Is(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to reset the demo tenant (may not exist yet), continuing with regeneration");
             succeeded = false;
@@ -383,12 +394,21 @@ public class DemoDataHostedService : BackgroundService
 
     /// <summary>
     /// Seeds the people beside the realtime stream rather than in it, so the host's chart takes no gap for as long as
-    /// the seeds run. A run still going is left to finish.
+    /// the seeds run. A run still going finishes first and a new run follows it, because a reset may have wiped what
+    /// that run already seeded.
     /// </summary>
     private void StartSeedingPeople(CancellationToken cancellationToken)
     {
-        if (_peopleSeeding.IsCompleted)
-            _peopleSeeding = Task.Run(() => SeedPeopleAsync(cancellationToken), CancellationToken.None);
+        var previous = _peopleSeeding;
+        _peopleSeeding = previous.IsCompleted
+            ? Task.Run(() => SeedPeopleAsync(cancellationToken), CancellationToken.None)
+            : RunAfterAsync(previous, cancellationToken);
+    }
+
+    private async Task RunAfterAsync(Task previous, CancellationToken cancellationToken)
+    {
+        await previous.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        await SeedPeopleAsync(cancellationToken);
     }
 
     /// <summary>
@@ -431,7 +451,7 @@ public class DemoDataHostedService : BackgroundService
         {
             await _apiClient.UpdateStatusAsync(nextResetAt: nextResetUtc, ct: cancellationToken);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (DemoApiFailure.Is(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to update demo status after reset");
         }
@@ -450,7 +470,7 @@ public class DemoDataHostedService : BackgroundService
         {
             await _apiClient.ResetVisitorStateAsync(cancellationToken);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (DemoApiFailure.Is(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to reset the clinic persona's views and rules");
         }
@@ -466,7 +486,7 @@ public class DemoDataHostedService : BackgroundService
         {
             await _apiClient.UpdateStatusAsync(nextVisitorResetAt: nextVisitorResetUtc, ct: cancellationToken);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (DemoApiFailure.Is(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to record the next visitor reset");
         }
@@ -488,31 +508,38 @@ public class DemoDataHostedService : BackgroundService
 
     private async Task GenerateAndPostEntryAsync(CancellationToken cancellationToken)
     {
+        var entry = _generator.GenerateCurrentEntry();
+
+        _logger.LogInformation(
+            "Demo data: Generated entry SGV={Sgv}, Direction={Direction}",
+            entry.Sgv,
+            entry.Direction
+        );
+
+        await _apiClient.PostCurrentEntryAsync(entry, cancellationToken);
+
+        var treatments = _generator.GenerateCurrentTreatments(entry).ToList();
+        if (treatments.Count > 0)
+        {
+            await _apiClient.PostCurrentTreatmentsAsync(treatments, cancellationToken);
+        }
+
+        var deviceStatus = _generator.GenerateCurrentDeviceStatus(entry, treatments);
+        await _apiClient.PostDeviceStatusAsync(deviceStatus, cancellationToken);
+    }
+
+    /// <summary>
+    /// The first reading of a start. A failed call is logged and the loop carries on to the next tick.
+    /// </summary>
+    private async Task TryGenerateAndPostEntryAsync(CancellationToken cancellationToken)
+    {
         try
         {
-            var entry = _generator.GenerateCurrentEntry();
-
-            _logger.LogInformation(
-                "Demo data: Generated entry SGV={Sgv}, Direction={Direction}",
-                entry.Sgv,
-                entry.Direction
-            );
-
-            await _apiClient.PostCurrentEntryAsync(entry, cancellationToken);
-
-            var treatments = _generator.GenerateCurrentTreatments(entry).ToList();
-            if (treatments.Count > 0)
-            {
-                await _apiClient.PostCurrentTreatmentsAsync(treatments, cancellationToken);
-            }
-
-            var deviceStatus = _generator.GenerateCurrentDeviceStatus(entry, treatments);
-            await _apiClient.PostDeviceStatusAsync(deviceStatus, cancellationToken);
+            await GenerateAndPostEntryAsync(cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (DemoApiFailure.Is(ex, cancellationToken))
         {
-            _logger.LogError(ex, "Failed to generate and post demo entry");
-            throw;
+            _logger.LogError(ex, "Failed to post the first demo entry");
         }
     }
 

@@ -12,6 +12,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Demo;
 using Nocturne.Core.Models.Identity;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;

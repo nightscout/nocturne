@@ -1,5 +1,6 @@
 #pragma warning disable ASPIREPIPELINES003 // Experimental container image APIs
 
+using System.Globalization;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Publishing;
@@ -39,24 +40,26 @@ public class DemoServiceOptions
     public bool RegenerateOnStartup { get; set; }
 
     /// <summary>
-    /// Number of days of historical data to backfill.
+    /// Number of days of historical data to backfill. Null leaves the demo service's own default.
     /// </summary>
-    public int BackfillDays { get; set; } = 90;
+    public int? BackfillDays { get; set; }
 
     /// <summary>
-    /// Interval in minutes between generated data points.
+    /// Interval in minutes between generated data points. Null leaves the demo service's own default.
     /// </summary>
-    public int IntervalMinutes { get; set; } = 5;
+    public int? IntervalMinutes { get; set; }
 
     /// <summary>
-    /// Interval in minutes between full demo data resets. Set to 0 to disable.
+    /// Interval in minutes between full demo data resets. Set to 0 to disable. Null leaves the demo service's own
+    /// default.
     /// </summary>
-    public int ResetIntervalMinutes { get; set; } = 0;
+    public int? ResetIntervalMinutes { get; set; }
 
     /// <summary>
-    /// Interval in minutes between visitor resets of the clinic persona's views and rules. Set to 0 to disable.
+    /// Interval in minutes between visitor resets of the clinic persona's views and rules. Set to 0 to disable. Null
+    /// leaves the demo service's own default.
     /// </summary>
-    public int VisitorResetIntervalMinutes { get; set; } = 60;
+    public int? VisitorResetIntervalMinutes { get; set; }
 }
 
 /// <summary>
@@ -104,16 +107,10 @@ public static class DemoServiceExtensions
         // Apply configuration values
         options.ClearOnStartup = configSection.GetValue("ClearOnStartup", options.ClearOnStartup);
         options.RegenerateOnStartup = configSection.GetValue("RegenerateOnStartup", options.RegenerateOnStartup);
-        options.BackfillDays = configSection.GetValue("BackfillDays", options.BackfillDays);
-        options.IntervalMinutes = configSection.GetValue("IntervalMinutes", options.IntervalMinutes);
-        options.ResetIntervalMinutes = configSection.GetValue(
-            "ResetIntervalMinutes",
-            options.ResetIntervalMinutes
-        );
-        options.VisitorResetIntervalMinutes = configSection.GetValue(
-            "VisitorResetIntervalMinutes",
-            options.VisitorResetIntervalMinutes
-        );
+        options.BackfillDays = configSection.GetValue<int?>("BackfillDays");
+        options.IntervalMinutes = configSection.GetValue<int?>("IntervalMinutes");
+        options.ResetIntervalMinutes = configSection.GetValue<int?>("ResetIntervalMinutes");
+        options.VisitorResetIntervalMinutes = configSection.GetValue<int?>("VisitorResetIntervalMinutes");
 
         // Apply user configuration overrides
         configure?.Invoke(options);
@@ -137,11 +134,13 @@ public static class DemoServiceExtensions
         demoService
             .WithEnvironment("DemoMode__Enabled", "true")
             .WithEnvironment("DemoMode__ClearOnStartup", options.ClearOnStartup.ToString().ToLowerInvariant())
-            .WithEnvironment("DemoMode__RegenerateOnStartup", options.RegenerateOnStartup.ToString().ToLowerInvariant())
-            .WithEnvironment("DemoMode__BackfillDays", options.BackfillDays.ToString())
-            .WithEnvironment("DemoMode__IntervalMinutes", options.IntervalMinutes.ToString())
-            .WithEnvironment("DemoMode__ResetIntervalMinutes", options.ResetIntervalMinutes.ToString())
-            .WithEnvironment("DemoMode__VisitorResetIntervalMinutes", options.VisitorResetIntervalMinutes.ToString());
+            .WithEnvironment("DemoMode__RegenerateOnStartup", options.RegenerateOnStartup.ToString().ToLowerInvariant());
+
+        WithConfiguredEnvironment(demoService, "DemoMode__BackfillDays", options.BackfillDays);
+        WithConfiguredEnvironment(demoService, "DemoMode__IntervalMinutes", options.IntervalMinutes);
+        WithConfiguredEnvironment(demoService, "DemoMode__ResetIntervalMinutes", options.ResetIntervalMinutes);
+        WithConfiguredEnvironment(
+            demoService, "DemoMode__VisitorResetIntervalMinutes", options.VisitorResetIntervalMinutes);
 
         // API should reference demo service for health monitoring
         apiEnvironment.WithEnvironment("DemoService__Url", demoService.GetEndpoint("http"))
@@ -156,5 +155,11 @@ public static class DemoServiceExtensions
         demoService.WithDemoCommands();
 
         return demoService;
+    }
+
+    private static void WithConfiguredEnvironment(IResourceBuilder<ProjectResource> demoService, string name, int? value)
+    {
+        if (value is { } configured)
+            demoService.WithEnvironment(name, configured.ToString(CultureInfo.InvariantCulture));
     }
 }
