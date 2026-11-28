@@ -189,18 +189,23 @@ public class ServicesController : ControllerBase
 
     /// <summary>
     /// Get capabilities for a specific connector, and when an API secret the caller saves on it stops.
+    /// The history reach is the one the tenant's connector configuration has for a caller holding
+    /// connectors.read, else the one the connector declares.
     /// </summary>
     /// <param name="id">The connector ID (e.g., "dexcom", "libre")</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Connector capabilities</returns>
     [HttpGet("connectors/{id}/capabilities")]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorCapabilities), 200)]
     [ProducesResponseType(404)]
-    public ActionResult<ConnectorCapabilities> GetConnectorCapabilities(string id)
+    public async Task<ActionResult<ConnectorCapabilities>> GetConnectorCapabilities(
+        string id, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Getting connector capabilities for: {Id}", id);
 
-        var capabilities = _dataSourceService.GetConnectorCapabilities(id);
+        var capabilities = await _dataSourceService.GetConnectorCapabilitiesAsync(
+            id, Scope.Satisfies(HttpContext.GetGrantedScopes(), Scope.ConnectorsRead), cancellationToken);
         if (capabilities == null)
         {
             return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");

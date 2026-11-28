@@ -156,7 +156,6 @@ public class ReadEndpointScopeEnforcementTests
             ["TrackersController.GetDeviceEventTypes"] = V4Reason.StaticReference,
             ["ServicesController.GetUploaderApps"] = V4Reason.StaticReference,
             ["ServicesController.GetUploaderSetup"] = V4Reason.StaticReference,
-            ["ServicesController.GetConnectorCapabilities"] = V4Reason.StaticReference,
             ["ServicesController.GetApiInfo"] = V4Reason.StaticReference,
             ["SupportController.GetFallbackUrl"] = V4Reason.StaticReference,
 
@@ -172,6 +171,9 @@ public class ReadEndpointScopeEnforcementTests
 
             // Drops the sections whose UISettingsSection.ReadScope the caller does not hold.
             ["UISettingsController.GetUISettings"] = V4Reason.CallerNarrowedAnswer,
+
+            // The history reach follows the tenant's connector configuration only for a caller holding connectors.read.
+            ["ServicesController.GetConnectorCapabilities"] = V4Reason.CallerNarrowedAnswer,
         };
 
     [Fact]

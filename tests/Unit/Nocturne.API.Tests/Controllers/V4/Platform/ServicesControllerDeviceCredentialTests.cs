@@ -32,6 +32,7 @@ public class ServicesControllerDeviceCredentialTests
     private static readonly DateTime CallerEnd = new(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private readonly Mock<IConnectionService> _connections = new();
+    private readonly Mock<IDataSourceService> _dataSources = new();
     private AuthType _authType = AuthType.SessionCookie;
 
     private ServicesController Controller(DateTime? callerAccessEndsAt, params string[] scopes)
@@ -50,13 +51,12 @@ public class ServicesControllerDeviceCredentialTests
                 new MembershipFacts(Guid.CreateVersion7(), new TenantMemberAccess(scopes.ToHashSet(), false, callerAccessEndsAt), new TenantMemberAccess(scopes.ToHashSet(), false, callerAccessEndsAt), null))
             .StoreOn(httpContext);
 
-        var dataSources = new Mock<IDataSourceService>();
-        dataSources
-            .Setup(d => d.GetConnectorCapabilities(It.IsAny<string>()))
-            .Returns(() => new ConnectorCapabilities());
+        _dataSources
+            .Setup(d => d.GetConnectorCapabilitiesAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ConnectorCapabilities());
 
         return new ServicesController(
-            dataSources.Object,
+            _dataSources.Object,
             _connections.Object,
             Mock.Of<IConnectorHealthService>(),
             Mock.Of<IConnectorSyncService>(),
@@ -111,9 +111,9 @@ public class ServicesControllerDeviceCredentialTests
     [InlineData("nightscout", true, true)]
     [InlineData("nightscout", false, false)]
     [InlineData("dexcom", true, false)]
-    public void TheConnectorSaysWhenASavedSecretWouldStop(string connector, bool callerAccessEnds, bool stops)
+    public async Task TheConnectorSaysWhenASavedSecretWouldStop(string connector, bool callerAccessEnds, bool stops)
     {
-        var capabilities = Capabilities(Controller(callerAccessEnds ? CallerEnd : null, Scope.TenantSettings), connector);
+        var capabilities = await Capabilities(Controller(callerAccessEnds ? CallerEnd : null, Scope.TenantSettings), connector);
 
         capabilities.SavedSecretStopsAt.Should().Be(stops ? CallerEnd : null);
         capabilities.SavedSecretMakesNoCredential.Should().BeFalse();
@@ -122,9 +122,9 @@ public class ServicesControllerDeviceCredentialTests
     [Theory]
     [InlineData("nightscout", true)]
     [InlineData("dexcom", false)]
-    public void ACallerWhoOnlySetsUpDataSourcesIsToldASavedSecretMakesNoCredential(string connector, bool makesNone)
+    public async Task ACallerWhoOnlySetsUpDataSourcesIsToldASavedSecretMakesNoCredential(string connector, bool makesNone)
     {
-        var capabilities = Capabilities(Controller(CallerEnd, Scope.ConnectorsReadWrite), connector);
+        var capabilities = await Capabilities(Controller(CallerEnd, Scope.ConnectorsReadWrite), connector);
 
         capabilities.SavedSecretMakesNoCredential.Should().Be(makesNone);
         capabilities.SavedSecretStopsAt.Should().BeNull("a caller who makes no credential has none to stop");
@@ -161,25 +161,40 @@ public class ServicesControllerDeviceCredentialTests
 
     [Theory]
     [MemberData(nameof(CeilingsThatMayNotAdopt))]
-    public void AMixedOrTeamOnlyMemberIsToldASavedSecretMakesNoCredentialUnlessTheDirectReasonMayMakeOne(GrantCeiling? ceiling)
+    public async Task AMixedOrTeamOnlyMemberIsToldASavedSecretMakesNoCredentialUnlessTheDirectReasonMayMakeOne(GrantCeiling? ceiling)
     {
         var controller = Controller(null, Scope.TenantSettings);
         controller.HttpContext.SetGrantCeiling(ceiling);
 
-        Capabilities(controller, "nightscout").SavedSecretMakesNoCredential.Should().BeTrue();
+        (await Capabilities(controller, "nightscout")).SavedSecretMakesNoCredential.Should().BeTrue();
     }
 
     [Fact]
-    public void ASavedSecretStopsWithTheSumNotTheDirectReason()
+    public async Task ASavedSecretStopsWithTheSumNotTheDirectReason()
     {
         var controller = Controller(CallerEnd, Scope.TenantSettings);
         controller.HttpContext.SetGrantCeiling(new GrantCeiling(new HashSet<string> { Scope.TenantSettings }, null, false));
 
-        Capabilities(controller, "nightscout").SavedSecretStopsAt.Should().Be(CallerEnd);
+        (await Capabilities(controller, "nightscout")).SavedSecretStopsAt.Should().Be(CallerEnd);
     }
 
-    private static ConnectorCapabilities Capabilities(ServicesController controller, string connector) =>
-        controller.GetConnectorCapabilities(connector)
+    /// <summary>
+    /// The reach of the tenant's connector configuration is shown only to a caller who may read that
+    /// configuration; anyone else is shown the connector's declaration.
+    /// </summary>
+    [Theory]
+    [InlineData(Scope.ConnectorsRead, true)]
+    [InlineData(Scope.ConnectorsReadWrite, true)]
+    [InlineData(Scope.GlucoseRead, false)]
+    public async Task TheCapabilitiesReadTheTenantsConfigurationOnlyForACallerWhoMayReadIt(string scope, bool reads)
+    {
+        await Capabilities(Controller(CallerEnd, scope), "glooko");
+
+        _dataSources.Verify(d => d.GetConnectorCapabilitiesAsync("glooko", reads, It.IsAny<CancellationToken>()));
+    }
+
+    private static async Task<ConnectorCapabilities> Capabilities(ServicesController controller, string connector) =>
+        (await controller.GetConnectorCapabilities(connector))
             .Result.Should().BeOfType<OkObjectResult>().Which.Value
             .Should().BeOfType<ConnectorCapabilities>().Subject;
 }

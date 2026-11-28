@@ -15,6 +15,7 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.Connectors;
+using Nocturne.Core.Models.Services;
 using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Connectors;
@@ -216,11 +217,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string connectorName, CancellationToken ct)
     {
         var configType = ConnectorMetadataService.GetConfigurationTypeByConnectorId(connectorName);
-        if (configType is null || Activator.CreateInstance(configType) is not BaseConnectorConfiguration baseline)
+        if (configType is null || InstanceBaseline(configType, connectorName) is not { } baseline)
             return null;
-
-        var bindingName = configType.GetCustomAttribute<ConnectorRegistrationAttribute>()?.ConnectorName ?? connectorName;
-        _configuration.BindConnectorConfiguration(baseline, bindingName);
 
         var entity = await _configurations.FindAsync(connectorName, ct);
         var stored = entity is null ? null : JsonDocument.Parse(entity.ConfigurationJson);
@@ -516,21 +514,44 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             return null;
         }
 
-        if (Activator.CreateInstance(configType) is not BaseConnectorConfiguration config)
+        if (InstanceBaseline(configType, connectorName) is not { } config)
         {
             _logger.LogWarning("Could not create configuration for connector {ConnectorName}", connectorName);
             return null;
         }
 
-        var registration = configType.GetCustomAttribute<ConnectorRegistrationAttribute>();
-        var bindingName = registration?.ConnectorName ?? connectorName;
-
-        _configuration.BindConnectorConfiguration(
-            config,
-            bindingName
-        );
-
         return GetEffectiveConfiguration(config);
+    }
+
+    /// <inheritdoc />
+    public async Task<ConnectorHistoryReach?> GetHistoryReachAsync(string connectorName, CancellationToken ct = default)
+    {
+        var configType = ConnectorMetadataService.GetConfigurationTypeByConnectorId(connectorName);
+        if (configType is null)
+            return null;
+
+        var entity = await _configurations.FindAsync(connectorName, ct);
+        if (entity is null || InstanceBaseline(configType, connectorName) is not { } config)
+            return null;
+
+        using var stored = JsonDocument.Parse(entity.ConfigurationJson);
+        ConnectorConfigurationBinder.ApplyJsonToConfig(stored, config);
+        return config.HistoryReach();
+    }
+
+    /// <summary>
+    /// A new <paramref name="configType"/> bound over the instance's own settings
+    /// (<c>CONNECT_{NAME}_*</c>), which every tenant's connector starts from; null when the type
+    /// cannot be created.
+    /// </summary>
+    private BaseConnectorConfiguration? InstanceBaseline(Type configType, string connectorName)
+    {
+        if (Activator.CreateInstance(configType) is not BaseConnectorConfiguration baseline)
+            return null;
+
+        var bindingName = configType.GetCustomAttribute<ConnectorRegistrationAttribute>()?.ConnectorName ?? connectorName;
+        _configuration.BindConnectorConfiguration(baseline, bindingName);
+        return baseline;
     }
 
     /// <summary>
