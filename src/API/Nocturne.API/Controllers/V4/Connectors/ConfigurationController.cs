@@ -181,7 +181,8 @@ public class ConfigurationController : ControllerBase
     /// Gets the effective configuration for a connector: the non-secret runtime values resolved
     /// from stored configuration and environment variables. Secret values (passwords, tokens) are
     /// excluded, but the result includes non-secret account identifiers such as the connector
-    /// account username or email.
+    /// account username or email. An address holds only its shown form
+    /// (<see cref="ConnectorAddresses"/>).
     /// </summary>
     /// <param name="connectorName">The connector name</param>
     /// <param name="ct">Cancellation token</param>

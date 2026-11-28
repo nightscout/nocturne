@@ -226,7 +226,7 @@ public interface IConnectorConfigurationService
 
     /// <summary>
     /// The values a running connector actually uses, including those resolved from environment
-    /// variables.
+    /// variables. Secrets are left out, and an address is in its shown form only.
     /// </summary>
     /// <returns>Dictionary of property names to effective values, or null if connector is not reachable</returns>
     Task<Dictionary<string, object?>?> GetEffectiveConfigurationAsync(string connectorName, CancellationToken ct = default);

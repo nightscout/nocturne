@@ -52,6 +52,13 @@ public class RuleScopeClassBackfillJobTests
         rules.VerifyNoOtherCalls();
     }
 
+    [Fact]
+    public void Its_name_differs_from_the_name_every_tenant_already_finished()
+    {
+        new RuleScopeClassBackfillJob(NullLogger<RuleScopeClassBackfillJob>.Instance).Name
+            .Should().NotBe("alert-rule-scope-class-backfill");
+    }
+
     private static AlertRuleSnapshot Rule(string conditionParams, RuleScopeClass stored) =>
         new(Guid.CreateVersion7(), Tenant.TenantId, "rule", AlertConditionType.Threshold, conditionParams,
             AlertRuleSeverity.Warning, "{}", 0, false, null, ScopeClass: stored);
