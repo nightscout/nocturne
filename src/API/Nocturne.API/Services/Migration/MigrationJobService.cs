@@ -1378,8 +1378,7 @@ internal class MigrationJob
         if (ReadFirst is not { } recent)
             return null;
 
-        var split = _window.To - recent;
-        split = split.AddTicks(-(split.Ticks % TimeSpan.TicksPerMillisecond));
+        var split = RecordTime.AtMillisecond(_window.To - recent);
 
         return _window.From is { } from && from >= split ? null : split;
     }

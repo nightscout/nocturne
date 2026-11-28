@@ -174,8 +174,8 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
     private static DateTime? DeclaredOverrideEnd(DeviceStatus ds, DateTime timestamp)
     {
         DateTime? end = ds.Override!.Duration is > 0
-            ? (ParseTimestampToDateTime(ds.Override.Timestamp) ?? timestamp)
-                .AddSeconds(ds.Override.Duration.Value)
+            ? RecordTime.AtMillisecond((ParseTimestampToDateTime(ds.Override.Timestamp) ?? timestamp)
+                .AddSeconds(ds.Override.Duration.Value))
             : null;
         return end > timestamp ? end : null;
     }
@@ -1374,11 +1374,15 @@ internal class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer
         if (ParseTimestampToDateTime(ds.Loop?.Predicted?.StartDate) is { } predictedTime)
             return predictedTime;
 
-        return _time.GetUtcNow().UtcDateTime;
+        return RecordTime.AtMillisecond(_time.GetUtcNow().UtcDateTime);
     }
 
+    /// <summary>
+    /// An uploaded time as the store keeps a record time, so a fold compares it exactly with the spans it
+    /// reads back.
+    /// </summary>
     private static DateTime? ParseTimestampToDateTime(string? timestamp) =>
-        UploaderTimestamp.ParseUtcDateTime(timestamp);
+        UploaderTimestamp.ParseUtcDateTime(timestamp) is { } parsed ? RecordTime.AtMillisecond(parsed) : null;
 
     private static Dictionary<string, object> BuildOverrideMetadata(OverrideStatus overrideStatus)
     {

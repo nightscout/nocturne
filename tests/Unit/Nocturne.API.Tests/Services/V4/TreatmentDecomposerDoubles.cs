@@ -93,7 +93,8 @@ internal static partial class TreatmentDecomposerDoubles
         RelativeTempBasalRates? relativeTempBasalRates = null,
         IDeviceEventReactor? deviceEventReactor = null,
         IRecordChangePublisher? changes = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        ILogger<TreatmentDecomposer>? logger = null)
     {
         if (foods is null)
         {
@@ -123,6 +124,7 @@ internal static partial class TreatmentDecomposerDoubles
             audit: audit,
             deviceEventReactor: deviceEventReactor,
             changes: changes,
+            logger: logger,
             time: time);
     }
 }

@@ -1,5 +1,8 @@
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models;
@@ -225,6 +228,60 @@ internal static class V4RecordTables
     /// <summary>The tables of the given kinds, in declaration order.</summary>
     internal static IReadOnlyList<V4RecordTable> OfKind(params V4RecordKind[] kinds) =>
         [.. All.Where(t => kinds.Contains(t.Kind))];
+
+    private static readonly HashSet<Type> Entities = [.. All.Select(t => t.Entity)];
+
+    private static readonly HashSet<string> RowStamps =
+    [
+        nameof(ISystemCreated.SysCreatedAt),
+        nameof(ISystemTimestamped.SysUpdatedAt),
+        nameof(IEntityCreated.CreatedAt),
+        nameof(IEntityTimestamped.UpdatedAt),
+        nameof(ISoftDeletable.DeletedAt),
+    ];
+
+    private static readonly ConcurrentDictionary<IEntityType, string[]> RecordTimes = new();
+
+    /// <summary>
+    /// The columns of <paramref name="entity"/> that say when its record happened, none for a type that
+    /// is not one of <see cref="All"/>: every <see cref="DateTime"/> column but the stamps of when its row
+    /// was written, changed and deleted.
+    /// </summary>
+    /// <remarks>
+    /// The legacy APIs name a record by its Unix milliseconds and find it again by that instant, so a
+    /// record time is stored at the millisecond (<see cref="RecordTime.AtMillisecond"/>). The row
+    /// stamps keep the microsecond of <see cref="NocturneDbContext.AtStoredPrecision"/>, so a new stamp of
+    /// the row's own life goes in <see cref="RowStamps"/>.
+    /// </remarks>
+    internal static IReadOnlyList<string> RecordTimesOf(IEntityType entity) =>
+        RecordTimes.GetOrAdd(entity, static type => Entities.Contains(type.ClrType)
+            ? [.. type.GetProperties()
+                .Where(p => (p.ClrType == typeof(DateTime) || p.ClrType == typeof(DateTime?)) && !RowStamps.Contains(p.Name))
+                .Select(p => p.Name)]
+            : []);
+
+    /// <summary>
+    /// Cuts the record times (<see cref="RecordTimesOf"/>) of the row <paramref name="entry"/> tracks to
+    /// <see cref="RecordTime.AtMillisecond"/>. A time that, cut, is the one stored is no longer modified, so
+    /// a record sent again below the millisecond writes nothing.
+    /// </summary>
+    /// <remarks>
+    /// It writes through the entry, which a save with change detection off still sees, and it may run before
+    /// or after change detection.
+    /// </remarks>
+    internal static void CutRecordTimes(EntityEntry entry)
+    {
+        foreach (var name in RecordTimesOf(entry.Metadata))
+        {
+            var property = entry.Property(name);
+            if (property.CurrentValue is not DateTime time || time.Ticks % TimeSpan.TicksPerMillisecond == 0)
+                continue;
+
+            property.CurrentValue = RecordTime.AtMillisecond(time);
+            if (entry.State is EntityState.Modified && Equals(property.OriginalValue, property.CurrentValue))
+                property.IsModified = false;
+        }
+    }
 
     private static bool IsCounted(V4RecordTable table) =>
         table.Kind is not (V4RecordKind.Profile or V4RecordKind.Activity) && !Uncounted.ContainsKey(table.Entity);

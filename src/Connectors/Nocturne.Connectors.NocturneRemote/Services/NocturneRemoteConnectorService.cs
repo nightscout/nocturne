@@ -559,7 +559,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         Func<T, DateTime?>? timeOf = null) where T : class
     {
         const int reachable = V4ApiLimits.MaxMergedPageWindow;
-        var floor = from is { } lower ? MillisecondOf(lower) : (DateTime?)null;
+        var floor = from is { } lower ? RecordTime.AtMillisecond(lower) : (DateTime?)null;
         var offset = 0;
         var stepped = false;
         DateTime? oldest = null;
@@ -614,11 +614,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         }
     }
 
-    private static DateTime MillisecondOf(DateTime at) =>
-        at.AddTicks(-(at.Ticks % TimeSpan.TicksPerMillisecond));
-
     private static DateTime EndOfMillisecond(DateTime at) =>
-        MillisecondOf(at) + TimeSpan.FromMilliseconds(1) - TimeSpan.FromMicroseconds(1);
+        RecordTime.AtMillisecond(at) + TimeSpan.FromMilliseconds(1) - TimeSpan.FromMicroseconds(1);
 
     private async Task<List<T>> FetchAllAsync<T>(
         string endpoint, DateTime? from, DateTime? to,

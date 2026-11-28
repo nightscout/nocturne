@@ -147,6 +147,6 @@ public class SensorGlucoseRepositoryLiveRelayFailureTests
         logger.Entries.Should().Contain(e => e.Level == LogLevel.Error && e.Exception == failure);
         interceptor.Armed = false;
         context.ChangeTracker.Clear();
-        (await context.Tenants.AsNoTracking().SingleAsync(t => t.Id == TenantId)).LastReadingAt.Should().Be(timestamp);
+        (await context.Tenants.AsNoTracking().SingleAsync(t => t.Id == TenantId)).LastReadingAt.Should().Be(RecordTime.AtMillisecond(timestamp));
     }
 }

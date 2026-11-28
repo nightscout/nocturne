@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Audit;
@@ -33,6 +34,7 @@ public class TreatmentDecomposerPumpSuspensionStoreTests : IDisposable
     private readonly AuditContext _audit = new();
     private readonly IDuplicateLinker _dedup = Mock.Of<IDuplicateLinker>();
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(Now));
+    private readonly Mock<ILogger<TreatmentDecomposer>> _logger = new();
     private readonly StateSpanRepository _spans;
     private readonly TreatmentDecomposer _decomposer;
 
@@ -45,7 +47,8 @@ public class TreatmentDecomposerPumpSuspensionStoreTests : IDisposable
         _decomposer = TreatmentDecomposerDoubles.Stored(
             _factory, _dedup, _audit,
             stateSpans: new StateSpanService(_spans, NullLogger<StateSpanService>.Instance),
-            time: _clock);
+            time: _clock,
+            logger: _logger.Object);
     }
 
     public void Dispose()
@@ -122,6 +125,31 @@ public class TreatmentDecomposerPumpSuspensionStoreTests : IDisposable
         await DecomposeAsync(PumpEvent("resume", "Pump Resume", Now.AddHours(2)));
 
         (await SuspensionsAsync()).Should().Equal([("pump-suspended-tx:suspend", Now, (DateTime?)Now.AddHours(1))]);
+    }
+
+    /// <summary>
+    /// A resume dated a day ahead that arrived below the millisecond ends the suspension at its arrival as
+    /// the store keeps it. The suspend and the resume uploaded again together find that end and change nothing.
+    /// </summary>
+    [Fact]
+    public async Task AResumeDatedADayAheadArrivingBelowTheMillisecond_EndsTheSuspensionOnceAcrossARefold()
+    {
+        var arrived = Now.AddHours(1).AddTicks(1_234_567);
+        await DecomposeAsync(PumpEvent("suspend", "Pump Suspend", Now));
+        _clock.SetUtcNow(new DateTimeOffset(arrived));
+        await DecomposeAsync(PumpEvent("resume-ahead", "Pump Resume", Ahead));
+        var ended = (DateTime?)RecordTime.AtMillisecond(arrived);
+
+        (await SuspensionsAsync()).Should().Equal([("pump-suspended-tx:suspend", Now, ended)]);
+
+        _clock.SetUtcNow(new DateTimeOffset(Now.AddHours(2)));
+        await DecomposeAsync(PumpEvent("suspend", "Pump Suspend", Now), PumpEvent("resume-ahead", "Pump Resume", Ahead));
+
+        (await SuspensionsAsync()).Should().Equal([("pump-suspended-tx:suspend", Now, ended)]);
+        _logger.Verify(
+            l => l.Log(LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
     }
 
     /// <summary>

@@ -92,7 +92,7 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
     [InlineData(1, false)]
     public async Task FindStoredDuplicateAsync_RangeIsHalfOpen(int offsetMillis, bool expectMatch)
     {
-        var now = DateTime.UtcNow;
+        var now = RecordTime.AtMillisecond(DateTime.UtcNow);
         var from = now.AddMilliseconds(offsetMillis);
         SeedReading(now, 134, "Dexcom G7 DXCMRf");
 

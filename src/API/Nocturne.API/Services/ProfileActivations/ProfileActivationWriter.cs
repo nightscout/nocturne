@@ -1,5 +1,6 @@
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -90,7 +91,10 @@ public sealed class ProfileActivationWriter
             return [];
 
         foreach (var (activation, stored) in writes)
+        {
             activation.Id = stored?.Id ?? (activation.Id == Guid.Empty ? Guid.CreateVersion7() : activation.Id);
+            AtRecordTime(activation);
+        }
 
         var family = await LoadAsync(
             writes.SelectMany(w => w.Stored is { } stored
@@ -456,6 +460,17 @@ public sealed class ProfileActivationWriter
         activation.Phase == ProfileActivationPhase.Effective
             ? ProfileActivationLegacyFields.ReportedEnd(activation)
             : NaturalEnd(activation);
+
+    /// <summary>
+    /// Cuts the times of <paramref name="activation"/> as the store keeps a record time, so its family is
+    /// planned on the instants it will be stored at and compared exactly with the rows read back.
+    /// </summary>
+    private static void AtRecordTime(ProfileActivation activation)
+    {
+        activation.StartTimestamp = RecordTime.AtMillisecond(activation.StartTimestamp);
+        activation.EndTimestamp = activation.EndTimestamp is { } end ? RecordTime.AtMillisecond(end) : null;
+        activation.EndedAt = activation.EndedAt is { } ended ? RecordTime.AtMillisecond(ended) : null;
+    }
 
     private static bool MovedFrom(ProfileActivation stored, ProfileActivation written) =>
         stored.StartTimestamp != written.StartTimestamp

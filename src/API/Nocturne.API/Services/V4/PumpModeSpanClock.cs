@@ -20,8 +20,16 @@ namespace Nocturne.API.Services.V4;
 internal static class PumpModeSpanClock
 {
     /// <summary>A transition at <see cref="At"/> of a record the server stored at <see cref="ArrivedAt"/>.</summary>
+    /// <remarks>
+    /// Both are kept as the store keeps a record time (<see cref="RecordTime.AtMillisecond"/>): either can
+    /// become a span's start or end, and a fold run again compares it with the end the store kept.
+    /// </remarks>
     public readonly record struct Transition(DateTime At, DateTime? ArrivedAt)
     {
+        public DateTime At { get; } = RecordTime.AtMillisecond(At);
+
+        public DateTime? ArrivedAt { get; } = ArrivedAt is { } arrived ? RecordTime.AtMillisecond(arrived) : null;
+
         /// <summary>Whether <paramref name="span"/> ends where this transition ends a span that starts no later than it.</summary>
         public bool Ended(StateSpan span) =>
             span.EndTimestamp == At || (IsAhead(At, ArrivedAt) && span.EndTimestamp == ArrivedAt);
@@ -55,7 +63,7 @@ internal static class PumpModeSpanClock
             return transition.At;
 
         var arrived = transition.ArrivedAt!.Value;
-        if (Stamped(open.CreatedAt) is { } spanArrived && arrived < spanArrived)
+        if (Stamped(open.CreatedAt) is { } spanArrived && arrived < RecordTime.AtMillisecond(spanArrived))
             return null;
         return arrived > open.StartTimestamp ? arrived : open.StartTimestamp;
     }
