@@ -224,7 +224,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     /// <returns>The saved configuration</returns>
     [HttpPut("{connectorName}")]
-    [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
+    [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus", "Services_GetConnectorCapabilities"])]
     [RequireScope(Scope.ConnectorsReadWrite)]
     [ProducesResponseType(typeof(ConnectorConfigurationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -673,7 +673,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="connectorName">The connector name</param>
     /// <param name="ct">Cancellation token</param>
     [HttpDelete("{connectorName}")]
-    [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
+    [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus", "Services_GetConnectorCapabilities"])]
     [RequireScope(Scope.ConnectorsReadWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

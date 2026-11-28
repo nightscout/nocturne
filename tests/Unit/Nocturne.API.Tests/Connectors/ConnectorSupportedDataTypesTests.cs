@@ -7,7 +7,7 @@ namespace Nocturne.API.Tests.Connectors;
 
 /// <summary>
 /// A connector's <see cref="ConnectorRegistrationAttribute.SupportedDataTypes"/> array is passed
-/// straight through by <c>DataSourceService.GetConnectorCapabilities</c> to the API response, and
+/// straight through by <c>DataSourceService.GetConnectorCapabilitiesAsync</c> to the API response, and
 /// the frontend's connector settings page renders it with a keyed Svelte <c>{#each}</c> keyed on the
 /// data type itself. A duplicate entry in the array is therefore a duplicate key, which throws
 /// <c>each_key_duplicate</c> and takes down that connector's settings page entirely (#1797, where

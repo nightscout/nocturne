@@ -418,7 +418,8 @@ public class DataSourceService : IDataSourceService
     }
 
     /// <inheritdoc />
-    public ConnectorCapabilities? GetConnectorCapabilities(string connectorId)
+    public async Task<ConnectorCapabilities?> GetConnectorCapabilitiesAsync(
+        string connectorId, bool readsConfiguration, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(connectorId))
         {
@@ -439,7 +440,10 @@ public class DataSourceService : IDataSourceService
                 .ToList()
                 ?? new List<string>(),
             SupportsHistoricalSync = registration.SupportsHistoricalSync,
-            HistoryReach = registration.HistoryReach,
+            HistoryReach = (readsConfiguration
+                    ? await _connectorConfiguration.GetHistoryReachAsync(connectorId, cancellationToken)
+                    : null)
+                ?? registration.HistoryReach,
             SupportsManualSync = registration.SupportsManualSync
         };
     }

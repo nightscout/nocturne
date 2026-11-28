@@ -32,9 +32,17 @@ public interface IDataSourceService
         CancellationToken cancellationToken = default
     );
 
+    /// <summary>
+    /// The connector's capabilities. Their history reach is the one the tenant's stored configuration
+    /// answers when <paramref name="readsConfiguration"/> and the tenant has one, else the reach the
+    /// connector declares.
+    /// </summary>
     /// <param name="connectorId">The connector ID (e.g., "dexcom", "glooko")</param>
+    /// <param name="readsConfiguration">Whether the caller may read the tenant's connector configuration.</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Connector capabilities if found</returns>
-    ConnectorCapabilities? GetConnectorCapabilities(string connectorId);
+    Task<ConnectorCapabilities?> GetConnectorCapabilitiesAsync(
+        string connectorId, bool readsConfiguration, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get uploader apps that can push data to Nocturne
