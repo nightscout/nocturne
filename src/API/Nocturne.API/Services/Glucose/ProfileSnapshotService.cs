@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -78,6 +79,7 @@ public sealed class ProfileSnapshotService : IProfileSnapshotService
 
         if (!await _therapySettings.HasDataAsync(ct))
         {
+            response.UsesDefaults = true;
             response.Segments.Add(new ProfileSnapshotSegment
             {
                 StartMills = nowMills,
@@ -88,6 +90,7 @@ public sealed class ProfileSnapshotService : IProfileSnapshotService
                 CarbRatio = DefaultCarbRatio,
                 MinBg = DefaultMinBg,
                 MaxBg = DefaultMaxBg,
+                DefaultTargets = true,
                 Peak = peak,
                 Curve = curve,
             });
@@ -99,7 +102,7 @@ public sealed class ProfileSnapshotService : IProfileSnapshotService
         foreach (var segment in timeline.Segments)
         {
             var snap = segment.Snapshot;
-            var targetCache = new Dictionary<int, (double Low, double High)>();
+            var targetCache = new Dictionary<int, Targets>();
 
             var t = segment.StartMills;
             while (t < segment.EndMills)
@@ -127,6 +130,7 @@ public sealed class ProfileSnapshotService : IProfileSnapshotService
                     CarbRatio = scalars.CarbRatio,
                     MinBg = scalars.MinBg,
                     MaxBg = scalars.MaxBg,
+                    DefaultTargets = scalars.DefaultTargets,
                     Peak = peak,
                     Curve = curve,
                 });
@@ -139,21 +143,24 @@ public sealed class ProfileSnapshotService : IProfileSnapshotService
         return response;
     }
 
-    private readonly record struct Scalars(double Sens, double CarbRatio, double Basal, double MinBg, double MaxBg);
+    private readonly record struct Targets(double Low, double High, bool IsDefault);
+
+    private readonly record struct Scalars(
+        double Sens, double CarbRatio, double Basal, double MinBg, double MaxBg, bool DefaultTargets);
 
     private async Task<Scalars> ScalarsAtAsync(
         TherapySnapshot snap,
         long t,
         string? profileId,
-        Dictionary<int, (double Low, double High)> targetCache,
+        Dictionary<int, Targets> targetCache,
         CancellationToken ct)
     {
         var bucket = ScheduleEntryTime.SecondsOfDay(t + snap.CcpTimeshiftMs, snap.Timezone);
         if (!targetCache.TryGetValue(bucket, out var target))
         {
-            var low = await _targetRange.GetLowBGTargetAsync(t, profileId, ct);
-            var high = await _targetRange.GetHighBGTargetAsync(t, profileId, ct);
-            target = (low, high);
+            target = await _targetRange.FindBGTargetRangeAsync(t, profileId, ct) is { } stored
+                ? new Targets(stored.Low, stored.High, false)
+                : DefaultTargets;
             targetCache[bucket] = target;
         }
 
@@ -162,8 +169,12 @@ public sealed class ProfileSnapshotService : IProfileSnapshotService
             snap.CarbRatioAt(t),
             snap.BasalRateAt(t),
             target.Low,
-            target.High);
+            target.High,
+            target.IsDefault);
     }
+
+    private static readonly Targets DefaultTargets =
+        new(GlucoseConstants.TargetBottomMgdl, GlucoseConstants.TargetTopMgdl, true);
 
     private static void EnsureContiguous(IReadOnlyList<ProfileSnapshotSegment> segments, long start, long end)
     {

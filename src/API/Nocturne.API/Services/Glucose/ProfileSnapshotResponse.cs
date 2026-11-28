@@ -22,6 +22,13 @@ public sealed class ProfileSnapshotResponse
     /// <summary>Ascending, contiguous, gap/overlap-free segments covering [now, now+24h).</summary>
     [JsonPropertyName("segments")]
     public List<ProfileSnapshotSegment> Segments { get; set; } = new();
+
+    /// <summary>
+    /// True when the tenant has no therapy data, so basal, sensitivity, carb ratio and targets are
+    /// defaults; a client sends no targets to its alert engine for it, as the server leaves them absent.
+    /// </summary>
+    [JsonPropertyName("uses_defaults")]
+    public bool UsesDefaults { get; set; }
 }
 
 /// <summary>
@@ -52,6 +59,13 @@ public sealed class ProfileSnapshotSegment
 
     /// <summary>High BG target (mg/dL).</summary>
     [JsonPropertyName("max_bg")] public double MaxBg { get; set; }
+
+    /// <summary>
+    /// True when <c>min_bg</c> and <c>max_bg</c> are the fallback defaults, not a stored target
+    /// schedule; a client sends no targets to its alert engine for the segment, as the server
+    /// leaves them absent.
+    /// </summary>
+    [JsonPropertyName("default_targets")] public bool DefaultTargets { get; set; }
 
     /// <summary>Insulin activity peak (minutes).</summary>
     [JsonPropertyName("peak")] public int Peak { get; set; }
