@@ -44,14 +44,20 @@ spec:
               value: "http://+:{{ .Values.demo.containerPort }}"
             - name: DemoMode__Enabled
               value: "true"
+            {{- if not (kindIs "invalid" .Values.demo.backfillDays) }}
             - name: DemoMode__BackfillDays
               value: {{ .Values.demo.backfillDays | quote }}
+            {{- end }}
+            {{- if not (kindIs "invalid" .Values.demo.intervalMinutes) }}
             - name: DemoMode__IntervalMinutes
               value: {{ .Values.demo.intervalMinutes | quote }}
+            {{- end }}
             - name: DemoMode__ResetIntervalMinutes
               value: {{ .Values.demo.resetIntervalMinutes | quote }}
+            {{- if not (kindIs "invalid" .Values.demo.visitorResetIntervalMinutes) }}
             - name: DemoMode__VisitorResetIntervalMinutes
               value: {{ .Values.demo.visitorResetIntervalMinutes | quote }}
+            {{- end }}
             - name: DemoService__ApiUrl
               value: {{ include "nocturne.api.internalUrl" . | quote }}
             - name: DemoService__AccessMode

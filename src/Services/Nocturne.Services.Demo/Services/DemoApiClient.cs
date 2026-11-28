@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Demo;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Services.Demo.Services;
@@ -305,7 +306,7 @@ public sealed class DemoApiClient
         CancellationToken ct = default)
     {
         var client = _httpClientFactory.CreateClient("DemoAdmin");
-        var payload = new { nextResetAt, lastResetAt, isActive, nextVisitorResetAt };
+        var payload = new DemoStatusPatchDto(nextResetAt, lastResetAt, isActive, nextVisitorResetAt);
         var response = await client.PatchAsJsonAsync("api/v4/admin/demo/status", payload, ct);
         response.EnsureSuccessStatusCode();
     }

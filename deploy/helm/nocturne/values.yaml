@@ -231,10 +231,9 @@ demo:
     tag: ""              # defaults to .Chart.AppVersion
     digest: ""           # see api.image.digest for semantics
   containerPort: 8080
-  backfillDays: 90
-  intervalMinutes: 5
+  # backfillDays, intervalMinutes and visitorResetIntervalMinutes are unset: the demo service's own
+  # default applies. Set one to override it; 0 for visitorResetIntervalMinutes turns visitor resets off.
   resetIntervalMinutes: 1440
-  visitorResetIntervalMinutes: 60
   accessMode: open
   resources:
     requests:

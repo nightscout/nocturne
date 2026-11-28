@@ -69,7 +69,7 @@ public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
     /// One person's data: readings back over <paramref name="History"/>, their own target range schedule, and the latest
     /// reading's age. With <paramref name="ReadFailsAfter"/>, reading their glucose waits for it, then fails as the
     /// database fails; with <paramref name="Defect"/>, it throws that at once. <paramref name="Pumps"/> are their pump
-    /// snapshots, oldest first.
+    /// snapshots, oldest first. <paramref name="OnBoard"/> is what the overview read of their insulin and carbs on board.
     /// </summary>
     private sealed record Person(
         Func<int, double> Mgdl,
@@ -78,7 +78,8 @@ public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
         TimeSpan? LatestAge = null,
         Task? ReadFailsAfter = null,
         Exception? Defect = null,
-        PumpSnapshot[]? Pumps = null);
+        PumpSnapshot[]? Pumps = null,
+        OnBoardFigures? OnBoard = null);
 
     private sealed class Harness
     {
@@ -425,8 +426,11 @@ public partial class FlagFactEvaluatorTests(ITestOutputHelper output)
                     ? await scope.ServiceProvider.GetRequiredService<ICanonicalGlucoseService>().GetLatestAsync(cancellationToken)
                     : null;
                 var pump = devices ? await NewestPumpAsync(person, scope.ServiceProvider, cancellationToken) : null;
+                var onBoard = Scope.Satisfies(person.AllowedScopes, Scope.TreatmentsRead)
+                    ? Owners.TryGetValue(evaluator, out var owner) ? owner.Data[person.Tenant.Id].OnBoard : null
+                    : null;
                 judged.Add(await judging.JudgeAsync(
-                    person, scope.ServiceProvider, new FlagLiveReads(latest, [], pump), [.. conditions.Select((_, i) => i)],
+                    person, scope.ServiceProvider, new FlagLiveReads(latest, [], pump, onBoard), [.. conditions.Select((_, i) => i)],
                     cancellationToken));
             }
             judging.Finish();

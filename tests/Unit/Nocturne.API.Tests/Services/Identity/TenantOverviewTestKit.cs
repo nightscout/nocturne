@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Nocturne.API.Reports;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -141,7 +142,7 @@ internal static class TenantOverviewTestKit
         public List<OverviewRuleSet> RuleSets { get; } = [];
         public List<IReadOnlyList<Guid>> PeopleBegunFor { get; } = [];
         public List<bool> CredentialLimits { get; } = [];
-        public List<(GlucoseReadTenant Person, SensorGlucose? Latest, IReadOnlyList<TrackerInstance>? Trackers, PumpSnapshot? Pump)> Judged { get; } = [];
+        public List<(GlucoseReadTenant Person, SensorGlucose? Latest, IReadOnlyList<TrackerInstance>? Trackers, PumpSnapshot? Pump, OnBoardFigures? OnBoard)> Judged { get; } = [];
         public int? FinishedAfter { get; private set; }
 
         public Task<IViewerFlagRuleRun?> BeginAsync(
@@ -165,10 +166,10 @@ internal static class TenantOverviewTestKit
 
             public Task<ViewerJudgement> JudgeAsync(
                 GlucoseReadTenant person, IServiceProvider personScope, SensorGlucose? latest,
-                IReadOnlyList<TrackerInstance>? activeTrackers, PumpSnapshot? pump, CancellationToken ct)
+                IReadOnlyList<TrackerInstance>? activeTrackers, PumpSnapshot? pump, OnBoardFigures? onBoard, CancellationToken ct)
             {
                 lock (owner.Judged)
-                    owner.Judged.Add((person, latest, activeTrackers, pump));
+                    owner.Judged.Add((person, latest, activeTrackers, pump, onBoard));
                 return Task.FromResult(new ViewerJudgement(
                     owner.Reasons.GetValueOrDefault(person.Tenant.Id) ?? [],
                     !owner.FailingFilters.Contains(person.Tenant.Id)));

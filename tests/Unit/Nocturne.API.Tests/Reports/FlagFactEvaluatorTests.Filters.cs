@@ -207,7 +207,7 @@ public partial class FlagFactEvaluatorTests
             var latest = clamped
                 ? null
                 : await scope.ServiceProvider.GetRequiredService<ICanonicalGlucoseService>().GetLatestAsync(CancellationToken.None);
-            judged.Add(await run!.JudgeAsync(person, scope.ServiceProvider, latest, [], null, CancellationToken.None));
+            judged.Add(await run!.JudgeAsync(person, scope.ServiceProvider, latest, [], null, null, CancellationToken.None));
         }
         run!.Finish();
         return (judged, run.PeopleWithRulesPending);

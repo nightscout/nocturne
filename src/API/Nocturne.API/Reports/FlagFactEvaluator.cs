@@ -78,7 +78,9 @@ internal sealed record FlagJudgement(
 /// </summary>
 /// <param name="ActiveTrackers">The running trackers; null where the caller may not read them.</param>
 /// <param name="Pump">The newest pump snapshot; null where there is none or the caller may not read it.</param>
-internal sealed record FlagLiveReads(SensorGlucose? Latest, IReadOnlyList<TrackerInstance>? ActiveTrackers, PumpSnapshot? Pump);
+/// <param name="OnBoard">Insulin and carbs on board now; null where the caller may not read treatments.</param>
+internal sealed record FlagLiveReads(
+    SensorGlucose? Latest, IReadOnlyList<TrackerInstance>? ActiveTrackers, PumpSnapshot? Pump, OnBoardFigures? OnBoard);
 
 /// <summary>What one overview read's judging found for a person.</summary>
 internal enum FlagPersonState
@@ -366,7 +368,8 @@ internal sealed class FlagFactEvaluator(
             {
                 judged = group;
                 var trackers = group.Any(i => _conditions[i].Field.Scope == Scope.AlertsRead) ? live.ActiveTrackers : null;
-                row = CurrentStatusDataset.RowOf(live.Latest, trackers, now, readLog);
+                var onBoard = group.Any(i => _conditions[i].Field.Scope == Scope.TreatmentsRead) ? live.OnBoard : null;
+                row = CurrentStatusDataset.RowOf(live.Latest, trackers, onBoard, now, readLog);
             }
             else if (first.Dataset.Name == DeviceStatusParameters.Name)
             {

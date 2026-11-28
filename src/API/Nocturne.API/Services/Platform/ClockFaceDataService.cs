@@ -1,4 +1,5 @@
 using Nocturne.API.Authorization;
+using Nocturne.API.Reports;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Analytics;
@@ -65,10 +66,11 @@ public sealed class ClockFaceDataService(
         if (types.Contains("iob") || types.Contains("cob"))
         {
             var reading = await iobCob.ReadTotalAsync(nowMills, live: true, ct);
-            if (types.Contains("iob") && reading.HasIob)
-                data.Iob = OnBoardRounding.Iob(reading.Iob.Iob);
-            if (types.Contains("cob") && reading.HasCob)
-                data.Cob = OnBoardRounding.Cob(reading.Cob!.Cob);
+            var onBoard = OnBoardFigures.Of(reading);
+            if (types.Contains("iob"))
+                data.Iob = onBoard.Insulin;
+            if (types.Contains("cob"))
+                data.Cob = onBoard.Carbs;
         }
 
         if (types.Contains("basal"))
