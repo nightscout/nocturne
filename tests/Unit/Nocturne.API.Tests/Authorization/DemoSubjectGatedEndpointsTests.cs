@@ -48,10 +48,8 @@ public class DemoSubjectGatedEndpointsTests
         { typeof(AuthorizationController), nameof(AuthorizationController.CreateSubject) },
 
         // Teams. The shared subject would be a manager of every team any visitor made or joined,
-        // and every later visitor could run them.
-        { typeof(TeamsController), nameof(TeamsController.GetMyTeams) },
+        // and every later visitor could run them. What is open is in DemoSubjectTeamSurfaceTests.
         { typeof(TeamsController), nameof(TeamsController.CreateTeam) },
-        { typeof(TeamsController), nameof(TeamsController.GetTeam) },
         { typeof(TeamsController), nameof(TeamsController.RenameTeam) },
         { typeof(TeamsController), nameof(TeamsController.RemoveManager) },
         { typeof(TeamsController), nameof(TeamsController.CreateManagerInvite) },
@@ -157,10 +155,7 @@ public class DemoSubjectGatedEndpointsTests
             "otherwise drop the gate silently",
             controller.Name, action);
 
-        var gated = method!.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null
-            || controller.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null;
-
-        gated.Should().BeTrue(
+        ControllerActionReflection.DeniesTheDemoSubject(method!, controller).Should().BeTrue(
             "{0}.{1} is reachable with a demo session, which any anonymous caller can " +
             "obtain, and it either acts as a platform user or writes state onto the shared " +
             "subject that later visitors can read",

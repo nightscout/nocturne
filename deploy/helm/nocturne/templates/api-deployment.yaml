@@ -107,6 +107,10 @@ spec:
             # not used (rationale: API Services/Alerts/Providers/ChatBotProvider.cs).
             - name: Telemetry__PageCounts__Enabled
               value: {{ .Values.telemetry.pageCounts.enabled | toString | quote }}
+            {{- if .Values.demo.enabled }}
+            - name: DemoMode__AllowTeamWrites
+              value: {{ .Values.demo.allowTeamWrites | toString | quote }}
+            {{- end }}
             - name: WEB_URL
               value: {{ include "nocturne.web.internalUrl" . | quote }}
             - name: INSTANCE_KEY

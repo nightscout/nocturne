@@ -84,6 +84,7 @@ public class FlagRulesController(
 
     /// <summary>The caller's rules, and for each how many of the people they follow it cannot be checked for.</summary>
     [HttpGet]
+    [OpenToDemoSubject(DemoSubjectOpening.Read)]
     [RemoteQuery]
     [ProducesResponseType(typeof(FlagRulesResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetFlagRules(CancellationToken ct)
@@ -101,6 +102,7 @@ public class FlagRulesController(
 
     /// <summary>The suggested rules and every fact a rule may name, each with its unit and, for a range fact, its family.</summary>
     [HttpGet("facts")]
+    [OpenToDemoSubject(DemoSubjectOpening.Read)]
     [RemoteQuery]
     [ProducesResponseType(typeof(FlagRuleFactsResponse), StatusCodes.Status200OK)]
     public IActionResult GetFlagRuleFacts() =>
@@ -108,6 +110,7 @@ public class FlagRulesController(
 
     /// <summary>Adds a rule. Refused with 409 once the caller holds the most they may.</summary>
     [HttpPost]
+    [OpenToDemoSubject(DemoSubjectOpening.StaffWrite)]
     [RemoteCommand(Invalidates = ["GetFlagRules"])]
     [ProducesResponseType(typeof(FlagRule), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -131,6 +134,7 @@ public class FlagRulesController(
 
     /// <summary>Changes a rule of the caller's; 404 for any other.</summary>
     [HttpPut("{ruleId:guid}")]
+    [OpenToDemoSubject(DemoSubjectOpening.StaffWrite)]
     [RemoteCommand(Invalidates = ["GetFlagRules"])]
     [ProducesResponseType(typeof(FlagRule), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -149,6 +153,7 @@ public class FlagRulesController(
 
     /// <summary>Deletes a rule of the caller's; 404 for any other.</summary>
     [HttpDelete("{ruleId:guid}")]
+    [OpenToDemoSubject(DemoSubjectOpening.StaffWrite)]
     [RemoteCommand(Invalidates = ["GetFlagRules"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -165,6 +170,7 @@ public class FlagRulesController(
     /// checked for. 404 when the caller is not a member of the team whose end has not passed.
     /// </summary>
     [HttpGet(TeamRoute)]
+    [OpenToDemoSubject(DemoSubjectOpening.Read)]
     [RemoteQuery]
     [ProducesResponseType(typeof(FlagRulesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

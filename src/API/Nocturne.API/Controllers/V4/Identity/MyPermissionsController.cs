@@ -72,12 +72,17 @@ public class MyPermissionsController : ControllerBase
 
     private static async Task<MyPermissionsResponse> BuildAsync(
         HttpContext httpContext,
-        ICategoryReadContext categoryReadContext) => new()
+        ICategoryReadContext categoryReadContext)
     {
-        Scopes = httpContext.GetGrantedScopes().ToList(),
-        LimitTo24Hours = categoryReadContext.IsHistoryClamped,
-        RefusedAsDemoSubject = await DenyDemoSubjectAttribute.RefusesAsync(httpContext),
-    };
+        var refused = await DenyDemoSubjectAttribute.RefusesAsync(httpContext);
+        return new()
+        {
+            Scopes = httpContext.GetGrantedScopes().ToList(),
+            LimitTo24Hours = categoryReadContext.IsHistoryClamped,
+            RefusedAsDemoSubject = refused,
+            RefusedStaffWritesAsDemoSubject = refused && !await DenyDemoSubjectAttribute.AdmitsStaffWriteAsync(httpContext),
+        };
+    }
 }
 
 /// <summary>
@@ -99,4 +104,10 @@ public class MyPermissionsResponse
     /// <see cref="DenyDemoSubjectAttribute"/> endpoint refuses whatever <see cref="Scopes"/> grants.
     /// </summary>
     public bool RefusedAsDemoSubject { get; set; }
+
+    /// <summary>
+    /// True when the caller is a demo subject the gate also refuses the <see cref="DemoSubjectOpening.StaffWrite"/>
+    /// writes: their saved views and their own flag rules.
+    /// </summary>
+    public bool RefusedStaffWritesAsDemoSubject { get; set; }
 }

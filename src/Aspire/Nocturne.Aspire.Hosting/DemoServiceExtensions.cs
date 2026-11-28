@@ -52,6 +52,11 @@ public class DemoServiceOptions
     /// Interval in minutes between full demo data resets. Set to 0 to disable.
     /// </summary>
     public int ResetIntervalMinutes { get; set; } = 0;
+
+    /// <summary>
+    /// Whether the clinic demo persona may change its own saved views and flag rules. Default is true.
+    /// </summary>
+    public bool AllowTeamWrites { get; set; } = true;
 }
 
 /// <summary>
@@ -105,6 +110,7 @@ public static class DemoServiceExtensions
             "ResetIntervalMinutes",
             options.ResetIntervalMinutes
         );
+        options.AllowTeamWrites = configSection.GetValue("AllowTeamWrites", options.AllowTeamWrites);
 
         // Apply user configuration overrides
         configure?.Invoke(options);
@@ -135,7 +141,8 @@ public static class DemoServiceExtensions
 
         // API should reference demo service for health monitoring
         apiEnvironment.WithEnvironment("DemoService__Url", demoService.GetEndpoint("http"))
-           .WithEnvironment("DemoService__Enabled", "true");
+           .WithEnvironment("DemoService__Enabled", "true")
+           .WithEnvironment("DemoMode__AllowTeamWrites", options.AllowTeamWrites.ToString().ToLowerInvariant());
 
         // Configure multi-arch container build for amd64 and arm64 (supports Mac Apple Silicon)
         demoService.WithContainerBuildOptions(options =>

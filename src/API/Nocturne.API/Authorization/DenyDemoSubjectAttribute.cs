@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Identity;
 
 namespace Nocturne.API.Authorization;
 
@@ -19,16 +21,24 @@ namespace Nocturne.API.Authorization;
 /// permission checks could refuse them, and to tenant administration actions, where the demo
 /// member holds the scope but must not act.
 /// </para>
+/// <para>
+/// On a controller, an action marked <see cref="OpenToDemoSubjectAttribute"/> is let through as its
+/// <see cref="DemoSubjectOpening"/> says.
+/// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class DenyDemoSubjectAttribute : Attribute, IAsyncAuthorizationFilter
 {
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
-        if (await RefusesAsync(context.HttpContext))
-        {
-            context.Result = new ForbidResult();
-        }
+        var opening = context.ActionDescriptor.EndpointMetadata.OfType<OpenToDemoSubjectAttribute>().SingleOrDefault()?.Opening;
+        if (opening is DemoSubjectOpening.Read || !await RefusesAsync(context.HttpContext))
+            return;
+
+        if (opening is DemoSubjectOpening.StaffWrite && await AdmitsStaffWriteAsync(context.HttpContext))
+            return;
+
+        context.Result = new ForbidResult();
     }
 
     /// <summary>
@@ -52,5 +62,21 @@ public sealed class DenyDemoSubjectAttribute : Attribute, IAsyncAuthorizationFil
         var isDemoSubject = await subjects.IsDemoSubjectAsync(subjectId, httpContext.RequestAborted);
 
         return isDemoSubject is null or true;
+    }
+
+    /// <summary>
+    /// A demo subject in no team stands for no staff member, so a write of a staff member's own is not
+    /// theirs to make.
+    /// </summary>
+    internal static async Task<bool> AdmitsStaffWriteAsync(HttpContext httpContext)
+    {
+        if (!httpContext.RequestServices.GetRequiredService<IDemoModeService>().AllowsTeamWrites)
+            return false;
+
+        if (httpContext.GetAuthContext() is not { EffectiveSubjectId: { } subjectId })
+            return false;
+
+        var teams = httpContext.RequestServices.GetRequiredService<ITeamRepository>();
+        return (await teams.GetTeamsOfAsync(subjectId, httpContext.RequestAborted)).Count > 0;
     }
 }

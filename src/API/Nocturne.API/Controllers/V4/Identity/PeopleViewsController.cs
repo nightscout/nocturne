@@ -75,6 +75,7 @@ public class PeopleViewsController(
 
     /// <summary>The caller's views in their order, each saying whether it names a group or a team the caller no longer has.</summary>
     [HttpGet]
+    [OpenToDemoSubject(DemoSubjectOpening.Read)]
     [RemoteQuery]
     [ProducesResponseType(typeof(PeopleViewsResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPeopleViews(CancellationToken ct)
@@ -108,6 +109,7 @@ public class PeopleViewsController(
     /// their views has the name.
     /// </summary>
     [HttpPost]
+    [OpenToDemoSubject(DemoSubjectOpening.StaffWrite)]
     [RemoteCommand(Invalidates = ["GetPeopleViews"])]
     [ProducesResponseType(typeof(PeopleView), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -129,6 +131,7 @@ public class PeopleViewsController(
 
     /// <summary>Changes a view of the caller's; 404 for any other, and 409 when another of their views has the name.</summary>
     [HttpPut("{viewId:guid}")]
+    [OpenToDemoSubject(DemoSubjectOpening.StaffWrite)]
     [RemoteCommand(Invalidates = ["GetPeopleViews"])]
     [ProducesResponseType(typeof(PeopleView), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -149,6 +152,7 @@ public class PeopleViewsController(
 
     /// <summary>Deletes a view of the caller's; 404 for any other.</summary>
     [HttpDelete("{viewId:guid}")]
+    [OpenToDemoSubject(DemoSubjectOpening.StaffWrite)]
     [RemoteCommand(Invalidates = ["GetPeopleViews"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -165,6 +169,7 @@ public class PeopleViewsController(
     /// order names each of their views exactly once.
     /// </summary>
     [HttpPost("reorder")]
+    [OpenToDemoSubject(DemoSubjectOpening.StaffWrite)]
     [RemoteCommand(Invalidates = ["GetPeopleViews"])]
     [ProducesResponseType(typeof(IReadOnlyList<PeopleView>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]

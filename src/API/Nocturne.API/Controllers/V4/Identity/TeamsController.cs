@@ -62,6 +62,7 @@ public class TeamsController(
 
     /// <summary>The caller's teams, and whether they may create one.</summary>
     [HttpGet]
+    [OpenToDemoSubject(DemoSubjectOpening.Read)]
     [RemoteQuery]
     [ProducesResponseType(typeof(MyTeamsResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyTeams(CancellationToken ct)
@@ -71,7 +72,8 @@ public class TeamsController(
 
         return Ok(new MyTeamsResponse(
             await teams.GetTeamsOfAsync(subjectId, ct),
-            CanCreate(await policies.GetAsync(ct), HttpContext.GetAuthContext())));
+            CanCreate(await policies.GetAsync(ct), HttpContext.GetAuthContext())
+                && !await DenyDemoSubjectAttribute.RefusesAsync(HttpContext)));
     }
 
     /// <summary>Creates a team, with the caller as its manager.</summary>
@@ -105,6 +107,7 @@ public class TeamsController(
     /// the static list of roles a ceiling may name, and nothing else.
     /// </summary>
     [HttpGet("{teamId:guid}")]
+    [OpenToDemoSubject(DemoSubjectOpening.Read)]
     [RemoteQuery]
     [ProducesResponseType(typeof(TeamDetail), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
