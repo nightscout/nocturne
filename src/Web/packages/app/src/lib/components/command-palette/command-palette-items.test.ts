@@ -77,13 +77,13 @@ describe("paletteItemsFor", () => {
   });
 });
 
-describe("the demo visitor", () => {
+describe("a viewer who may not read teams", () => {
   it("is not offered Teams by the palette flag", () => {
     const all = paletteItems();
     const teams = all.find((item) => item.id === "settings-teams");
 
-    expect(teams?.notForDemoSubject).toBe(true);
-    expect(all.filter((item) => item.notForDemoSubject).map((item) => item.id)).toEqual(["settings-teams"]);
+    expect(teams?.needsTeamReads).toBe(true);
+    expect(all.filter((item) => item.needsTeamReads).map((item) => item.id)).toEqual(["settings-teams"]);
   });
 });
 

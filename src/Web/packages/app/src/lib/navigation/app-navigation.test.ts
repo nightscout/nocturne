@@ -169,8 +169,8 @@ describe("buildAppNavigation", () => {
     ]);
   });
 
-  it("leaves Teams out of the settings for the demo visitor", () => {
-    const hrefs = buildAppNavigation({ ...MEMBER, refusedAsDemoSubject: true })
+  it("leaves Teams out of the settings for a viewer who may not read teams", () => {
+    const hrefs = buildAppNavigation({ ...MEMBER, canReadTeams: false })
       .flatMap((item) => item.children ?? [])
       .map((child) => child.href);
 

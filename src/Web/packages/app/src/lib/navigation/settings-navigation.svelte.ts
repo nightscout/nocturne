@@ -36,8 +36,8 @@ export type SettingsLink = {
   strict?: boolean;
   /** Scopes of which the viewer must hold at least one to be offered the link. */
   anyScope?: readonly string[];
-  /** Not offered to the demo visitor, whom the API refuses on the page behind it. */
-  notForDemoSubject?: boolean;
+  /** Not offered to a viewer the API refuses the teams' reads. */
+  needsTeamReads?: boolean;
 };
 
 /**
@@ -59,8 +59,8 @@ export interface SettingsViewer {
   grantedScopes: readonly string[];
   /** Whether the viewer administers the platform. */
   isPlatformAdmin: boolean;
-  /** Whether the API refuses the viewer as the demo subject, as `page.data.refusedAsDemoSubject` carries it. */
-  refusedAsDemoSubject?: boolean;
+  /** Whether the viewer may read teams. Absent reads as they may. */
+  canReadTeams?: boolean;
 }
 
 function settingsGroups(): SettingsGroup[] {
@@ -87,7 +87,7 @@ function settingsGroups(): SettingsGroup[] {
           description: "The teams that you are a member of, and their managers.",
           href: "/settings/teams",
           icon: UsersRound,
-          notForDemoSubject: true,
+          needsTeamReads: true,
         },
         {
           title: "Discord",
@@ -236,7 +236,7 @@ export function visibleSettingsGroups(viewer: SettingsViewer): SettingsGroup[] {
       ...group,
       links: group.links.filter(
         (link) =>
-          !(link.notForDemoSubject && viewer.refusedAsDemoSubject) &&
+          !(link.needsTeamReads && viewer.canReadTeams === false) &&
           (!link.anyScope ||
             link.anyScope.some((scope) => satisfiesScope(viewer.grantedScopes, scope)))
       ),

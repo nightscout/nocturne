@@ -175,6 +175,33 @@ public class StatusServiceTests
         result.NextVisitorResetAt.Should().Be(reported ? nextVisitorResetAt : null);
     }
 
+    [Theory]
+    [InlineData(Nocturne.Core.Models.Demo.DemoTenantKind.Host)]
+    [InlineData(Nocturne.Core.Models.Demo.DemoTenantKind.Person)]
+    public async Task GetSystemStatusAsync_OnADemoTenant_ReportsItsKind(string kind)
+    {
+        var dbName = $"nocturne_status_demo_kind_{Guid.NewGuid()}";
+        var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
+        var tenantId = SettableTenantAccessor.DefaultTenantId;
+
+        ctx.Tenants.Add(new TenantEntity
+        {
+            Id = tenantId,
+            Slug = "demo",
+            DisplayName = "Nocturne Demo",
+            IsActive = true,
+            IsDemo = true,
+            DemoConfig = new TenantDemoConfigEntity { TenantId = tenantId, Kind = kind },
+        });
+        await ctx.SaveChangesAsync();
+
+        var service = CreateStatusService(
+            _configuration, ctx, dbName,
+            SettableTenantAccessor.Resolved(tenantId: tenantId, slug: "demo", isDemo: true));
+
+        (await service.GetSystemStatusAsync()).DemoKind.Should().Be(kind);
+    }
+
     [Fact]
     public async Task GetSystemStatusAsync_OnAnOrdinaryTenant_LeavesTheDemoFieldsUnset()
     {
@@ -186,6 +213,7 @@ public class StatusServiceTests
 
         result.IsDemo.Should().BeNull("an ordinary tenant reports no demo state at all");
         result.NextResetAt.Should().BeNull();
+        result.DemoKind.Should().BeNull();
     }
 
     [Fact]

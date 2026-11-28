@@ -89,6 +89,23 @@ public class DemoTenantServiceResetTests : IDisposable
     }
 
     [Fact]
+    public async Task IsClinicPersonaAsync_IsTrueOnlyForThePersonaTheClinicProvisionRecorded()
+    {
+        var tenantId = SeedDemoTenant();
+        await _service.ResetAsync();
+
+        var host = (await _service.FindDemoTenantAsync())!;
+        var persona = await _service.FindClinicPersonaAsync(host);
+        var member = await _service.FindDemoMemberSubjectIdAsync(tenantId);
+
+        persona.Should().NotBeNull();
+        (await _service.IsClinicPersonaAsync(persona!.Value)).Should().BeTrue();
+        (await _service.IsClinicPersonaAsync(Guid.CreateVersion7())).Should().BeFalse();
+        if (member is { } memberId)
+            (await _service.IsClinicPersonaAsync(memberId)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ResetAsync_PreservesTenantIdentity()
     {
         var tenantId = SeedDemoTenant();

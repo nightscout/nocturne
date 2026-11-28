@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models.Identity;
@@ -160,6 +161,7 @@ public class MyPermissionsControllerTests
             .AddSingleton(factory.Object.AsNocturneFactory())
             .AddSingleton<ISubjectRepository>(new SubjectRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off))
             .AddSingleton(teams.Object)
+            .AddSingleton(Mock.Of<IDemoPersonaReader>())
             .BuildServiceProvider();
         httpContext.Items["AuthContext"] = new AuthContext
         {
@@ -172,6 +174,48 @@ public class MyPermissionsControllerTests
         answer.RefusedAsDemoSubject.Should().Be(refused);
         answer.RefusedStaffWritesAsDemoSubject.Should().Be(staffWritesRefused);
         answer.Scopes.Should().Contain(Scope.TenantSettings);
+    }
+
+    [Theory]
+    [InlineData(true, true, "clinic")]
+    [InlineData(true, false, null)]
+    [InlineData(false, true, null)]
+    public void GetMyPermissions_NamesTheDemoPersonaOnlyForTheClinicPersona(
+        bool isDemoSubject, bool isClinicPersona, string? persona)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = Guid.CreateVersion7();
+        using (var seed = db.CreateContext())
+        {
+            seed.Subjects.Add(new SubjectEntity
+            {
+                Id = subjectId,
+                Name = "Subject",
+                IsActive = true,
+                IsDemoSubject = isDemoSubject,
+            });
+            seed.SaveChanges();
+        }
+
+        var controller = ControllerWithScopes(Scope.GlucoseRead);
+        var factory = new Mock<IDbContextFactory<NocturneDbContext>>();
+        factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => db.CreateContext());
+        var teams = new Mock<ITeamRepository>();
+        teams.Setup(t => t.GetTeamsOfAsync(subjectId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(isClinicPersona ? [new TeamSummary(Guid.CreateVersion7(), "Clinic", TeamMemberKind.Staff)] : []);
+        var personas = new Mock<IDemoPersonaReader>();
+        personas.Setup(p => p.IsClinicPersonaAsync(subjectId, It.IsAny<CancellationToken>())).ReturnsAsync(isClinicPersona);
+        var httpContext = controller.ControllerContext.HttpContext;
+        httpContext.RequestServices = new ServiceCollection()
+            .AddSingleton(factory.Object.AsNocturneFactory())
+            .AddSingleton<ISubjectRepository>(new SubjectRepository(factory.Object.AsNocturneFactory(), AccountLinkRoutes.Off))
+            .AddSingleton(teams.Object)
+            .AddSingleton(personas.Object)
+            .BuildServiceProvider();
+        httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = subjectId };
+
+        Answer(controller).DemoPersona.Should().Be(persona);
     }
 
     [Fact]

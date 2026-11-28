@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { demoSubjectAccess } from "#lib/authorization/demo-subject.js";
 
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
@@ -121,7 +122,7 @@
       user,
       isGuestSession,
       isPlatformAdmin,
-      refusedAsDemoSubject: page.data.refusedAsDemoSubject ?? false,
+      canReadTeams: demoSubjectAccess(page.data).canReadTeams,
       grantedScopes: page.data.effectivePermissions ?? [],
       tenantCount: tenantTargets.length,
       tenantless,

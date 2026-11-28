@@ -107,6 +107,13 @@ declare global {
 			 */
 			refusedAsDemoSubject?: boolean;
 			/**
+			 * Whether the demo-subject gate also refuses the current user the staff writes (saved views
+			 * and personal flag rules)
+			 */
+			refusedStaffWritesAsDemoSubject?: boolean;
+			/** The demo persona the current user signed in as, null for any other user */
+			demoPersona?: string | null;
+			/**
 			 * Whether the current user is a platform administrator
 			 */
 			isPlatformAdmin: boolean;
@@ -152,6 +159,10 @@ declare global {
 			limitTo24Hours?: boolean;
 			/** Whether the viewer is the demo visitor account, resolved by the root layout. */
 			refusedAsDemoSubject?: boolean;
+			/** Whether the viewer is also refused the staff writes, resolved by the root layout. */
+			refusedStaffWritesAsDemoSubject?: boolean;
+			/** The demo persona the viewer signed in as, resolved by the root layout. */
+			demoPersona?: string | null;
 		}
 		// Shallow-routing state. Dialogs key their browser-history entries here
 		// (see useDialogHistory) so the back button can dismiss them.

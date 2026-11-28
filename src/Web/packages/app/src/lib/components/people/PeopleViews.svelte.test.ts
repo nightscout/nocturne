@@ -1020,6 +1020,47 @@ describe("saving", () => {
   });
 });
 
+describe("a demo subject", () => {
+  const clinic = {
+    baseDomain: "example.com",
+    refusedAsDemoSubject: true,
+    refusedStaffWritesAsDemoSubject: false,
+    demoPersona: "clinic",
+  };
+
+  it("keeps and manages views as the clinic persona, which the demo lets write them", async () => {
+    pageState.data = clinic;
+    openAt("?filters=flagged");
+
+    await expect.element(page.getByRole("button", { name: "Save as new view" })).toBeEnabled();
+    await expect.element(page.getByRole("button", { name: "Manage views" })).toBeEnabled();
+    expect(page.getByTestId("people-views-demo").elements()).toHaveLength(0);
+  });
+
+  it("disables saving and managing views, and says why, where the demo refuses the staff writes", async () => {
+    pageState.data = { ...clinic, refusedStaffWritesAsDemoSubject: true };
+    openAt("?filters=flagged");
+
+    await expect.element(page.getByRole("button", { name: "Save as new view" })).toBeDisabled();
+    await expect.element(page.getByRole("button", { name: "Manage views" })).toBeDisabled();
+    await expect.element(page.getByTestId("people-views-demo")).toHaveTextContent(
+      "You cannot save views in the demo."
+    );
+  });
+
+  it("disables saving views for the personal persona", async () => {
+    pageState.data = {
+      baseDomain: "example.com",
+      refusedAsDemoSubject: true,
+      refusedStaffWritesAsDemoSubject: true,
+      demoPersona: null,
+    };
+    openAt("?filters=flagged");
+
+    await expect.element(page.getByRole("button", { name: "Save as new view" })).toBeDisabled();
+  });
+});
+
 describe("managing views", () => {
   async function manage() {
     await page.getByRole("button", { name: "Manage views" }).click();

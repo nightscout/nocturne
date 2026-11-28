@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { env } from "./env.ts";
 import { ApiClient, eventually } from "./http.ts";
+import { instanceKeyHeaders } from "./instance-key.ts";
 import type { Tenant } from "./tenant.ts";
 
 export const googleTypes = ["steps", "heart-rate", "weight", "sleep"];
@@ -23,10 +23,7 @@ export async function configureGoogleHealth() {
   const response = await new ApiClient().request("PUT", "/api/v4/admin/platform-settings/google-health", {
     enabled: true,
     fields: { clientId: googleClientId, clientSecret: "e2e-google-secret", redirectUri: googleRedirectUri },
-  }, {
-    "X-Instance-Key": createHash("sha256").update("e2e-instance-key-test-only-not-a-real-secret").digest("hex"),
-    "X-Instance-Service": "e2e-setup",
-  });
+  }, instanceKeyHeaders);
   if (response.status !== 200) throw new Error(`Google Health admin setup failed: HTTP ${response.status}`);
 }
 

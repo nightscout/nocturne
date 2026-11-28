@@ -26,6 +26,8 @@ export async function readPermissions(locals: App.Locals): Promise<MyPermissions
       scopes: locals.effectivePermissions,
       limitTo24Hours: locals.limitTo24Hours ?? false,
       refusedAsDemoSubject: locals.refusedAsDemoSubject ?? false,
+      refusedStaffWritesAsDemoSubject: locals.refusedStaffWritesAsDemoSubject ?? false,
+      demoPersona: locals.demoPersona ?? undefined,
     };
   }
   if (!locals.isShareHost && !locals.isGuestSession) return {};

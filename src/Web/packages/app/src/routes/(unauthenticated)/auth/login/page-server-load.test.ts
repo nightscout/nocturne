@@ -10,13 +10,14 @@ const DEMO_LOGIN_ENDPOINT = "/api/v4/demo/session";
 /** Where the login page sends a visitor on a demo tenant, or null when it renders. */
 async function redirectTarget(
   returnUrl: string,
-  signedIn: boolean
+  signedIn: boolean,
+  status: { isDemo?: boolean; demoKind?: string } = { isDemo: true }
 ): Promise<string | null> {
   const url = new URL(`/auth/login?${new URLSearchParams({ returnUrl })}`, ORIGIN);
   const locals = {
     isAuthenticated: signedIn,
     isShareHost: false,
-    apiClient: { status: { getStatus: async () => ({ isDemo: true }) } },
+    apiClient: { status: { getStatus: async () => status } },
   };
   const event = {
     url,
@@ -79,6 +80,16 @@ describe("login page auto-login redirects", () => {
     expect(await autoLoginReturnPath("/join?token=a%2Fb")).toBe(
       "/join?token=a%2Fb&__autologin=1"
     );
+  });
+
+  it("offers the demo on the demo host", async () => {
+    expect(await redirectTarget("/", false, { isDemo: true, demoKind: "host" })).toBe(
+      `${DEMO_LOGIN_ENDPOINT}?redirect=%2F%3F__autologin%3D1`
+    );
+  });
+
+  it("renders the passkey page on a person of the demo clinic, whose host serves no demo session", async () => {
+    expect(await redirectTarget("/", false, { isDemo: true, demoKind: "person" })).toBeNull();
   });
 
   it("renders the passkey page once the marker has come back", async () => {

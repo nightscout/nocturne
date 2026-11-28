@@ -1,10 +1,14 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
+  import { demoSubjectAccess } from "#lib/authorization/demo-subject.js";
   import FlagRulesEditor from "#lib/components/people/FlagRulesEditor.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Card from "#lib/components/ui/card/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Flag from "@lucide/svelte/icons/flag";
+
+  const canEdit = $derived(demoSubjectAccess(page.data).canWriteStaffRecords);
 </script>
 
 <svelte:head>
@@ -32,7 +36,10 @@
 
   <Card.Root>
     <Card.Content>
-      <FlagRulesEditor owner={{ kind: "personal" }} canEdit />
+      {#if !canEdit}
+        <p class="mb-3 text-sm text-muted-foreground">You cannot change flag rules in the demo.</p>
+      {/if}
+      <FlagRulesEditor owner={{ kind: "personal" }} {canEdit} />
     </Card.Content>
   </Card.Root>
 </div>

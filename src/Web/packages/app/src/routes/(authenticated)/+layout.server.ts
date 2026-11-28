@@ -156,7 +156,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   if (!locals.isAuthenticated || !locals.user) {
     if (!publicViewAllowed) {
       const returnUrl = pathname + search;
-      const endpoint = autoLoginEndpoint(status?.isDemo, locals.isShareHost);
+      const endpoint = autoLoginEndpoint(status, locals.isShareHost);
       throw redirect(
         303,
         (endpoint && autoLoginRedirect(endpoint, returnUrl, origin)) ??
@@ -182,6 +182,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
 
   const isDemo = status?.isDemo ?? false;
   const nextResetAt = toIsoString(status?.nextResetAt);
+  const nextVisitorResetAt = toIsoString(status?.nextVisitorResetAt);
 
   const showBackupSignInPrompt = !tenantless && !isDemo && (await backupSignInPrompt);
   const resolvedTenantTargets = await tenantTargets;
@@ -201,6 +202,8 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     tenantTargets: resolvedTenantTargets,
     isDemo,
     nextResetAt,
+    nextVisitorResetAt,
+    demoKind: status?.demoKind ?? null,
     onboardingComplete,
     pillRows: parsePillRows(cookies.get(PILL_ROWS_COOKIE)),
     // The sidebar records its own open state in this cookie; reading it back here is what makes a

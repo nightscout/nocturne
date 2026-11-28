@@ -27,9 +27,9 @@ describe("visibleSettingsGroups", () => {
     expect(hrefs(OWNER).site).not.toContain("/settings/teams");
   });
 
-  it("does not offer Teams to the demo visitor", () => {
+  it("does not offer Teams to a viewer who may not read teams", () => {
     expect(
-      hrefs({ grantedScopes: [], isPlatformAdmin: false, refusedAsDemoSubject: true }).personal,
+      hrefs({ grantedScopes: [], isPlatformAdmin: false, canReadTeams: false }).personal,
     ).not.toContain("/settings/teams");
   });
 

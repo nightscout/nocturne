@@ -74,6 +74,20 @@ describe("teams page", () => {
     expect(page.getByRole("button", { name: "Create team" }).elements()).toHaveLength(0);
   });
 
+  it("lists the teams of the clinic persona of the demo", async () => {
+    pageState.data = {
+      refusedAsDemoSubject: true,
+      refusedStaffWritesAsDemoSubject: false,
+      demoPersona: "clinic",
+    };
+    mocks.teams = { items: [{ id: teamId, name: "Clinic", kind: "staff" }], canCreate: false };
+    render(TeamsPage);
+
+    await expect
+      .element(page.getByRole("link", { name: /Clinic/ }))
+      .toHaveAttribute("href", `/settings/teams/${teamId}`);
+  });
+
   it("says so when the person is in no team", async () => {
     mocks.teams = { items: [], canCreate: true };
     render(TeamsPage);

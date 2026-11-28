@@ -44,7 +44,7 @@ namespace Nocturne.API.Services.Demo;
 /// wrote: the host's demo config names the clinic's team, and the persona is that team's demo subject on it as staff.
 /// </para>
 /// </remarks>
-public sealed class DemoTenantService
+public sealed class DemoTenantService : IDemoPersonaReader
 {
     /// <summary>
     /// Value of <c>tenant_members.username</c> for the demo tenant's human-facing
@@ -176,6 +176,12 @@ public sealed class DemoTenantService
         await using var db = await _factory.CreatePlatformAsync(ct);
         return await TeamRepository.FindDemoStaffAsync(db, teamId, ct);
     }
+
+    /// <summary>
+    /// Whether <paramref name="subjectId"/> is the subject <see cref="FindClinicPersonaAsync"/> names on the demo host.
+    /// </summary>
+    public async Task<bool> IsClinicPersonaAsync(Guid subjectId, CancellationToken ct = default) =>
+        await FindDemoTenantAsync(ct) is { } host && await FindClinicPersonaAsync(host, ct) == subjectId;
 
     /// <summary>
     /// Provisions the demo on the host <paramref name="hostId"/>: its access (<see cref="ConfigureAccessAsync"/>), then

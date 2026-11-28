@@ -1,4 +1,5 @@
 import { NOCTURNE_DEV_AUTO_LOGIN } from "$app/env/private";
+import type { StatusResponse } from "#lib/api/index.js";
 import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
 
 // Marker appended to returnUrl so a single auto-login attempt can be detected
@@ -20,6 +21,19 @@ export const AUTO_LOGIN_MARKER = "__autologin";
 // on a tenant whose IsDemo flag is set; any other tenant gets a 404.
 export const DEV_LOGIN_ENDPOINT = "/api/v4/dev-only/auth/login";
 export const DEMO_LOGIN_ENDPOINT = "/api/v4/demo/session";
+const DEMO_PERSON_KIND = "person";
+
+/** What a tenant's status says of its demo. */
+export type DemoStatus = Pick<StatusResponse, "isDemo" | "demoKind">;
+
+/**
+ * Whether the tenant serves demo sessions: a demo tenant that is not one of the clinic's people,
+ * whose host answers a session request with a 404. A status that names no kind is a host, as it
+ * was before the API said.
+ */
+export function servesDemoSessions(status: DemoStatus | null | undefined): boolean {
+  return status?.isDemo === true && status.demoKind !== DEMO_PERSON_KIND;
+}
 
 /**
  * The auto-login endpoint for a request, or null when sign-in should render the
@@ -27,12 +41,12 @@ export const DEMO_LOGIN_ENDPOINT = "/api/v4/demo/session";
  * honors credentials, so there is no session to be had there.
  */
 export function autoLoginEndpoint(
-  isDemo: boolean | undefined,
+  status: DemoStatus | null | undefined,
   isShareHost: boolean | undefined,
 ): string | null {
   if (NOCTURNE_DEV_AUTO_LOGIN === "true") return DEV_LOGIN_ENDPOINT;
   if (isShareHost) return null;
-  return isDemo ? DEMO_LOGIN_ENDPOINT : null;
+  return servesDemoSessions(status) ? DEMO_LOGIN_ENDPOINT : null;
 }
 
 /**

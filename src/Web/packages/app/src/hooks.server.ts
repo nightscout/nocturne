@@ -163,6 +163,8 @@ const authHandle: Handle = async ({ event, resolve }) => {
         event.locals.effectivePermissions = grant.scopes ?? [];
         event.locals.limitTo24Hours = grant.limitTo24Hours ?? false;
         event.locals.refusedAsDemoSubject = grant.refusedAsDemoSubject ?? false;
+        event.locals.refusedStaffWritesAsDemoSubject = grant.refusedStaffWritesAsDemoSubject ?? false;
+        event.locals.demoPersona = grant.demoPersona ?? null;
       }
     }
   } catch (error) {

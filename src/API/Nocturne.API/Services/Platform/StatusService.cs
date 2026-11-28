@@ -180,6 +180,7 @@ public class StatusService : IStatusService
         bool? isDemo = null;
         DateTime? nextResetAt = null;
         DateTime? nextVisitorResetAt = null;
+        string? demoKind = null;
 
         var tenantContext = _tenantAccessor.Context;
         if (tenantContext is { IsDemo: true })
@@ -188,6 +189,7 @@ public class StatusService : IStatusService
 
             var demoConfig = (await _tenantRepository.GetAsync(tenantContext.TenantId, CancellationToken.None))?.DemoConfig;
             nextResetAt = demoConfig?.NextResetAt;
+            demoKind = demoConfig?.Kind;
             // Nothing clears the recorded time when visitor resets stop, so a past one would be a countdown to nothing.
             nextVisitorResetAt = demoConfig?.NextVisitorResetAt is { } visitorReset && visitorReset > serverTime ? visitorReset : null;
         }
@@ -230,6 +232,7 @@ public class StatusService : IStatusService
             IsDemo = isDemo,
             NextResetAt = nextResetAt,
             NextVisitorResetAt = nextVisitorResetAt,
+            DemoKind = demoKind,
             AnonymousReadAccess = anonymousReadAccess,
         };
 

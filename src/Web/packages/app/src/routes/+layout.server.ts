@@ -87,6 +87,8 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies, depends
     effectivePermissions: permissions.scopes ?? [],
     limitTo24Hours: permissions.limitTo24Hours ?? false,
     refusedAsDemoSubject: permissions.refusedAsDemoSubject ?? false,
+    refusedStaffWritesAsDemoSubject: permissions.refusedStaffWritesAsDemoSubject ?? false,
+    demoPersona: permissions.demoPersona ?? null,
     isPlatformAdmin: locals.isPlatformAdmin,
     isPlatformAccessGrant: locals.isPlatformAccessGrant ?? false,
     isHandedOffSession: locals.isHandedOffSession ?? false,

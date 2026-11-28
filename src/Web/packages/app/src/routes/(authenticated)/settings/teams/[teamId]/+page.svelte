@@ -2,6 +2,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { demoSubjectAccess } from "#lib/authorization/demo-subject.js";
   import * as Card from "#lib/components/ui/card/index.js";
   import * as Alert from "#lib/components/ui/alert/index.js";
   import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
@@ -47,7 +48,8 @@
   import StaffInvitesSection from "#lib/components/teams/StaffInvitesSection.svelte";
   import StaffNarrowing from "#lib/components/teams/StaffNarrowing.svelte";
 
-  const refused = $derived(page.data.refusedAsDemoSubject === true);
+  const access = $derived(demoSubjectAccess(page.data));
+  const refused = $derived(!access.canReadTeams);
   const teamId = $derived(page.params.teamId ?? "");
   const teamQuery = $derived(refused ? null : getTeam(teamId));
   retainQuery(() => teamQuery);
@@ -422,6 +424,9 @@
           {#if staffLeaveError}
             <p class="text-sm text-destructive" role="alert">{staffLeaveError}</p>
           {/if}
+          {#if access.persona}
+            <p class="text-sm text-muted-foreground">You cannot leave a team in the demo.</p>
+          {/if}
           <ConfirmDialog
             title="Leave team"
             confirmLabel="Leave team"
@@ -429,7 +434,7 @@
             onConfirm={leaveAsStaff}
           >
             {#snippet trigger(props)}
-              <Button {...props} variant="outline-destructive" size="sm" disabled={leaving || !callerId}>
+              <Button {...props} variant="outline-destructive" size="sm" disabled={leaving || !callerId || access.persona !== null}>
                 <LogOut class="mr-2 h-4 w-4" />
                 Leave
               </Button>

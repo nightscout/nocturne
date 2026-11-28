@@ -5,6 +5,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { demoSubjectAccess } from "#lib/authorization/demo-subject.js";
   import { satisfiesScope } from "#lib/authorization/scopes.js";
   import {
     glucoseChartLookback,
@@ -83,7 +84,7 @@
         (!item.scope ||
           satisfiesScope(page.data.effectivePermissions ?? [], item.scope)) &&
         (!item.platformAdmin || page.data.isPlatformAdmin) &&
-        !(item.notForDemoSubject && page.data.refusedAsDemoSubject)
+        !(item.needsTeamReads && !demoSubjectAccess(page.data).canReadTeams)
     )
   );
 

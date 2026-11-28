@@ -44,14 +44,14 @@ async function resolveAutoLoginEndpoint(
   locals: App.Locals,
 ): Promise<string | null> {
   // Neither dev auto-login nor the share host depends on the tenant's status.
-  const withoutStatus = autoLoginEndpoint(false, locals.isShareHost);
+  const withoutStatus = autoLoginEndpoint(undefined, locals.isShareHost);
   if (withoutStatus || locals.isShareHost) return withoutStatus;
 
   // Fail closed to the passkey UI: an unreachable status call must not bounce a
   // real tenant's owner through an endpoint that will 404.
   try {
     const status = await locals.apiClient.status.getStatus();
-    return autoLoginEndpoint(status?.isDemo, false);
+    return autoLoginEndpoint(status, false);
   } catch {
     return null;
   }

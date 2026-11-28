@@ -39,7 +39,7 @@ export async function mintDemoSession(
   if (event.url.searchParams.has(AUTO_LOGIN_MARKER)) return null;
 
   const status = await event.locals.statusPromise;
-  if (autoLoginEndpoint(status?.isDemo, event.locals.isShareHost) !== DEMO_LOGIN_ENDPOINT) {
+  if (autoLoginEndpoint(status, event.locals.isShareHost) !== DEMO_LOGIN_ENDPOINT) {
     return null;
   }
 
