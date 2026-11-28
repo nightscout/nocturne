@@ -80,8 +80,11 @@ const ALLOWED_FLAT_MAPS: Record<string, { lines: string[]; reason: string }> = {
     reason: "the ids of the viewer's views, in their order, for a move",
   },
   "lib/components/people/PeopleWall.svelte": {
-    lines: ['new Set(columns.flat().flatMap((slot) => (slot.kind === "person" ? [slot.person] : [])))'],
-    reason: "the people the wall's columns placed, to count what does not fit",
+    lines: [
+      "laid.flat().flatMap((slot) =>",
+      'new Set(columns.flat().flatMap((slot) => (slot.kind === "person" ? [slot.person] : [])))',
+    ],
+    reason: "the wall's person slots, held as the same objects across polls, and the people they placed, to count what does not fit",
   },
   "lib/components/people/person-trace.ts": {
     lines: ["return (points ?? []).flatMap((point) =>"],
