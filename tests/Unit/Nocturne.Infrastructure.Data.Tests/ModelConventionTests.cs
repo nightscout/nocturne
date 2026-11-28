@@ -220,6 +220,53 @@ public class ModelConventionTests
             .Should().BeEmpty("a window read over deleted rows needs a tenant-led timestamp index that holds them");
     }
 
+    [Fact]
+    public void TheTenantTimestampIndexedTables_AreTheTimestampedRecordsWithoutAListIndex()
+    {
+        NocturneDbContext.TenantTimestampIndexedEntities.Should().BeEquivalentTo(
+            new[]
+            {
+                typeof(SensorGlucoseEntity), typeof(BolusEntity), typeof(CarbIntakeEntity),
+                typeof(BolusCalculationEntity), typeof(DeviceEventEntity), typeof(BGCheckEntity),
+                typeof(NoteEntity), typeof(TempBasalEntity), typeof(ProfileActivationEntity),
+                typeof(HeartRateEntity), typeof(StepCountEntity), typeof(TherapySettingsEntity),
+                typeof(DeviceStatusExtrasEntity),
+            },
+            "a timestamped record table that takes no list index gets the unfiltered index by the registry, not by where its author declared it");
+
+        NocturneDbContext.TenantTimestampIndexedEntities.Should().NotContain(
+            NocturneDbContext.V4SortedListEntities,
+            "a table with a list index takes the list index's columns in its _id_any twin");
+
+        NocturneDbContext.TenantTimestampAscending.Keys.Should().BeEquivalentTo(
+            [typeof(HeartRateEntity), typeof(StepCountEntity)]);
+    }
+
+    [Fact]
+    public void EveryTenantTimestampIndexedTable_HasTheUnfilteredTenantTimestampIndex()
+    {
+        NocturneDbContext.TenantTimestampIndexedEntities.Should().NotBeEmpty();
+        var model = Model();
+
+        NocturneDbContext.TenantTimestampIndexedEntities.Select(model.FindEntityType)
+            .Where(e => e is null || !e.GetIndexes().Any(i => IsTenantTimestampIndex(e, i)))
+            .Select(e => e?.ShortName() ?? "<unmapped>")
+            .Should().BeEmpty("each is named for its timestamp column, newest first unless listed ascending");
+    }
+
+    private static bool IsTenantTimestampIndex(IEntityType entity, IIndex index)
+    {
+        var column = entity.FindProperty(nameof(IObservationTimestamped.Timestamp))!.GetColumnName();
+        var ascending = NocturneDbContext.TenantTimestampAscending.ContainsKey(entity.ClrType);
+        return index.GetDatabaseName() == $"ix_{entity.GetTableName()}_tenant_{column}"
+            && Columns(index).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(IObservationTimestamped.Timestamp)])
+            && !index.IsUnique
+            && index.GetFilter() is null
+            && (ascending
+                ? index.IsDescending is not { Count: > 0 }
+                : index.IsDescending is not null && index.IsDescending.SequenceEqual([false, true]));
+    }
+
     /// <summary>
     /// A table with a list index takes that index's columns, so the partial list index stays the
     /// smaller for a live read; see <see cref="ModelConventions"/>.

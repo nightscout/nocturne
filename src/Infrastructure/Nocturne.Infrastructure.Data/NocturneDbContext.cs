@@ -646,6 +646,45 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     ];
 
     /// <summary>
+    /// The timestamped record tables that carry no unfiltered <c>(tenant_id, timestamp)</c> index, each
+    /// with the reason.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<Type, string> TenantTimestampUnindexed = new Dictionary<Type, string>
+    {
+        [typeof(BasalInjectionEntity)] = "shipped without the index, and adding it is a migration",
+        [typeof(BasalScheduleEntity)] = "read by profile name, off ix_basal_schedules_tenant_profile_timestamp",
+        [typeof(CarbRatioScheduleEntity)] = "read by profile name, off ix_carb_ratio_schedules_tenant_profile_timestamp",
+        [typeof(SensitivityScheduleEntity)] = "read by profile name, off ix_sensitivity_schedules_tenant_profile_timestamp",
+        [typeof(TargetRangeScheduleEntity)] = "read by profile name, off ix_target_range_schedules_tenant_profile_timestamp",
+    };
+
+    /// <summary>
+    /// The tables whose <see cref="TenantTimestampIndexedEntities"/> index sorts timestamp ascending,
+    /// each with the reason.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<Type, string> TenantTimestampAscending = new Dictionary<Type, string>
+    {
+        [typeof(HeartRateEntity)] = "the index shipped ascending, and sorting it descending is a migration",
+        [typeof(StepCountEntity)] = "the index shipped ascending, and sorting it descending is a migration",
+    };
+
+    /// <summary>
+    /// The tables that get the unfiltered <c>(tenant_id, timestamp)</c> index, which serves a tenant's
+    /// range reads by timestamp, live or with the deleted rows: every <see cref="V4RecordTables.All"/> table with an
+    /// <see cref="IObservationTimestamped.Timestamp"/> but those in <see cref="TenantTimestampUnindexed"/>
+    /// and the <see cref="V4SortedListEntities"/>, which take the list index's columns instead
+    /// (<c>_id_any</c>); and <see cref="DeviceStatusExtrasEntity"/>, which is no record table.
+    /// </summary>
+    internal static readonly Type[] TenantTimestampIndexedEntities =
+    [
+        .. V4RecordTables.All.Select(t => t.Entity)
+            .Where(t => typeof(IObservationTimestamped).IsAssignableFrom(t))
+            .Except(V4SortedListEntities)
+            .Except(TenantTimestampUnindexed.Keys),
+        typeof(DeviceStatusExtrasEntity),
+    ];
+
+    /// <summary>
     /// The <see cref="IDuplicateFlagged"/> <see cref="IV4TimeSeriesEntity"/> tables, whose lists read
     /// the same order as <see cref="V4SortedListEntities"/> over the rows
     /// <see cref="Extensions.ReadVisibilityFilter"/> shows. <see cref="TempBasalEntity"/>'s timestamp is
